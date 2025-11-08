@@ -1,0 +1,479 @@
+### REST Client Test File
+### Sử dụng với VS Code extension "REST Client"
+### Hoặc copy các curl commands để test
+
+@baseUrl = http://localhost:3000
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### ==============================================
+### HEALTH CHECKS
+### ==============================================
+
+### API Gateway Health
+GET http://localhost:3000/health
+
+### Auth Service Health
+GET http://localhost:3001/health
+
+### User Service Health
+GET http://localhost:3002/health
+
+### Product Service Health
+GET http://localhost:3003/health
+
+### Coin Market Service Health
+GET http://localhost:3004/health
+
+### Order Service Health
+GET http://localhost:3005/health
+
+### Payment Service Health
+GET http://localhost:3006/health
+
+### Blockchain Service Health
+GET http://localhost:3007/health
+
+### Chat Service Health
+GET http://localhost:3008/health
+
+### Social Service Health
+GET http://localhost:3009/health
+
+### AI Analysis Service Health
+GET http://localhost:3010/health
+
+### ==============================================
+### AUTH SERVICE
+### ==============================================
+
+### 1. Register User
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "Test123!@#",
+  "fullName": "Test User"
+}
+
+### 2. Verify OTP
+POST {{baseUrl}}/api/v1/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "otp": "123456"
+}
+
+### 3. Login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "Test123!@#"
+}
+
+### 4. Refresh Token
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "YOUR_REFRESH_TOKEN"
+}
+
+### ==============================================
+### USER SERVICE
+### ==============================================
+
+### 1. Get Profile
+GET {{baseUrl}}/api/v1/users/profile
+Authorization: Bearer {{token}}
+
+### 2. Update Profile
+PUT {{baseUrl}}/api/v1/users/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Updated Name",
+  "bio": "My bio",
+  "phone": "0123456789",
+  "country": "Vietnam",
+  "city": "Ho Chi Minh"
+}
+
+### 3. Update Privacy Settings
+PUT {{baseUrl}}/api/v1/users/profile/privacy
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "showCoinBalance": true,
+  "showJoinDate": true,
+  "showEmail": false,
+  "showPhone": false
+}
+
+### 4. Apply to be Seller
+POST {{baseUrl}}/api/v1/sellers/apply
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "shopName": "My Shop",
+  "shopDescription": "Best shop ever",
+  "businessType": "individual",
+  "businessAddress": "123 Main St",
+  "phoneNumber": "0123456789",
+  "website": "https://myshop.com",
+  "taxId": "1234567890",
+  "bankName": "Vietcombank",
+  "bankAccountNumber": "1234567890",
+  "bankAccountName": "Test User"
+}
+
+### ==============================================
+### PRODUCT SERVICE
+### ==============================================
+
+### 1. Get All Products
+GET {{baseUrl}}/api/v1/products?page=1&limit=20
+
+### 2. Get Product by ID
+GET {{baseUrl}}/api/v1/products/PRODUCT_ID
+
+### 3. Search Products
+GET {{baseUrl}}/api/v1/products/search?q=laptop&category=electronics
+
+### 4. Get Categories
+GET {{baseUrl}}/api/v1/products/categories
+
+### 5. Create Product (Seller)
+POST {{baseUrl}}/api/v1/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "MacBook Pro",
+  "description": "Latest model MacBook Pro",
+  "price": 2000,
+  "priceInCrypto": 0.05,
+  "cryptoSymbol": "BTC",
+  "category": "electronics",
+  "condition": "new",
+  "stock": 10,
+  "images": ["image1.jpg", "image2.jpg"],
+  "specifications": {
+    "brand": "Apple",
+    "model": "MacBook Pro 16",
+    "year": "2024"
+  }
+}
+
+### ==============================================
+### COIN MARKET SERVICE
+### ==============================================
+
+### 1. Get Top 10 Coins
+GET {{baseUrl}}/api/v1/coins/top
+
+### 2. Get Coin Details
+GET {{baseUrl}}/api/v1/coins/bitcoin
+
+### 3. Get Price History
+GET {{baseUrl}}/api/v1/coins/bitcoin/history?days=7
+
+### ==============================================
+### ORDER SERVICE
+### ==============================================
+
+### 1. Add to Cart
+POST {{baseUrl}}/api/v1/cart/add
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": "PRODUCT_ID",
+  "quantity": 1
+}
+
+### 2. Get Cart
+GET {{baseUrl}}/api/v1/cart
+Authorization: Bearer {{token}}
+
+### 3. Update Cart Item
+PUT {{baseUrl}}/api/v1/cart/ITEM_ID
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "quantity": 2
+}
+
+### 4. Remove from Cart
+DELETE {{baseUrl}}/api/v1/cart/ITEM_ID
+Authorization: Bearer {{token}}
+
+### 5. Create Order (Checkout)
+POST {{baseUrl}}/api/v1/orders/create
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "shippingAddress": {
+    "fullName": "Test User",
+    "phone": "0123456789",
+    "address": "123 Main St",
+    "city": "Ho Chi Minh",
+    "country": "Vietnam",
+    "postalCode": "70000"
+  },
+  "paymentMethod": "stripe"
+}
+
+### 6. Get My Orders
+GET {{baseUrl}}/api/v1/orders/my
+Authorization: Bearer {{token}}
+
+### 7. Get Order Details
+GET {{baseUrl}}/api/v1/orders/ORDER_ID
+Authorization: Bearer {{token}}
+
+### ==============================================
+### PAYMENT SERVICE
+### ==============================================
+
+### 1. Create Stripe Payment Intent
+POST {{baseUrl}}/api/v1/payments/create-intent
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderId": "ORDER_ID",
+  "amount": 2000
+}
+
+### 2. Create P2P Trade
+POST {{baseUrl}}/api/v1/payments/p2p/create
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderId": "ORDER_ID",
+  "amount": 2000,
+  "currency": "USD",
+  "cryptoAmount": 0.05,
+  "cryptoSymbol": "BTC",
+  "bankAccountNumber": "1234567890"
+}
+
+### 3. Upload Payment Proof (P2P)
+POST {{baseUrl}}/api/v1/payments/p2p/TRADE_ID/proof
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data
+
+# Upload file here
+
+### 4. Get Payment History
+GET {{baseUrl}}/api/v1/payments/history
+Authorization: Bearer {{token}}
+
+### ==============================================
+### BLOCKCHAIN SERVICE
+### ==============================================
+
+### 1. Create Wallet
+POST {{baseUrl}}/api/v1/blockchain/wallets/create
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "USER_ID"
+}
+
+### 2. Get Wallet
+GET {{baseUrl}}/api/v1/blockchain/wallets/user/USER_ID
+Authorization: Bearer {{token}}
+
+### 3. Mint Token (Tokenize Asset)
+POST {{baseUrl}}/api/v1/blockchain/tokens/mint
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": "PRODUCT_ID",
+  "ownerId": "USER_ID",
+  "ownerAddress": "0x1234567890abcdef",
+  "name": "MacBook Pro NFT",
+  "symbol": "MBP",
+  "assetDescription": "MacBook Pro tokenized asset",
+  "assetValue": 2000,
+  "assetImages": ["image1.jpg"]
+}
+
+### 4. Get Token Details
+GET {{baseUrl}}/api/v1/blockchain/tokens/TOKEN_ID
+Authorization: Bearer {{token}}
+
+### 5. Get User Tokens
+GET {{baseUrl}}/api/v1/blockchain/tokens/user/USER_ID
+Authorization: Bearer {{token}}
+
+### 6. Transfer Token
+POST {{baseUrl}}/api/v1/blockchain/tokens/transfer
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tokenId": "TOKEN_ID",
+  "fromAddress": "0x1234567890abcdef",
+  "toAddress": "0xabcdef1234567890",
+  "fromUserId": "USER_ID_1",
+  "toUserId": "USER_ID_2"
+}
+
+### 7. Get Transaction History
+GET {{baseUrl}}/api/v1/blockchain/transactions/history/0x1234567890abcdef
+Authorization: Bearer {{token}}
+
+### ==============================================
+### CHAT SERVICE
+### ==============================================
+
+### 1. Create Support Ticket
+POST {{baseUrl}}/api/v1/chat/tickets/create
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "subject": "Need help with order",
+  "description": "My order hasn't arrived",
+  "priority": "MEDIUM"
+}
+
+### 2. Get My Tickets
+GET {{baseUrl}}/api/v1/chat/tickets/my
+Authorization: Bearer {{token}}
+
+### 3. Send Message
+POST {{baseUrl}}/api/v1/chat/tickets/TICKET_ID/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "content": "Hello, I need help"
+}
+
+### 4. Get Ticket Messages
+GET {{baseUrl}}/api/v1/chat/tickets/TICKET_ID/messages
+Authorization: Bearer {{token}}
+
+### ==============================================
+### SOCIAL SERVICE
+### ==============================================
+
+### 1. Create Post
+POST {{baseUrl}}/api/v1/social/posts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "content": "My first post about crypto!",
+  "visibility": "PUBLIC",
+  "images": ["post-image.jpg"]
+}
+
+### 2. Get Feed
+GET {{baseUrl}}/api/v1/social/posts/feed?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### 3. Get Post Details
+GET {{baseUrl}}/api/v1/social/posts/POST_ID
+Authorization: Bearer {{token}}
+
+### 4. Like Post
+POST {{baseUrl}}/api/v1/social/posts/POST_ID/like
+Authorization: Bearer {{token}}
+
+### 5. Comment on Post
+POST {{baseUrl}}/api/v1/social/posts/POST_ID/comments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "content": "Great post!"
+}
+
+### 6. Share Post
+POST {{baseUrl}}/api/v1/social/posts/POST_ID/share
+Authorization: Bearer {{token}}
+
+### ==============================================
+### AI ANALYSIS SERVICE
+### ==============================================
+
+### 1. Get All Market Analysis
+GET {{baseUrl}}/api/v1/analysis?page=1&limit=10
+
+### 2. Get Coin Analysis
+GET {{baseUrl}}/api/v1/analysis/bitcoin
+
+### 3. Get Market Summary
+GET {{baseUrl}}/api/v1/analysis/summary
+
+### 4. Get Trending Analysis
+GET {{baseUrl}}/api/v1/analysis/trending?limit=5
+
+### 5. Get All Reports
+GET {{baseUrl}}/api/v1/reports?page=1&limit=20
+
+### 6. Get Latest Report
+GET {{baseUrl}}/api/v1/reports/latest?type=DAILY
+
+### 7. Get Report by ID
+GET {{baseUrl}}/api/v1/reports/REPORT_ID
+
+### ==============================================
+### ADMIN APIs (Require ADMIN role)
+### ==============================================
+
+### 1. Get Admin Stats
+GET {{baseUrl}}/api/v1/admin/stats
+Authorization: Bearer {{token}}
+
+### 2. Get All Users
+GET {{baseUrl}}/api/v1/admin/users?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### 3. Suspend User
+PUT {{baseUrl}}/api/v1/admin/users/USER_ID/suspend
+Authorization: Bearer {{token}}
+
+### 4. Get Seller Applications
+GET {{baseUrl}}/api/v1/admin/sellers/applications?status=pending
+Authorization: Bearer {{token}}
+
+### 5. Approve Seller Application
+PUT {{baseUrl}}/api/v1/admin/sellers/applications/APP_ID/approve
+Authorization: Bearer {{token}}
+
+### 6. Reject Seller Application
+PUT {{baseUrl}}/api/v1/admin/sellers/applications/APP_ID/reject
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "reason": "Incomplete documents"
+}
+
+### 7. Trigger AI Analysis Update
+POST {{baseUrl}}/api/v1/analysis/admin/update
+Authorization: Bearer {{token}}
+
+### 8. Generate Report Manually
+POST {{baseUrl}}/api/v1/reports/admin/generate
+Authorization: Bearer {{token}}
+
+
