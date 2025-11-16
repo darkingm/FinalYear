@@ -23,6 +23,7 @@ router.post(
 );
 
 router.get('/', OrderController.getOrders);
+router.get('/recent', OrderController.getRecentOrders); // ✅ Thêm route này TRƯỚC /:id
 router.get('/:id', OrderController.getOrderById);
 
 router.post(

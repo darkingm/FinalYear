@@ -30,11 +30,7 @@ app.use(morgan('combined', {
   stream: { write: (message) => logger.info(message.trim()) }
 }));
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Rate limiting
+// Rate limiting BEFORE body parsing to avoid issues
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
@@ -44,6 +40,10 @@ const limiter = rateLimit({
 });
 
 app.use('/api/', limiter);
+
+// Body parsing - After rate limit, before routes
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -58,13 +58,34 @@ app.get('/health', (req, res) => {
 // API Routes with Proxies
 
 // Auth Service - No authentication required
-app.use('/api/v1/auth', createProxyMiddleware({
+app.use('/api/v1/auth', (req, res, next) => {
+  // Log incoming request
+  logger.info(`Auth request: ${req.method} ${req.path}`, { body: req.body });
+  next();
+}, createProxyMiddleware({
   target: serviceRegistry.auth,
   changeOrigin: true,
   pathRewrite: { '^/api/v1/auth': '/api/auth' },
-  onError: (err, req, res) => {
+  timeout: 30000,
+  proxyTimeout: 30000,
+  onProxyReq: (proxyReq, req: any, res) => {
+    // Rewrite body for POST/PUT/PATCH requests
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res: any) => {
     logger.error('Auth Service Proxy Error:', err);
-    res.status(503).json({ error: 'Auth service unavailable' });
+    if (!res.headersSent) {
+      res.status(503).json({ 
+        success: false,
+        error: 'Auth service unavailable', 
+        details: err.message 
+      });
+    }
   },
 }));
 
@@ -77,6 +98,9 @@ app.use('/api/v1/users', authMiddleware, createProxyMiddleware({
     if (req.user) {
       proxyReq.setHeader('X-User-Id', req.user.id);
       proxyReq.setHeader('X-User-Role', req.user.role);
+      // ✅ Thêm email và username
+      proxyReq.setHeader('X-User-Email', req.user.email || '');
+      proxyReq.setHeader('X-User-Username', req.user.username || '');
     }
   },
   onError: (err, req, res) => {
@@ -246,13 +270,18 @@ app.use(errorHandler);
 // Start server
 const startServer = async () => {
   try {
-    // Connect to Redis
-    await redisClient.connect();
-    logger.info('Connected to Redis');
+    // Connect to Redis (optional)
+    try {
+      await redisClient.connect();
+      logger.info('Connected to Redis');
+    } catch (error: any) {
+      logger.warn('Redis connection failed, continuing without cache:', error.message);
+    }
 
     app.listen(PORT, () => {
       logger.info(`API Gateway running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info('Gateway is ready to accept requests');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

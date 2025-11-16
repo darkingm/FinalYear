@@ -79,7 +79,15 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       dispatch(setCredentials({ user, accessToken, refreshToken }));
       toast.success(t('auth.login_title') + ' successful!');
       onClose();
-      navigate('/');
+      
+      // Redirect based on user role
+      if (user.role === 'ADMIN') {
+        navigate('/dashboard/admin');
+      } else if (user.role === 'SUPPORT') {
+        navigate('/dashboard/support');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Login failed');
     } finally {
@@ -116,6 +124,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   };
 
   const handleOAuthLogin = (provider: 'google' | 'facebook') => {
+    // Redirect directly to OAuth endpoint
+    // Backend will handle whether it's configured or not
+    const callbackUrl = `${window.location.origin}/auth/callback`;
     window.location.href = `/api/v1/auth/${provider}`;
   };
 
@@ -145,7 +156,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     setLoading(true);
 
     try {
-      await axios.post('/api/v1/auth/verify-otp', {
+      await axios.post('/api/v1/auth/verify-email', {
         email: registerData.email,
         otp: otpCode,
       });
@@ -165,15 +176,15 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     setLoading(true);
 
     try {
-      await axios.post('/api/v1/auth/forgot-password', {
+      await axios.post('/api/v1/auth/request-password-reset', {
         email: forgotEmail,
       });
 
-      toast.success('Password reset link sent to your email');
+      toast.success('Password reset code sent to your email');
       setViewMode('login');
       setForgotEmail('');
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to send reset link');
+      toast.error(error.response?.data?.error || 'Failed to send reset code');
     } finally {
       setLoading(false);
     }
@@ -195,17 +206,16 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     }),
   };
 
-  if (!isOpen) return null;
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      >
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={onClose}
+        >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -472,6 +482,42 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
                         required
                       />
                     </div>
+                    {/* Divider */}
+                    <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                          </div>
+                          <div className="relative flex justify-center text-sm">
+                            <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">
+                              {t('auth.or_continue_with')}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* OAuth Buttons */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            type="button"
+                            onClick={() => handleOAuthLogin('google')}
+                            className="flex items-center justify-center space-x-2 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            <FcGoogle className="w-5 h-5" />
+                            <span className="font-medium text-gray-700 dark:text-gray-300">Google</span>
+                          </motion.button>
+
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            type="button"
+                            onClick={() => handleOAuthLogin('facebook')}
+                            className="flex items-center justify-center space-x-2 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            <FaFacebook className="w-5 h-5 text-blue-600" />
+                            <span className="font-medium text-gray-700 dark:text-gray-300">Facebook</span>
+                          </motion.button>
+                        </div>
 
                     {/* Submit */}
                     <motion.button
@@ -614,6 +660,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           </div>
         </motion.div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 };

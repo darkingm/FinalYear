@@ -17,15 +17,16 @@ interface OAuthProviderAttributes {
 interface OAuthProviderCreationAttributes extends Optional<OAuthProviderAttributes, 'id'> {}
 
 class OAuthProvider extends Model<OAuthProviderAttributes, OAuthProviderCreationAttributes> implements OAuthProviderAttributes {
-  public id!: string;
-  public userId!: string;
-  public provider!: 'GOOGLE' | 'FACEBOOK' | 'MICROSOFT';
-  public providerId!: string;
-  public accessToken?: string;
-  public refreshToken?: string;
-  public profile?: any;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  // Chỉ dùng declare để TypeScript biết các thuộc tính, KHÔNG khai báo public fields
+  declare id: string;
+  declare userId: string;
+  declare provider: 'GOOGLE' | 'FACEBOOK' | 'MICROSOFT';
+  declare providerId: string;
+  declare accessToken?: string;
+  declare refreshToken?: string;
+  declare profile?: any;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 OAuthProvider.init(
@@ -67,23 +68,17 @@ OAuthProvider.init(
   },
   {
     sequelize,
-    tableName: 'oauth_providers',
+    tableName: 'OAuthProviders',
     timestamps: true,
     indexes: [
-      {
-        unique: true,
-        fields: ['provider', 'providerId'],
-      },
-      {
-        fields: ['userId'],
-      },
+      { unique: true, fields: ['provider', 'providerId'] },
+      { fields: ['userId'] },
     ],
   }
 );
 
-// Define associations
+// Associations
 User.hasMany(OAuthProvider, { foreignKey: 'userId', as: 'oauthProviders' });
 OAuthProvider.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
 export default OAuthProvider;
-

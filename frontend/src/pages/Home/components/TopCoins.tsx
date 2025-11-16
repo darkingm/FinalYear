@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { FiTrendingUp, FiTrendingDown, FiRefreshCw } from 'react-icons/fi';
 import axios from '../../../api/axios';
 import toast from 'react-hot-toast';
@@ -19,6 +20,7 @@ interface Coin {
 
 const TopCoins = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [coins, setCoins] = useState<Coin[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,6 +115,7 @@ const TopCoins = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
             whileHover={{ y: -4, scale: 1.02 }}
+            onClick={() => navigate(`/coins/${coin.coinId}`)}
             className="bg-white dark:bg-gray-700 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-200 dark:border-gray-600"
           >
             {/* Rank Badge */}
@@ -181,13 +184,13 @@ const TopCoins = () => {
         transition={{ delay: 0.5 }}
         className="text-center mt-8"
       >
-        <a
-          href="/coins"
+        <button
+          onClick={() => navigate('/coins')}
           className="inline-flex items-center space-x-2 text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
         >
           <span>{t('home.view_all')}</span>
           <FiTrendingUp className="w-4 h-4" />
-        </a>
+        </button>
       </motion.div>
     </div>
   );

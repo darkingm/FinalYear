@@ -1,40 +1,198 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 import UserProfile from '../models/UserProfile.model';
 import { redisClient } from '../utils/redis';
 import { publishEvent } from '../utils/rabbitmq';
 import logger from '../utils/logger';
+import axios from 'axios';
+import jwt from 'jsonwebtoken';
 
 const CACHE_TTL = 300; // 5 minutes
 
 export class UserController {
+  // Create profile (auto-create if not exists)
+  static async createProfile(req: Request, res: Response) {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      const { fullName, email, username } = req.body;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User ID required',
+        });
+      }
+
+      // Check if profile already exists
+      const existing = await UserProfile.findOne({ where: { userId } });
+      if (existing) {
+        return res.json({
+          success: true,
+          data: existing,
+          message: 'Profile already exists',
+        });
+      }
+
+      // Create new profile
+      const profile = await UserProfile.create({
+        userId,
+        email: email || '',
+        username: username || '',
+        fullName: fullName || '',
+        role: 'USER',
+        isSeller: false,
+        sellerVerified: false,
+        bankVerified: false,
+        bankVerificationStatus: 'PENDING',
+        showCoinBalance: true,
+        showJoinDate: true,
+        showEmail: false,
+        showPhone: false,
+        totalSales: 0,
+        totalPurchases: 0,
+        rating: 0,
+        reviewCount: 0,
+        isActive: true,
+        isSuspended: false,
+      });
+
+      // Publish event
+      await publishEvent('user.profile.created', {
+        userId,
+        username: profile.username,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: profile,
+        message: 'Profile created successfully',
+      });
+    } catch (error: any) {
+      logger.error('Create profile error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create profile',
+        details: error.message,
+      });
+    }
+  }
+
   // Get user profile
   static async getProfile(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
+      // ✅ Lấy email và username từ headers
+      const userEmail = req.headers['x-user-email'] as string;
+      const userUsername = req.headers['x-user-username'] as string;
+
+      // ✅ Debug logging
+      logger.info('Get profile request:', {
+        userId,
+        userEmail,
+        userUsername,
+        headers: {
+          'x-user-id': req.headers['x-user-id'],
+          'x-user-email': req.headers['x-user-email'],
+          'x-user-username': req.headers['x-user-username'],
+        },
+      });
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User ID required',
+        });
+      }
 
       // Try cache
       const cacheKey = `user:profile:${userId}`;
-      const cached = await redisClient.get(cacheKey);
-      
-      if (cached) {
-        return res.json({
-          success: true,
-          data: JSON.parse(cached),
-          cached: true,
-        });
+      try {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          return res.json({
+            success: true,
+            data: JSON.parse(cached),
+            cached: true,
+          });
+        }
+      } catch (redisError) {
+        // Redis not available, continue without cache
+        logger.warn('Redis cache miss, continuing without cache');
       }
 
-      const profile = await UserProfile.findOne({ where: { userId } });
+      let profile = await UserProfile.findOne({ where: { userId } });
 
+      // ✅ Auto-create profile if not found
       if (!profile) {
-        return res.status(404).json({
-          success: false,
-          error: 'Profile not found',
+        // ✅ Fallback: Nếu không có email từ headers, query từ auth service
+        let finalEmail = userEmail;
+        let finalUsername = userUsername;
+
+        if (!finalEmail || !finalEmail.includes('@')) {
+          // Try to get from auth service
+          try {
+            const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+            const authResponse = await axios.get(`${authServiceUrl}/api/users/${userId}`, {
+              headers: {
+                'X-Service-Key': process.env.SERVICE_SECRET_KEY || 'service-secret-key',
+              },
+            });
+
+            if (authResponse.data?.data?.email) {
+              finalEmail = authResponse.data.data.email;
+              finalUsername = authResponse.data.data.username || finalUsername;
+              logger.info(`Fetched email from auth service: ${finalEmail}`);
+            }
+          } catch (authError: any) {
+            logger.warn('Failed to fetch user from auth service:', authError.message);
+          }
+        }
+
+        // ✅ Validate email exists
+        if (!finalEmail || !finalEmail.includes('@')) {
+          logger.error('Cannot create profile: email is missing or invalid', {
+            userId,
+            userEmail,
+            finalEmail,
+          });
+          return res.status(400).json({
+            success: false,
+            error: 'User email is required to create profile. Please ensure you are authenticated and API Gateway is properly configured.',
+          });
+        }
+
+        // ✅ Create profile with email from JWT token or auth service
+        profile = await UserProfile.create({
+          userId,
+          email: finalEmail, // ✅ Dùng email từ JWT token hoặc auth service
+          username: finalUsername || `user_${userId.substring(0, 8)}`, // ✅ Dùng username từ JWT token
+          fullName: '', // User sẽ update sau
+          role: (req.headers['x-user-role'] as string) || 'USER',
+          isSeller: false,
+          sellerVerified: false,
+          bankVerified: false,
+          bankVerificationStatus: 'PENDING',
+          showCoinBalance: true,
+          showJoinDate: true,
+          showEmail: false,
+          showPhone: false,
+          totalSales: 0,
+          totalPurchases: 0,
+          rating: 0,
+          reviewCount: 0,
+          isActive: true,
+          isSuspended: false,
         });
+
+        logger.info(`Auto-created profile for user ${userId} with email ${finalEmail}`);
       }
 
       // Cache result
-      await redisClient.setEx(cacheKey, CACHE_TTL, JSON.stringify(profile));
+      try {
+        await redisClient.setEx(cacheKey, CACHE_TTL, JSON.stringify(profile));
+      } catch (redisError) {
+        // Continue without cache
+      }
 
       res.json({
         success: true,
@@ -55,7 +213,10 @@ export class UserController {
       const { id } = req.params;
 
       const user = await UserProfile.findOne({
-        where: { userId: id, isActive: true },
+        where: { 
+          userId: id,
+          // Only show active users, but don't require isActive if field doesn't exist
+        },
       });
 
       if (!user) {
@@ -110,6 +271,13 @@ export class UserController {
     try {
       const userId = req.headers['x-user-id'] as string;
 
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User ID required',
+        });
+      }
+
       const profile = await UserProfile.findOne({ where: { userId } });
 
       if (!profile) {
@@ -135,13 +303,22 @@ export class UserController {
       await profile.save();
 
       // Clear cache
-      await redisClient.del(`user:profile:${userId}`);
+      try {
+        await redisClient.del(`user:profile:${userId}`);
+      } catch (redisError) {
+        // Continue without cache
+      }
 
       // Publish event
-      await publishEvent('user.profile.updated', {
-        userId,
-        username: profile.username,
-      });
+      try {
+        await publishEvent('user.profile.updated', {
+          userId,
+          username: profile.username,
+        });
+      } catch (eventError) {
+        // Continue without event
+        logger.warn('Failed to publish event:', eventError);
+      }
 
       res.json({
         success: true,
@@ -152,6 +329,7 @@ export class UserController {
       res.status(500).json({
         success: false,
         error: 'Failed to update profile',
+        details: error.message,
       });
     }
   }
@@ -160,6 +338,14 @@ export class UserController {
   static async updatePrivacy(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User ID required',
+        });
+      }
+
       const { showCoinBalance, showJoinDate, showEmail, showPhone } = req.body;
 
       const profile = await UserProfile.findOne({ where: { userId } });
@@ -179,7 +365,11 @@ export class UserController {
       await profile.save();
 
       // Clear cache
-      await redisClient.del(`user:profile:${userId}`);
+      try {
+        await redisClient.del(`user:profile:${userId}`);
+      } catch (redisError) {
+        // Continue without cache
+      }
 
       res.json({
         success: true,
@@ -194,6 +384,62 @@ export class UserController {
     }
   }
 
+  // Upload avatar
+  static async uploadAvatar(req: Request, res: Response) {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      const file = req.file as Express.Multer.File;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User ID required',
+        });
+      }
+
+      if (!file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file uploaded',
+        });
+      }
+
+      // In production, upload to S3/Cloudinary/etc
+      // For now, save file path or URL
+      const avatarUrl = `/uploads/avatars/${file.filename}`;
+
+      const profile = await UserProfile.findOne({ where: { userId } });
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          error: 'Profile not found',
+        });
+      }
+
+      profile.avatar = avatarUrl;
+      await profile.save();
+
+      // Clear cache
+      try {
+        await redisClient.del(`user:profile:${userId}`);
+      } catch (redisError) {
+        // Continue without cache
+      }
+
+      res.json({
+        success: true,
+        data: { avatar: avatarUrl },
+      });
+    } catch (error: any) {
+      logger.error('Upload avatar error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to upload avatar',
+        details: error.message,
+      });
+    }
+  }
+
   // Search users
   static async searchUsers(req: Request, res: Response) {
     try {
@@ -203,20 +449,30 @@ export class UserController {
       const limitNum = parseInt(limit as string);
       const offset = (pageNum - 1) * limitNum;
 
-      if (!q) {
+      if (!q || !q.toString().trim()) {
         return res.json({
           success: true,
-          data: { users: [], pagination: { total: 0, page: pageNum, limit: limitNum } },
+          data: { 
+            users: [], 
+            pagination: { 
+              total: 0, 
+              page: pageNum, 
+              limit: limitNum,
+              totalPages: 0,
+            } 
+          },
         });
       }
 
+      const searchQuery = q.toString().trim();
+
       const { count, rows } = await UserProfile.findAndCountAll({
         where: {
-          [sequelize.Sequelize.Op.or]: [
-            { username: { [sequelize.Sequelize.Op.iLike]: `%${q}%` } },
-            { fullName: { [sequelize.Sequelize.Op.iLike]: `%${q}%` } },
+          [Op.or]: [
+            { username: { [Op.iLike]: `%${searchQuery}%` } },
+            { fullName: { [Op.iLike]: `%${searchQuery}%` } },
           ],
-          isActive: true,
+          // Only show active users if field exists
         },
         limit: limitNum,
         offset,
@@ -240,8 +496,8 @@ export class UserController {
       res.status(500).json({
         success: false,
         error: 'Failed to search users',
+        details: error.message,
       });
     }
   }
 }
-

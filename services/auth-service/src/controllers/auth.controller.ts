@@ -14,7 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-i
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key-change-in-production';
 
 // Helper functions
-const generateAccessToken = (user: User) => {
+const generateAccessToken = (user: User): string => {
   return jwt.sign(
     {
       id: user.id,
@@ -22,15 +22,15 @@ const generateAccessToken = (user: User) => {
       username: user.username,
       role: user.role,
     },
-    JWT_SECRET,
+    JWT_SECRET as string,
     { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
   );
 };
 
-const generateRefreshToken = async (user: User, ipAddress: string) => {
+const generateRefreshToken = async (user: User, ipAddress: string): Promise<string> => {
   const token = jwt.sign(
     { id: user.id },
-    JWT_REFRESH_SECRET,
+    JWT_REFRESH_SECRET as string,
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
   );
 
@@ -90,7 +90,6 @@ export class AuthController {
         username,
         password,
         fullName,
-        phoneNumber,
         role: 'USER',
       });
 
@@ -108,8 +107,8 @@ export class AuthController {
         attempts: 0,
       });
 
-      // Send verification email
-      await sendEmail({
+      // Send verification email (non-blocking)
+      sendEmail({
         to: email,
         subject: 'Verify Your Email - TokenAsset',
         html: `
@@ -117,15 +116,20 @@ export class AuthController {
           <p>Your verification code is: <strong>${otp}</strong></p>
           <p>This code will expire in 10 minutes.</p>
         `,
+      }).catch((emailError: any) => {
+        logger.error('Failed to send verification email:', emailError.message);
       });
 
-      // Publish event
-      await publishEvent('user.registered', {
+      // Publish event (non-blocking)
+      publishEvent('user.registered', {
         userId: user.id,
         email: user.email,
         username: user.username,
+      }).catch((eventError: any) => {
+        logger.error('Failed to publish user.registered event:', eventError.message);
       });
 
+      // Always return success if user was created
       res.status(201).json({
         success: true,
         message: 'Registration successful. Please verify your email.',
@@ -257,16 +261,21 @@ export class AuthController {
       const accessToken = generateAccessToken(user);
       const refreshToken = await generateRefreshToken(user, ipAddress);
 
-      // Store session in Redis
-      await redisClient.setEx(
-        `session:${user.id}`,
-        7 * 24 * 60 * 60, // 7 days
-        JSON.stringify({
-          userId: user.id,
-          email: user.email,
-          role: user.role,
-        })
-      );
+      // Store session in Redis (if available)
+      try {
+        await redisClient.setEx(
+          `session:${user.id}`,
+          7 * 24 * 60 * 60, // 7 days
+          JSON.stringify({
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+          })
+        );
+      } catch (redisError: any) {
+        logger.warn('Failed to store session in Redis:', redisError.message);
+        // Continue without Redis session
+      }
 
       // Update last login
       user.lastLoginAt = new Date();
@@ -323,7 +332,18 @@ export class AuthController {
         where: { token: refreshToken },
       });
 
-      if (!tokenRecord || !tokenRecord.isActive()) {
+      // Fix: Replace isActive() with manual check
+      if (!tokenRecord) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid refresh token',
+        });
+      }
+
+      // Check if token is revoked or expired
+      const isActive = !tokenRecord.revokedAt && new Date(tokenRecord.expiresAt) > new Date();
+
+      if (!isActive) {
         return res.status(401).json({
           success: false,
           error: 'Invalid refresh token',
@@ -384,15 +404,27 @@ export class AuthController {
       }
 
       if (token) {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        
-        // Remove session from Redis
-        await redisClient.del(`session:${decoded.id}`);
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET) as any;
+          
+          // Remove session from Redis (if available)
+          try {
+            await redisClient.del(`session:${decoded.id}`);
+          } catch (redisError: any) {
+            logger.warn('Failed to remove session from Redis:', redisError.message);
+          }
 
-        // Blacklist token
-        const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-        if (expiresIn > 0) {
-          await redisClient.setEx(`blacklist:${token}`, expiresIn, 'true');
+          // Blacklist token (if Redis available)
+          try {
+            const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+            if (expiresIn > 0) {
+              await redisClient.setEx(`blacklist:${token}`, expiresIn, 'true');
+            }
+          } catch (redisError: any) {
+            logger.warn('Failed to blacklist token in Redis:', redisError.message);
+          }
+        } catch (jwtError: any) {
+          logger.warn('Failed to verify token during logout:', jwtError.message);
         }
       }
 
@@ -501,7 +533,7 @@ export class AuthController {
       // Revoke all refresh tokens
       await RefreshToken.update(
         { revokedAt: new Date() },
-        { where: { userId: user.id, revokedAt: null } }
+        { where: { userId: user.id } }
       );
 
       res.json({

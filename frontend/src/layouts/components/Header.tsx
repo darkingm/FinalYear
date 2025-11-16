@@ -20,6 +20,22 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Thêm helper function để get dashboard URL dựa trên role
+const getDashboardUrl = (userRole: string | undefined): string => {
+  if (!userRole) return '/dashboard';
+  
+  switch (userRole.toUpperCase()) {
+    case 'ADMIN':
+      return '/dashboard/admin';
+    case 'SUPPORT':
+      return '/dashboard/support';
+    case 'SELLER':
+      return '/seller/dashboard';
+    default:
+      return '/dashboard';
+  }
+};
+
 const Header = () => {
   const { t, i18n } = useTranslation();
   const dispatch = useDispatch();
@@ -90,6 +106,18 @@ const Header = () => {
               className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
             >
               {t('nav.products')}
+            </Link>
+            <Link 
+              to="/coins" 
+              className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+            >
+              {t('nav.coins') || 'Coins'}
+            </Link>
+            <Link 
+              to="/square" 
+              className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+            >
+              Square
             </Link>
             <Link 
               to="/about" 
@@ -202,7 +230,7 @@ const Header = () => {
                         <span>{t('nav.profile')}</span>
                       </Link>
                       <Link
-                        to="/dashboard"
+                        to={getDashboardUrl(user?.role)}
                         onClick={() => setUserMenuOpen(false)}
                         className="flex items-center space-x-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       >

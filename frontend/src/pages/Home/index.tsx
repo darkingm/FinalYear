@@ -31,17 +31,17 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Product Grid Section - Sản phẩm đề xuất */}
       <section className="py-16 bg-gray-50 dark:bg-gray-900">
         <div className="container mx-auto px-4">
-          <Features />
+          <ProductGrid />
         </div>
       </section>
 
-      {/* Product Grid Section */}
+      {/* Features Section - Why Choose TokenAsset */}
       <section className="py-16 bg-white dark:bg-gray-800">
         <div className="container mx-auto px-4">
-          <ProductGrid />
+          <Features />
         </div>
       </section>
 

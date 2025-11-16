@@ -9,6 +9,13 @@ import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
 
+// ✅ Import models trước
+import './models/Order.model';
+import './models/OrderItem.model';
+
+// ✅ Import associations SAU KHI models đã được init
+import './models/associations';
+
 dotenv.config();
 
 const app: Application = express();

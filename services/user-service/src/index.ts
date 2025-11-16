@@ -36,7 +36,7 @@ app.use('/api/admin/users', adminRoutes);
 // Start server
 const startServer = async () => {
   try {
-    // Connect to PostgreSQL
+    // Connect to PostgreSQL (required)
     await sequelize.authenticate();
     logger.info('PostgreSQL connected');
 
@@ -46,17 +46,26 @@ const startServer = async () => {
       logger.info('Database synced');
     }
 
-    // Connect to Redis
-    await redisClient.connect();
-    logger.info('Redis connected');
+    // Connect to Redis (optional)
+    try {
+      await redisClient.connect();
+      logger.info('Redis connected');
+    } catch (error: any) {
+      logger.warn('Redis connection failed, continuing without cache:', error.message);
+    }
 
-    // Connect to RabbitMQ
-    await connectRabbitMQ();
-    await subscribeToEvents();
-    logger.info('RabbitMQ connected');
+    // Connect to RabbitMQ (optional)
+    try {
+      await connectRabbitMQ();
+      await subscribeToEvents();
+      logger.info('RabbitMQ connected');
+    } catch (error: any) {
+      logger.warn('RabbitMQ connection failed, continuing without events:', error.message);
+    }
 
     app.listen(PORT, () => {
       logger.info(`User Service running on port ${PORT}`);
+      logger.info('Service is ready to accept requests');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

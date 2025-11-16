@@ -1,46 +1,49 @@
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { FiShield, FiZap, FiDollarSign, FiTrendingUp, FiLock, FiGlobe } from 'react-icons/fi';
 
-const features = [
-  {
-    icon: FiShield,
-    title: 'Secure Trading',
-    description: 'Bank-grade security with blockchain verification for every transaction',
-    color: 'from-blue-500 to-blue-600',
-  },
-  {
-    icon: FiZap,
-    title: 'Instant Transactions',
-    description: 'Lightning-fast transactions powered by Layer 2 blockchain technology',
-    color: 'from-yellow-500 to-orange-600',
-  },
-  {
-    icon: FiDollarSign,
-    title: 'Low Fees',
-    description: 'Competitive fees with transparent pricing and no hidden charges',
-    color: 'from-green-500 to-emerald-600',
-  },
-  {
-    icon: FiTrendingUp,
-    title: 'Real-Time Prices',
-    description: 'Live cryptocurrency market data updated every minute',
-    color: 'from-purple-500 to-pink-600',
-  },
-  {
-    icon: FiLock,
-    title: 'P2P Trading',
-    description: 'Secure peer-to-peer coin trading with escrow protection',
-    color: 'from-red-500 to-rose-600',
-  },
-  {
-    icon: FiGlobe,
-    title: 'Global Access',
-    description: 'Trade from anywhere in the world, 24/7 availability',
-    color: 'from-indigo-500 to-blue-600',
-  },
-];
-
 const Features = () => {
+  const { t } = useTranslation();
+
+  const features = [
+    {
+      icon: FiShield,
+      titleKey: 'features.secure_title',
+      descKey: 'features.secure_desc',
+      color: 'from-blue-500 to-blue-600',
+    },
+    {
+      icon: FiZap,
+      titleKey: 'features.instant_title',
+      descKey: 'features.instant_desc',
+      color: 'from-yellow-500 to-orange-600',
+    },
+    {
+      icon: FiDollarSign,
+      titleKey: 'features.low_fees_title',
+      descKey: 'features.low_fees_desc',
+      color: 'from-green-500 to-emerald-600',
+    },
+    {
+      icon: FiTrendingUp,
+      titleKey: 'features.realtime_title',
+      descKey: 'features.realtime_desc',
+      color: 'from-purple-500 to-pink-600',
+    },
+    {
+      icon: FiLock,
+      titleKey: 'features.p2p_title',
+      descKey: 'features.p2p_desc',
+      color: 'from-red-500 to-rose-600',
+    },
+    {
+      icon: FiGlobe,
+      titleKey: 'features.global_title',
+      descKey: 'features.global_desc',
+      color: 'from-indigo-500 to-blue-600',
+    },
+  ];
+
   return (
     <div>
       {/* Section Header */}
@@ -51,10 +54,10 @@ const Features = () => {
         className="text-center mb-12"
       >
         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-          Why Choose TokenAsset?
+          {t('features.title')}
         </h2>
         <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-          Experience the future of asset trading with our cutting-edge platform
+          {t('features.subtitle')}
         </p>
       </motion.div>
 
@@ -81,10 +84,10 @@ const Features = () => {
 
             {/* Content */}
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-              {feature.title}
+              {t(feature.titleKey)}
             </h3>
             <p className="text-gray-600 dark:text-gray-400">
-              {feature.description}
+              {t(feature.descKey)}
             </p>
 
             {/* Decorative Element */}

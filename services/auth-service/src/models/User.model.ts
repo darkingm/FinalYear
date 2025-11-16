@@ -8,16 +8,8 @@ interface UserAttributes {
   username: string;
   password?: string;
   fullName: string;
-  phoneNumber?: string;
-  role: 'ADMIN' | 'SUPPORT' | 'SELLER' | 'USER';
+  role: 'ADMIN' | 'SUPPORT' | 'USER';
   isEmailVerified: boolean;
-  isPhoneVerified: boolean;
-  emailVerificationToken?: string;
-  emailVerificationExpires?: Date;
-  passwordResetToken?: string;
-  passwordResetExpires?: Date;
-  twoFactorEnabled: boolean;
-  twoFactorSecret?: string;
   lastLoginAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
@@ -26,29 +18,26 @@ interface UserAttributes {
 interface UserCreationAttributes extends Optional<UserAttributes, 'id'> {}
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: string;
-  public email!: string;
-  public username!: string;
-  public password?: string;
-  public fullName!: string;
-  public phoneNumber?: string;
-  public role!: 'ADMIN' | 'SUPPORT' | 'SELLER' | 'USER';
-  public isEmailVerified!: boolean;
-  public isPhoneVerified!: boolean;
-  public emailVerificationToken?: string;
-  public emailVerificationExpires?: Date;
-  public passwordResetToken?: string;
-  public passwordResetExpires?: Date;
-  public twoFactorEnabled!: boolean;
-  public twoFactorSecret?: string;
-  public lastLoginAt?: Date;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
-
+  // Bỏ public class fields để tránh Sequelize warning
+  // Sequelize tự động tạo getters/setters từ User.init()
+  
+  // Chỉ giữ lại methods
   public async validatePassword(password: string): Promise<boolean> {
     if (!this.password) return false;
     return bcrypt.compare(password, this.password);
   }
+
+  // Declare getters để TypeScript biết về các attributes
+  declare id: string;
+  declare email: string;
+  declare username: string;
+  declare password?: string;
+  declare fullName: string;
+  declare role: 'ADMIN' | 'SUPPORT' | 'USER';
+  declare isEmailVerified: boolean;
+  declare lastLoginAt?: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 User.init(
@@ -82,45 +71,13 @@ User.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    phoneNumber: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
     role: {
-      type: DataTypes.ENUM('ADMIN', 'SUPPORT', 'SELLER', 'USER'),
+      type: DataTypes.ENUM('ADMIN', 'SUPPORT', 'USER'),
       defaultValue: 'USER',
     },
     isEmailVerified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
-    },
-    isPhoneVerified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-    emailVerificationToken: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    emailVerificationExpires: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
-    passwordResetToken: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    passwordResetExpires: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
-    twoFactorEnabled: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-    twoFactorSecret: {
-      type: DataTypes.STRING,
-      allowNull: true,
     },
     lastLoginAt: {
       type: DataTypes.DATE,
@@ -129,7 +86,7 @@ User.init(
   },
   {
     sequelize,
-    tableName: 'users',
+    tableName: 'Users',
     timestamps: true,
     hooks: {
       beforeCreate: async (user: User) => {
@@ -149,4 +106,3 @@ User.init(
 );
 
 export default User;
-

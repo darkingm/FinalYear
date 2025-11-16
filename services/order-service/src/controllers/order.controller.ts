@@ -184,6 +184,53 @@ export class OrderController {
     }
   }
 
+  // Get recent orders for user
+  static async getRecentOrders(req: Request, res: Response) {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      const limit = parseInt(req.query.limit as string) || 5;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        });
+      }
+
+      // ✅ Fetch orders first
+      const orders = await Order.findAll({
+        where: { userId },
+        order: [['createdAt', 'DESC']],
+        limit,
+      });
+
+      // ✅ Fetch order items separately for each order
+      // (Workaround until associations are fully working)
+      const ordersWithItems = await Promise.all(
+        orders.map(async (order) => {
+          const items = await OrderItem.findAll({
+            where: { orderId: order.id },
+          });
+          return {
+            ...order.toJSON(),
+            items: items.map(item => item.toJSON()),
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        data: ordersWithItems,
+      });
+    } catch (error: any) {
+      logger.error('Get recent orders error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch recent orders',
+      });
+    }
+  }
+
   // Get order by ID
   static async getOrderById(req: Request, res: Response) {
     try {

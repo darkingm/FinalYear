@@ -11,6 +11,8 @@ export interface IProduct extends Document {
   images: string[];
   priceInCoins: number;
   priceInUSD: number;
+  coinSymbol: string;
+  coinLogo: string;
   condition: 'NEW' | 'LIKE_NEW' | 'GOOD' | 'FAIR' | 'POOR';
   status: 'DRAFT' | 'ACTIVE' | 'SOLD' | 'SUSPENDED' | 'DELETED';
   quantity: number;
@@ -18,6 +20,8 @@ export interface IProduct extends Document {
   tags: string[];
   views: number;
   likes: number[];
+  rating?: number;
+  reviews?: number;
   tokenized: boolean;
   tokenAddress?: string;
   tokenId?: string;
@@ -39,6 +43,8 @@ const ProductSchema = new Schema<IProduct>(
     images: [{ type: String, required: true }],
     priceInCoins: { type: Number, required: true, index: true },
     priceInUSD: { type: Number, required: true, index: true },
+    coinSymbol: { type: String, default: 'BTC' },
+    coinLogo: { type: String, default: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png' },
     condition: {
       type: String,
       enum: ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'POOR'],
@@ -55,6 +61,8 @@ const ProductSchema = new Schema<IProduct>(
     tags: [{ type: String, index: true }],
     views: { type: Number, default: 0 },
     likes: [{ type: String }],
+    rating: { type: Number, default: 4.5 },
+    reviews: { type: Number, default: 0 },
     tokenized: { type: Boolean, default: false },
     tokenAddress: { type: String },
     tokenId: { type: String },

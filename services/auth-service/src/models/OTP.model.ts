@@ -69,7 +69,7 @@ OTP.init(
   },
   {
     sequelize,
-    tableName: 'otps',
+    tableName: 'OTP',
     timestamps: true,
     indexes: [
       {

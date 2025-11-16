@@ -38,31 +38,35 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      try {
-        const refreshToken = store.getState().auth.refreshToken;
-        const response = await axios.post(`${API_URL}/api/v1/auth/refresh-token`, {
-          refreshToken,
-        });
+      // Only try to refresh if user is authenticated
+      const refreshToken = store.getState().auth.refreshToken;
+      
+      if (refreshToken) {
+        try {
+          const response = await axios.post(`${API_URL}/api/v1/auth/refresh-token`, {
+            refreshToken,
+          });
 
-        const { accessToken } = response.data.data;
-        
-        // Update token in store and localStorage
-        store.dispatch({
-          type: 'auth/setCredentials',
-          payload: {
-            ...store.getState().auth,
-            accessToken,
-          },
-        });
+          const { accessToken } = response.data.data;
+          
+          // Update token in store and localStorage
+          store.dispatch({
+            type: 'auth/setCredentials',
+            payload: {
+              ...store.getState().auth,
+              accessToken,
+            },
+          });
 
-        // Retry original request
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return axiosInstance(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed, logout user
-        store.dispatch(logout());
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
+          // Retry original request
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return axiosInstance(originalRequest);
+        } catch (refreshError) {
+          // Refresh failed, logout user
+          store.dispatch(logout());
+          // Don't redirect, just let the error propagate
+          return Promise.reject(refreshError);
+        }
       }
     }
 

@@ -17,11 +17,60 @@ interface AuthState {
   isLoading: boolean;
 }
 
+// Helper function to check if token is valid (not expired)
+const isTokenValid = (token: string | null): boolean => {
+  if (!token) return false;
+  
+  try {
+    // JWT structure: header.payload.signature
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiry = payload.exp * 1000; // Convert to milliseconds
+    return Date.now() < expiry;
+  } catch (error) {
+    return false;
+  }
+};
+
+// ✅ Helper function to decode user from token
+const decodeUserFromToken = (token: string | null): User | null => {
+  if (!token) return null;
+  
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return {
+      id: payload.id || payload.userId || '',
+      email: payload.email || '',
+      username: payload.username || '',
+      fullName: payload.fullName || payload.name || '',
+      role: payload.role || 'USER',
+      avatar: payload.avatar,
+    };
+  } catch (error) {
+    return null;
+  }
+};
+
+const storedAccessToken = localStorage.getItem('accessToken');
+const storedRefreshToken = localStorage.getItem('refreshToken');
+
+// Only use tokens if they are valid
+const validAccessToken = isTokenValid(storedAccessToken) ? storedAccessToken : null;
+const validRefreshToken = isTokenValid(storedRefreshToken) ? storedRefreshToken : null;
+
+// ✅ Decode user from token if token is valid
+const decodedUser = validAccessToken ? decodeUserFromToken(validAccessToken) : null;
+
+// Clear invalid tokens from localStorage
+if (!validAccessToken) {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
 const initialState: AuthState = {
-  user: null,
-  accessToken: localStorage.getItem('accessToken'),
-  refreshToken: localStorage.getItem('refreshToken'),
-  isAuthenticated: !!localStorage.getItem('accessToken'),
+  user: decodedUser, // ✅ Set user từ decoded token
+  accessToken: validAccessToken,
+  refreshToken: validRefreshToken,
+  isAuthenticated: !!validAccessToken,
   isLoading: false,
 };
 

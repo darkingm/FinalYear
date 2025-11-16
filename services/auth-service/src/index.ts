@@ -1,7 +1,7 @@
+import './config/env'; // PHẢI import đầu tiên - load .env trước tất cả
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import passport from 'passport';
 import { sequelize, testConnection } from './database';
 import { setupPassport } from './config/passport';
@@ -9,8 +9,6 @@ import authRoutes from './routes/auth.routes';
 import logger from './utils/logger';
 import { redisClient, connectRedis } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
-
-dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.AUTH_SERVICE_PORT || 3001;
@@ -36,41 +34,40 @@ app.use('/api/auth', authRoutes);
 const startServer = async () => {
   try {
     // Connect to PostgreSQL (required - app won't work without it)
+    logger.info('Connecting to PostgreSQL...');
     const dbConnected = await testConnection();
     if (!dbConnected) {
       logger.error('Failed to connect to PostgreSQL after retries. Exiting...');
       process.exit(1);
     }
     
-    // Sync database models
-    try {
-      await sequelize.sync({ alter: true });
-      logger.info('Database synced');
-    } catch (error: any) {
-      logger.error('Database sync error:', error.message);
-      // Continue anyway - might be permission issue
-    }
+    // Sync database models (only if needed - init.sql already created tables)
+    // Don't use alter: true if you already ran init.sql
+    // await sequelize.sync({ alter: true });
+    logger.info('✅ Database connection established - using init.sql schema');
 
     // Connect to Redis (optional - app can work without it)
     try {
+      logger.info('Connecting to Redis...');
       await connectRedis();
     } catch (error: any) {
-      logger.warn('Redis connection failed, continuing without cache:', error.message);
+      logger.warn('⚠️  Redis connection failed, continuing without cache:', error.message);
     }
 
     // Connect to RabbitMQ (optional - app can work without it)
     try {
+      logger.info('Connecting to RabbitMQ...');
       await connectRabbitMQ();
     } catch (error: any) {
-      logger.warn('RabbitMQ connection failed, continuing without events:', error.message);
+      logger.warn('⚠️  RabbitMQ connection failed, continuing without events:', error.message);
     }
 
     app.listen(PORT, () => {
-      logger.info(`Auth Service running on port ${PORT}`);
-      logger.info('Service is ready to accept requests');
+      logger.info(`🚀 Auth Service running on port ${PORT}`);
+      logger.info('✅ Service is ready to accept requests');
     });
   } catch (error: any) {
-    logger.error('Failed to start server:', error.message);
+    logger.error('❌ Failed to start server:', error.message);
     process.exit(1);
   }
 };
@@ -86,4 +83,3 @@ process.on('SIGTERM', async () => {
 startServer();
 
 export default app;
-

@@ -7,10 +7,10 @@ interface RefreshTokenAttributes {
   userId: string;
   token: string;
   expiresAt: Date;
-  createdByIp: string;
-  revokedAt?: Date;
-  revokedByIp?: string;
-  replacedByToken?: string;
+  createdByIp?: string;
+  revokedAt?: Date | null;
+  revokedByIp?: string | null;
+  replacedByToken?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -18,24 +18,17 @@ interface RefreshTokenAttributes {
 interface RefreshTokenCreationAttributes extends Optional<RefreshTokenAttributes, 'id'> {}
 
 class RefreshToken extends Model<RefreshTokenAttributes, RefreshTokenCreationAttributes> implements RefreshTokenAttributes {
-  public id!: string;
-  public userId!: string;
-  public token!: string;
-  public expiresAt!: Date;
-  public createdByIp!: string;
-  public revokedAt?: Date;
-  public revokedByIp?: string;
-  public replacedByToken?: string;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
-
-  public isExpired(): boolean {
-    return new Date() > this.expiresAt;
-  }
-
-  public isActive(): boolean {
-    return !this.revokedAt && !this.isExpired();
-  }
+  // Chỉ dùng declare, không khai báo public fields
+  declare id: string;
+  declare userId: string;
+  declare token: string;
+  declare expiresAt: Date;
+  declare createdByIp?: string;
+  declare revokedAt?: Date | null;
+  declare revokedByIp?: string | null;
+  declare replacedByToken?: string | null;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 RefreshToken.init(
@@ -57,22 +50,21 @@ RefreshToken.init(
     token: {
       type: DataTypes.STRING(500),
       allowNull: false,
-      unique: true,
     },
     expiresAt: {
       type: DataTypes.DATE,
       allowNull: false,
     },
     createdByIp: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      type: DataTypes.STRING(100),
+      allowNull: true,
     },
     revokedAt: {
       type: DataTypes.DATE,
       allowNull: true,
     },
     revokedByIp: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: true,
     },
     replacedByToken: {
@@ -82,24 +74,19 @@ RefreshToken.init(
   },
   {
     sequelize,
-    tableName: 'refresh_tokens',
+    tableName: 'RefreshTokens',
     timestamps: true,
     indexes: [
-      {
-        fields: ['userId'],
-      },
-      {
-        fields: ['token'],
-      },
-      {
-        fields: ['expiresAt'],
-      },
+      { fields: ['userId'] },
+      { fields: ['token'] },
+      { fields: ['revokedAt'] },
+      { fields: ['expiresAt'] },
     ],
   }
 );
 
+// Associations
 User.hasMany(RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
 RefreshToken.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
 export default RefreshToken;
-

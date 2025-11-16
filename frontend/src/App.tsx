@@ -17,11 +17,19 @@ import CartPage from './pages/Cart';
 import CheckoutPage from './pages/Checkout';
 import ProfilePage from './pages/Profile';
 import SellerApplyPage from './pages/Seller/Apply';
+import SellerDashboard from './pages/Seller/Dashboard';
+import AddProduct from './pages/Seller/AddProduct';
 import DashboardPage from './pages/Dashboard';
 import AdminDashboard from './pages/Dashboard/Admin';
 import SupportDashboard from './pages/Dashboard/Support';
 import AboutPage from './pages/About';
 import NotFoundPage from './pages/NotFound';
+import CoinListPage from './pages/Coins/CoinList';
+import CoinDetailPage from './pages/Coins/CoinDetail';
+import OrderListPage from './pages/Orders/OrderList';
+import OrderDetailPage from './pages/Orders/OrderDetail';
+import SquarePage from './pages/Square';
+import OAuthCallback from './pages/Auth/OAuthCallback';
 
 function App() {
   const dispatch = useDispatch();
@@ -47,6 +55,9 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="products" element={<ProductListPage />} />
         <Route path="products/:id" element={<ProductDetailPage />} />
+        <Route path="coins" element={<CoinListPage />} />
+        <Route path="coins/:id" element={<CoinDetailPage />} />
+        <Route path="square" element={<SquarePage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="cart" element={<CartPage />} />
       </Route>
@@ -54,13 +65,25 @@ function App() {
       {/* Auth routes */}
       <Route path="/auth" element={<AuthLayout />}>
         <Route index element={<LoginRegisterPage />} />
+        <Route path="callback" element={<OAuthCallback />} />
+      </Route>
+      <Route path="/login" element={<AuthLayout />}>
+        <Route index element={<LoginRegisterPage />} />
+      </Route>
+      <Route path="/register" element={<AuthLayout />}>
+        <Route index element={<LoginRegisterPage />} />
       </Route>
 
       {/* Protected routes */}
       <Route path="/" element={<MainLayout />}>
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="orders" element={<OrderListPage />} />
+        <Route path="orders/:id" element={<OrderDetailPage />} />
         <Route path="seller/apply" element={<SellerApplyPage />} />
+        <Route path="seller/dashboard" element={<SellerDashboard />} />
+        <Route path="seller/products/new" element={<AddProduct />} />
+        <Route path="seller/products/:id/edit" element={<AddProduct />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="dashboard/admin" element={<AdminDashboard />} />
         <Route path="dashboard/support" element={<SupportDashboard />} />

@@ -14,6 +14,7 @@ export class ProductController {
         page = 1,
         limit = 20,
         category,
+        coinSymbol,
         minPrice,
         maxPrice,
         condition,
@@ -32,6 +33,7 @@ export class ProductController {
       const filter: any = { status };
 
       if (category) filter.category = category;
+      if (coinSymbol) filter.coinSymbol = coinSymbol;
       if (condition) filter.condition = condition;
       
       if (minPrice || maxPrice) {
@@ -97,6 +99,49 @@ export class ProductController {
       res.status(500).json({
         success: false,
         error: 'Failed to fetch products',
+      });
+    }
+  }
+
+  // Get featured products
+  static async getFeaturedProducts(req: Request, res: Response) {
+    try {
+      const limit = parseInt(req.query.limit as string) || 8;
+
+      // Try cache first
+      const cacheKey = `featured_products_${limit}`;
+      const cached = await redisClient.get(cacheKey);
+      
+      if (cached) {
+        return res.json({
+          success: true,
+          data: JSON.parse(cached),
+        });
+      }
+
+      // Get featured products (most views, likes, or recent)
+      const products = await Product.find({ status: 'ACTIVE' })
+        .sort({ views: -1, likes: -1, createdAt: -1 })
+        .limit(limit)
+        .select('-__v');
+
+      const result = {
+        products,
+        total: products.length,
+      };
+
+      // Cache for 10 minutes
+      await redisClient.setEx(cacheKey, 600, JSON.stringify(result));
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      logger.error('Get featured products error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch featured products',
       });
     }
   }

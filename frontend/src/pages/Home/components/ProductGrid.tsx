@@ -1,30 +1,101 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useDispatch } from 'react-redux';
 import { FiShoppingCart, FiHeart, FiStar } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
+import axios from '../../../api/axios';
+import { addToCart } from '../../../store/slices/cartSlice';
+import toast from 'react-hot-toast';
+import { handleAddToCart } from '../../../utils/cartUtils';
 
-// Mock data - sẽ thay bằng API sau
-const mockProducts = Array.from({ length: 22 }, (_, i) => ({
-  id: `product-${i + 1}`,
-  title: `Premium Product ${i + 1}`,
-  description: 'High quality tokenized real-world asset',
-  image: `https://picsum.photos/400/400?random=${i + 1}`,
-  priceInCoins: (Math.random() * 10 + 1).toFixed(2),
-  priceInUSD: (Math.random() * 1000 + 100).toFixed(2),
-  seller: `Seller ${Math.floor(Math.random() * 100)}`,
-  rating: (Math.random() * 2 + 3).toFixed(1),
-  reviews: Math.floor(Math.random() * 500),
-  condition: ['NEW', 'LIKE_NEW', 'GOOD'][Math.floor(Math.random() * 3)],
-}));
+interface Product {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  priceInCoins: number;
+  priceInUSD: number;
+  coinSymbol: string;
+  coinLogo: string;
+  seller: string;
+  rating: number;
+  reviews: number;
+  condition: string;
+  stock: number;
+}
 
 const ProductGrid = () => {
   const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get('/api/v1/products/featured');
+      const backendProducts = response.data.data.products || [];
+      
+      // ✅ Transform backend data - đảm bảo ID là string unique
+      const transformedProducts = backendProducts.map((p: any) => ({
+        id: String(p._id || p.id), // ✅ Convert ObjectId sang string
+        title: p.title,
+        description: p.description || '', // ✅ Thêm description
+        image: p.images?.[0] || 'https://via.placeholder.com/400',
+        priceInCoins: p.priceInCoins || 0,
+        priceInUSD: p.priceInUSD || 0,
+        coinSymbol: p.coinSymbol || 'BTC',
+        coinLogo: p.coinLogo || 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+        seller: p.sellerName || 'Verified Seller',
+        rating: p.rating || 4.5,
+        reviews: p.reviews || 0,
+        condition: p.condition || 'NEW',
+        stock: p.quantity || 0,
+      }));
+      
+      // ✅ Debug: Log để kiểm tra IDs
+      console.log('Products loaded:', transformedProducts.map(p => ({ 
+        id: p.id, 
+        idType: typeof p.id,
+        title: p.title 
+      })));
+      
+      setProducts(transformedProducts);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast.error('Failed to load products. Please check if product service is running.');
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onAddToCart = (product: Product) => {
+    handleAddToCart(product, dispatch);
+  };
 
   const conditionColors: Record<string, string> = {
     NEW: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
     LIKE_NEW: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
     GOOD: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -51,9 +122,18 @@ const ProductGrid = () => {
         </Link>
       </div>
 
+      {/* Empty State */}
+      {products.length === 0 && !loading && (
+        <div className="text-center py-12">
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            {t('home.no_products') || 'No products available. Please start the product service.'}
+          </p>
+        </div>
+      )}
+
       {/* Products Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {mockProducts.map((product, index) => (
+        {products.map((product, index) => (
           <motion.div
             key={product.id}
             initial={{ opacity: 0, y: 20 }}
@@ -112,14 +192,24 @@ const ProductGrid = () => {
                 </span>
               </div>
 
-              {/* Price */}
-              <div className="flex items-center justify-between mb-4">
-                <div>
+              {/* Price with Coin Logo */}
+              <div className="mb-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <img 
+                    src={product.coinLogo} 
+                    alt={product.coinSymbol}
+                    className="w-6 h-6"
+                  />
                   <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
-                    {product.priceInCoins} ₿
+                    {product.priceInCoins} {product.coinSymbol}
                   </div>
+                </div>
+                <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                    ${product.priceInUSD}
+                    ≈ ${product.priceInUSD.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {product.stock} in stock
                   </div>
                 </div>
               </div>
@@ -128,10 +218,12 @@ const ProductGrid = () => {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors shadow-md hover:shadow-lg"
+                onClick={() => onAddToCart(product)}
+                disabled={product.stock === 0}
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <FiShoppingCart className="w-5 h-5" />
-                <span>Add to Cart</span>
+                <span>{product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}</span>
               </motion.button>
             </div>
           </motion.div>
