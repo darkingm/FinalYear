@@ -111,7 +111,7 @@ const Header = () => {
               to="/coins" 
               className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
             >
-              {t('nav.coins') || 'Coins'}
+              {t('Makets') || 'Coins'}
             </Link>
             <Link 
               to="/square" 
@@ -120,10 +120,10 @@ const Header = () => {
               Square
             </Link>
             <Link 
-              to="/about" 
-              className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-            >
-              {t('nav.about')}
+                to="/trading" 
+                className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                {t('nav.trading') || 'Giao dịch'}
             </Link>
           </nav>
 

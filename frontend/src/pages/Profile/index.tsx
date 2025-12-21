@@ -57,6 +57,10 @@ export default function Profile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // ✅ THÊM: Ref để track xem đã gọi API chưa, tránh gọi nhiều lần
+  const fetchingRef = useRef(false);
+  const lastFetchTimeRef = useRef<number>(0);
+  
   const [formData, setFormData] = useState({
     fullName: '',
     bio: '',
@@ -73,16 +77,31 @@ export default function Profile() {
     showPhone: false,
   });
 
+  // ✅ SỬA: Loại bỏ navigate khỏi dependency array (navigate là stable)
   useEffect(() => {
     if (!user) {
       navigate('/auth');
       return;
     }
+    // ✅ THÊM: Check xem đã gọi API gần đây chưa (trong vòng 2 giây)
+    const now = Date.now();
+    if (fetchingRef.current || (now - lastFetchTimeRef.current < 2000)) {
+      return;
+    }
     fetchProfile();
-  }, [user, navigate]);
+  }, [user]); // ✅ CHỈ giữ user trong dependency
 
   const fetchProfile = async () => {
+    // ✅ THÊM: Guard để tránh gọi API nhiều lần
+    if (fetchingRef.current) {
+      return;
+    }
+
+    fetchingRef.current = true;
+    lastFetchTimeRef.current = Date.now();
+
     try {
+      setLoading(true);
       const response = await axios.get('/api/v1/users/profile');
       const data = response.data.data;
       setProfile(data);
@@ -104,6 +123,13 @@ export default function Profile() {
     } catch (error: any) {
       console.error('Error fetching profile:', error);
       
+      // ✅ THÊM: Xử lý 429 error riêng
+      if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment and try again.');
+        // ✅ Không retry ngay, để user tự refresh
+        return;
+      }
+      
       // Auto-create profile if not found
       if (error.response?.status === 404 && user) {
         try {
@@ -114,17 +140,38 @@ export default function Profile() {
           });
           setProfile(createResponse.data.data);
           toast.success('Profile created successfully');
-          // Reload to get full data
-          await fetchProfile();
-        } catch (createError) {
+          
+          // ✅ SỬA: Không gọi lại fetchProfile ngay, chỉ update state
+          // Thay vì gọi lại API, sử dụng data từ createResponse
+          setFormData({
+            fullName: createResponse.data.data.fullName || '',
+            bio: createResponse.data.data.bio || '',
+            phone: createResponse.data.data.phone || '',
+            dateOfBirth: createResponse.data.data.dateOfBirth ? createResponse.data.data.dateOfBirth.split('T')[0] : '',
+            country: createResponse.data.data.country || '',
+            city: createResponse.data.data.city || '',
+            address: createResponse.data.data.address || '',
+          });
+          setPrivacySettings({
+            showCoinBalance: createResponse.data.data.showCoinBalance ?? true,
+            showJoinDate: createResponse.data.data.showJoinDate ?? true,
+            showEmail: createResponse.data.data.showEmail ?? false,
+            showPhone: createResponse.data.data.showPhone ?? false,
+          });
+        } catch (createError: any) {
           console.error('Error creating profile:', createError);
-          toast.error('Failed to create profile');
+          if (createError.response?.status === 429) {
+            toast.error('Too many requests. Please wait a moment and try again.');
+          } else {
+            toast.error('Failed to create profile');
+          }
         }
       } else {
         toast.error('Failed to load profile');
       }
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   };
 
@@ -155,7 +202,12 @@ export default function Profile() {
       toast.success('Avatar updated successfully');
     } catch (error: any) {
       console.error('Error uploading avatar:', error);
-      toast.error(error.response?.data?.error || 'Failed to upload avatar');
+      // ✅ THÊM: Xử lý 429 error
+      if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment and try again.');
+      } else {
+        toast.error(error.response?.data?.error || 'Failed to upload avatar');
+      }
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) {
@@ -168,12 +220,33 @@ export default function Profile() {
     try {
       setLoading(true);
       await axios.put('/api/v1/users/profile', formData);
-      await fetchProfile();
+      
+      // ✅ SỬA: Chỉ fetch lại nếu cần, hoặc update state trực tiếp
+      // await fetchProfile(); // ❌ XÓA dòng này để tránh gọi API thêm
+      
+      // ✅ THÊM: Update profile state trực tiếp
+      if (profile) {
+        setProfile({
+          ...profile,
+          ...formData,
+        });
+      }
+      
       setIsEditing(false);
       toast.success('Profile updated successfully');
     } catch (error: any) {
+      // ✅ THÊM: Error logging chi tiết
       console.error('Error updating profile:', error);
-      toast.error(error.response?.data?.error || 'Failed to update profile');
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Request payload:', formData);
+      
+      // ✅ THÊM: Xử lý 429 error
+      if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment and try again.');
+      } else {
+        toast.error(error.response?.data?.error || 'Failed to update profile');
+      }
     } finally {
       setLoading(false);
     }
@@ -185,7 +258,12 @@ export default function Profile() {
       toast.success('Privacy settings updated');
     } catch (error: any) {
       console.error('Error updating privacy:', error);
-      toast.error('Failed to update privacy settings');
+      // ✅ THÊM: Xử lý 429 error
+      if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment and try again.');
+      } else {
+        toast.error('Failed to update privacy settings');
+      }
     }
   };
 

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import blockchainService from '../services/blockchain.service';
+import multiChainService from '../services/MultiChainService';
 import Transaction from '../models/Transaction.model';
 import logger from '../utils/logger';
 
@@ -7,11 +8,33 @@ export class TransactionController {
   // Get transaction by hash
   static async getTransaction(req: Request, res: Response) {
     try {
-      const { txHash } = req.params;
+      const { txHash, networkId } = req.params;
 
-      const transaction = await Transaction.findOne({ txHash });
+      let transaction;
+      if (networkId) {
+        transaction = await Transaction.findOne({ txHash, networkId });
+      } else {
+        transaction = await Transaction.findOne({ txHash });
+      }
 
       if (!transaction) {
+        // Try to fetch from blockchain if not in database
+        if (networkId) {
+          try {
+            const provider = multiChainService.getProvider(networkId);
+            const txDetails = await provider.getTransaction(txHash);
+            if (txDetails) {
+              return res.json({
+                success: true,
+                data: txDetails,
+                source: 'blockchain',
+              });
+            }
+          } catch (error) {
+            // Ignore blockchain fetch error
+          }
+        }
+
         return res.status(404).json({
           success: false,
           error: 'Transaction not found',
@@ -21,6 +44,7 @@ export class TransactionController {
       res.json({
         success: true,
         data: transaction,
+        source: 'database',
       });
     } catch (error: any) {
       logger.error('Get transaction error:', error);
@@ -35,18 +59,22 @@ export class TransactionController {
   static async getHistory(req: Request, res: Response) {
     try {
       const { address } = req.params;
-      const { limit = 20, offset = 0 } = req.query;
+      const { networkId, limit = 20, offset = 0 } = req.query;
 
-      const transactions = await Transaction.find({
+      const query: any = {
         $or: [{ from: address }, { to: address }],
-      })
-        .sort({ blockTimestamp: -1 })
+      };
+
+      if (networkId) {
+        query.networkId = networkId;
+      }
+
+      const transactions = await Transaction.find(query)
+        .sort({ createdAt: -1 })
         .skip(Number(offset))
         .limit(Number(limit));
 
-      const total = await Transaction.countDocuments({
-        $or: [{ from: address }, { to: address }],
-      });
+      const total = await Transaction.countDocuments(query);
 
       res.json({
         success: true,
@@ -93,7 +121,17 @@ export class TransactionController {
   // Get pending transactions
   static async getPendingTransactions(req: Request, res: Response) {
     try {
-      const transactions = await Transaction.find({ status: 'PENDING' })
+      const { networkId } = req.query;
+
+      const query: any = {
+        status: { $in: ['PENDING', 'CONFIRMING'] },
+      };
+
+      if (networkId) {
+        query.networkId = networkId;
+      }
+
+      const transactions = await Transaction.find(query)
         .sort({ createdAt: -1 })
         .limit(50);
 

@@ -3,7 +3,7 @@
     "home": "Home",
     "products": "Products",
     "marketplace": "Marketplace",
-    "about": "About",
+    "trading": "Trading",
     "contact": "Contact",
     "profile": "Profile",
     "dashboard": "Dashboard",
@@ -285,6 +285,11 @@
     "p2p_desc": "Secure peer-to-peer coin trading with escrow protection",
     "global_title": "Global Access",
     "global_desc": "Trade from anywhere in the world, 24/7 availability"
+  },
+  "trading": {
+  "title": "Trading",
+  "p2p": "P2P Trading",
+  "wallet": "My Wallet"
   },
   "common": {
     "loading": "Loading...",

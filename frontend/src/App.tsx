@@ -30,6 +30,7 @@ import OrderListPage from './pages/Orders/OrderList';
 import OrderDetailPage from './pages/Orders/OrderDetail';
 import SquarePage from './pages/Square';
 import OAuthCallback from './pages/Auth/OAuthCallback';
+import TradingPage from './pages/Trading';
 
 function App() {
   const dispatch = useDispatch();
@@ -60,6 +61,7 @@ function App() {
         <Route path="square" element={<SquarePage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="cart" element={<CartPage />} />
+        <Route path="trading" element={<TradingPage />} />
       </Route>
 
       {/* Auth routes */}

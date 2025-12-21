@@ -29,13 +29,27 @@ const TopCoins = () => {
     try {
       if (showToast) setRefreshing(true);
       const response = await axios.get('/api/v1/coins/top10');
-      setCoins(response.data.data.coins);
-      if (showToast) {
-        toast.success('Prices updated!');
+      
+      // ✅ Thêm null check
+      if (response.data?.success && response.data.data?.coins) {
+        setCoins(response.data.data.coins);
+        if (showToast) {
+          toast.success('Prices updated!');
+        }
+      } else {
+        // Nếu không có data, set empty array
+        setCoins([]);
+        if (showToast) {
+          toast.info('No coin data available');
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching coins:', error);
-      toast.error('Failed to fetch coin prices');
+      // ✅ Set empty array thay vì để undefined
+      setCoins([]);
+      if (showToast) {
+        toast.error('Failed to fetch coin prices');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -107,75 +121,86 @@ const TopCoins = () => {
       </div>
 
       {/* Coins Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {coins.map((coin, index) => (
-          <motion.div
-            key={coin.coinId}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            whileHover={{ y: -4, scale: 1.02 }}
-            onClick={() => navigate(`/coins/${coin.coinId}`)}
-            className="bg-white dark:bg-gray-700 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-200 dark:border-gray-600"
-          >
-            {/* Rank Badge */}
-            <div className="flex justify-between items-start mb-3">
-              <div className="flex items-center space-x-3">
-                <img 
-                  src={coin.image} 
-                  alt={coin.name}
-                  className="w-10 h-10"
-                />
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">
-                    {coin.symbol.toUpperCase()}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {coin.name}
-                  </p>
+      {coins && coins.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {coins.map((coin, index) => (
+            <motion.div
+              key={coin.coinId}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              whileHover={{ y: -4, scale: 1.02 }}
+              onClick={() => navigate(`/coins/${coin.coinId}`)}
+              className="bg-white dark:bg-gray-700 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-200 dark:border-gray-600"
+            >
+              {/* Rank Badge */}
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center space-x-3">
+                  <img 
+                    src={coin.image} 
+                    alt={coin.name}
+                    className="w-10 h-10"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40';
+                    }}
+                  />
+                  <div>
+                    <h3 className="font-bold text-gray-900 dark:text-white">
+                      {coin.symbol?.toUpperCase() || 'N/A'}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {coin.name || 'Unknown'}
+                    </p>
+                  </div>
+                </div>
+                <span className="bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs font-bold px-2 py-1 rounded">
+                  #{coin.marketCapRank || 'N/A'}
+                </span>
+              </div>
+
+              {/* Price */}
+              <div className="mb-2">
+                <div className="text-xl font-bold text-gray-900 dark:text-white">
+                  {formatPrice(coin.currentPrice || 0)}
                 </div>
               </div>
-              <span className="bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs font-bold px-2 py-1 rounded">
-                #{coin.marketCapRank}
-              </span>
-            </div>
 
-            {/* Price */}
-            <div className="mb-2">
-              <div className="text-xl font-bold text-gray-900 dark:text-white">
-                {formatPrice(coin.currentPrice)}
+              {/* Price Change */}
+              <div className={`flex items-center space-x-1 text-sm font-medium ${
+                (coin.priceChangePercentage24h || 0) >= 0 
+                  ? 'text-green-600 dark:text-green-400' 
+                  : 'text-red-600 dark:text-red-400'
+              }`}>
+                {(coin.priceChangePercentage24h || 0) >= 0 ? (
+                  <FiTrendingUp className="w-4 h-4" />
+                ) : (
+                  <FiTrendingDown className="w-4 h-4" />
+                )}
+                <span>
+                  {(coin.priceChangePercentage24h || 0) >= 0 ? '+' : ''}
+                  {(coin.priceChangePercentage24h || 0).toFixed(2)}%
+                </span>
               </div>
-            </div>
 
-            {/* Price Change */}
-            <div className={`flex items-center space-x-1 text-sm font-medium ${
-              coin.priceChangePercentage24h >= 0 
-                ? 'text-green-600 dark:text-green-400' 
-                : 'text-red-600 dark:text-red-400'
-            }`}>
-              {coin.priceChangePercentage24h >= 0 ? (
-                <FiTrendingUp className="w-4 h-4" />
-              ) : (
-                <FiTrendingDown className="w-4 h-4" />
-              )}
-              <span>
-                {coin.priceChangePercentage24h >= 0 ? '+' : ''}
-                {coin.priceChangePercentage24h.toFixed(2)}%
-              </span>
-            </div>
-
-            {/* Market Cap */}
-            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Market Cap
+              {/* Market Cap */}
+              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Market Cap
+                </div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatMarketCap(coin.marketCap || 0)}
+                </div>
               </div>
-              <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                {formatMarketCap(coin.marketCap)}
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-gray-500 dark:text-gray-400">
+            No coins available at the moment. Please try again later.
+          </p>
+        </div>
+      )}
 
       {/* View All Link */}
       <motion.div
@@ -197,4 +222,3 @@ const TopCoins = () => {
 };
 
 export default TopCoins;
-

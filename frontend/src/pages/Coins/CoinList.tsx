@@ -19,11 +19,11 @@ interface Coin {
   image: string;
   currentPrice: number;
   priceChangePercentage24h: number;
-  priceChangePercentage7d: number;
+  priceChangePercentage7d?: number;
   marketCap: number;
   marketCapRank: number;
   totalVolume: number;
-  sparkline: number[];
+  sparkline?: number[];
 }
 
 const CoinList = () => {
@@ -48,62 +48,24 @@ const CoinList = () => {
       const response = await axios.get('/api/v1/coins', {
         params: { limit: 100 }
       });
-      setCoins(response.data.data.coins);
-      if (showToast) {
-        toast.success('Prices updated!');
+      
+      if (response.data.success && response.data.data.coins) {
+        setCoins(response.data.data.coins);
+        if (showToast) {
+          toast.success('Prices updated!');
+        }
+      } else {
+        throw new Error('Invalid response format');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching coins:', error);
-      // Generate mock data for top 100 coins
-      generateMockCoins();
-      if (!showToast) {
-        toast.info('Showing demo data');
-      }
+      toast.error('Failed to fetch coin prices. Please try again later.');
+      // Không dùng mock data nữa, chỉ set empty array
+      setCoins([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  const generateMockCoins = () => {
-    const topCoins = [
-      { name: 'Bitcoin', symbol: 'BTC', image: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png', basePrice: 45000 },
-      { name: 'Ethereum', symbol: 'ETH', image: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', basePrice: 2500 },
-      { name: 'Tether', symbol: 'USDT', image: 'https://assets.coingecko.com/coins/images/325/small/Tether.png', basePrice: 1 },
-      { name: 'BNB', symbol: 'BNB', image: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png', basePrice: 300 },
-      { name: 'XRP', symbol: 'XRP', image: 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png', basePrice: 0.5 },
-      { name: 'Cardano', symbol: 'ADA', image: 'https://assets.coingecko.com/coins/images/975/small/cardano.png', basePrice: 0.4 },
-      { name: 'Solana', symbol: 'SOL', image: 'https://assets.coingecko.com/coins/images/4128/small/solana.png', basePrice: 100 },
-      { name: 'Dogecoin', symbol: 'DOGE', image: 'https://assets.coingecko.com/coins/images/5/small/dogecoin.png', basePrice: 0.08 },
-      { name: 'Polkadot', symbol: 'DOT', image: 'https://assets.coingecko.com/coins/images/12171/small/polkadot.png', basePrice: 6 },
-      { name: 'Polygon', symbol: 'MATIC', image: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png', basePrice: 0.8 },
-    ];
-
-    const mockCoins: Coin[] = [];
-    
-    for (let i = 0; i < 100; i++) {
-      const coinTemplate = topCoins[i % topCoins.length];
-      const volatility = (Math.random() - 0.5) * 0.1;
-      const currentPrice = coinTemplate.basePrice * (1 + volatility);
-      const change24h = (Math.random() - 0.5) * 20;
-      const change7d = (Math.random() - 0.5) * 30;
-
-      mockCoins.push({
-        coinId: `${coinTemplate.symbol.toLowerCase()}-${i}`,
-        symbol: i < 10 ? coinTemplate.symbol : `${coinTemplate.symbol}${i}`,
-        name: i < 10 ? coinTemplate.name : `${coinTemplate.name} ${i}`,
-        image: coinTemplate.image,
-        currentPrice,
-        priceChangePercentage24h: change24h,
-        priceChangePercentage7d: change7d,
-        marketCap: currentPrice * (Math.random() * 1000000000 + 100000000),
-        marketCapRank: i + 1,
-        totalVolume: currentPrice * (Math.random() * 10000000 + 1000000),
-        sparkline: Array.from({ length: 7 }, () => Math.random() * 100),
-      });
-    }
-
-    setCoins(mockCoins);
   };
 
   const filteredCoins = coins
@@ -331,8 +293,14 @@ const CoinList = () => {
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                     }`}>
-                      {coin.priceChangePercentage7d >= 0 ? '+' : ''}
-                      {coin.priceChangePercentage7d?.toFixed(2)}%
+                      {coin.priceChangePercentage7d ? (
+                        <>
+                          {coin.priceChangePercentage7d >= 0 ? '+' : ''}
+                          {coin.priceChangePercentage7d.toFixed(2)}%
+                        </>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right text-gray-900 dark:text-white hidden lg:table-cell">
                       {formatNumber(coin.marketCap)}
@@ -366,7 +334,10 @@ const CoinList = () => {
           {filteredCoins.length === 0 && (
             <div className="text-center py-12">
               <p className="text-gray-500 dark:text-gray-400">
-                No coins found matching "{searchTerm}"
+                {coins.length === 0 
+                  ? 'No coins available. Please try again later.'
+                  : `No coins found matching "${searchTerm}"`
+                }
               </p>
             </div>
           )}
@@ -377,4 +348,3 @@ const CoinList = () => {
 };
 
 export default CoinList;
-

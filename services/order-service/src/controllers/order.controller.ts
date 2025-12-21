@@ -23,6 +23,8 @@ export class OrderController {
         shippingCountry,
         shippingPostalCode,
         paymentMethod,
+        coinId,       
+        coinSymbol,
         notes,
       } = req.body;
 
@@ -74,6 +76,7 @@ export class OrderController {
           totalInCoins,
           totalInUSD,
           paymentMethod,
+          
           paymentStatus: PaymentStatus.PENDING,
           orderStatus: OrderStatus.PENDING,
           notes,
@@ -100,6 +103,8 @@ export class OrderController {
               priceInUSD: cartItem.priceInUSD,
               subtotalInCoins: priceInCoins * cartItem.quantity,
               subtotalInUSD: priceInUSD * cartItem.quantity,
+              coinId: coinId || null,        // Thêm
+              coinSymbol: coinSymbol || null, // Thêm
             },
             { transaction }
           );

@@ -6,6 +6,9 @@ import mongoose from 'mongoose';
 import tokenRoutes from './routes/token.routes';
 import transactionRoutes from './routes/transaction.routes';
 import walletRoutes from './routes/wallet.routes';
+import networkRoutes from './routes/network.routes';
+import transferRoutes from './routes/transfer.routes';
+import swapRoutes from './routes/swap.routes';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
@@ -29,6 +32,9 @@ app.get('/health', (req, res) => {
 app.use('/api/tokens', tokenRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallets', walletRoutes);
+app.use('/api/networks', networkRoutes);
+app.use('/api/transfers', transferRoutes);
+app.use('/api/swaps', swapRoutes);
 
 // Start server
 const startServer = async () => {

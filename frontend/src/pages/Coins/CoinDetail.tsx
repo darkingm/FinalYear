@@ -42,6 +42,23 @@ interface CoinDetail {
 
 type TimeRange = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w' | '1M' | '1y';
 
+// ✅ THÊM: Helper function để convert timeRange sang days
+const getDaysFromTimeRange = (timeRange: TimeRange): number => {
+  const daysMap: Record<TimeRange, number> = {
+    '1m': 1,
+    '5m': 1,
+    '15m': 1,
+    '30m': 1,
+    '1h': 1,
+    '4h': 1,
+    '1d': 1,
+    '1w': 7,
+    '1M': 30,
+    '1y': 365,
+  };
+  return daysMap[timeRange] || 7;
+};
+
 const CoinDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -90,10 +107,26 @@ const CoinDetail = () => {
 
   const fetchChartData = async () => {
     try {
-      const response = await axios.get(`/api/v1/coins/${id}/chart`, {
-        params: { timeRange }
+      // ✅ SỬA: Thay /chart bằng /history và convert timeRange sang days
+      const days = getDaysFromTimeRange(timeRange);
+      const response = await axios.get(`/api/v1/coins/${id}/history`, {
+        params: { days }
       });
-      setChartData(response.data.data);
+      
+      // ✅ Xử lý response data từ backend
+      if (response.data.success && response.data.data.history) {
+        // Convert history data sang format cho chart
+        const formattedData = response.data.data.history.map((item: any) => ({
+          time: new Date(item.timestamp).getTime() / 1000,
+          open: item.price,
+          high: item.price * 1.02, // Approximate
+          low: item.price * 0.98, // Approximate
+          close: item.price,
+        }));
+        setChartData(formattedData);
+      } else {
+        generateMockChartData();
+      }
     } catch (error) {
       console.error('Error fetching chart data:', error);
       // Generate mock data for demonstration
@@ -542,4 +575,3 @@ const CoinDetail = () => {
 };
 
 export default CoinDetail;
-

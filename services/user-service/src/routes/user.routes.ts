@@ -47,6 +47,16 @@ router.get('/profile', UserController.getProfile);
 // Get user by ID (public)
 router.get('/:id', UserController.getUserById);
 
+router.get('/dashboard/stats', UserController.getDashboardStats);
+// Get user balances
+router.get('/:userId/balances', UserController.getBalances);
+
+// Add balance
+router.post('/:userId/balances/add', UserController.addBalance);
+
+// Deduct balance
+router.post('/:userId/balances/deduct', UserController.deductBalance);
+
 // Update profile (requires auth)
 router.put(
   '/profile',

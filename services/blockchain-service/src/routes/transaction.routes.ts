@@ -3,7 +3,8 @@ import { TransactionController } from '../controllers/transaction.controller';
 
 const router = express.Router();
 
-// Get transaction by hash
+// Get transaction by hash (supports networkId)
+router.get('/:networkId/:txHash', TransactionController.getTransaction);
 router.get('/:txHash', TransactionController.getTransaction);
 
 // Get transaction history for address

@@ -19,7 +19,18 @@ router.post(
   ],
   PaymentController.createPaymentIntent
 );
-
+// Process coin payment
+router.post(
+  '/coin',
+  [
+    body('orderId').isString().withMessage('Order ID is required'),
+    body('coinId').isString().withMessage('Coin ID is required'),
+    body('coinSymbol').isString().withMessage('Coin symbol is required'),
+    body('amount').isFloat({ min: 0 }).withMessage('Amount must be positive'),
+    validate,
+  ],
+  PaymentController.processCoinPayment
+);
 // Get payment
 router.get('/:id', PaymentController.getPayment);
 

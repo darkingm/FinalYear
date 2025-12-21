@@ -90,7 +90,8 @@ export class AuthController {
         username,
         password,
         fullName,
-        role: 'USER',
+        role: 'USER'
+        isEmailVerified: false,
       });
 
       // Generate OTP
@@ -125,6 +126,7 @@ export class AuthController {
         userId: user.id,
         email: user.email,
         username: user.username,
+        fullName: user.fullName || user.username,
       }).catch((eventError: any) => {
         logger.error('Failed to publish user.registered event:', eventError.message);
       });

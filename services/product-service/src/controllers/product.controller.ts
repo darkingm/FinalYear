@@ -3,6 +3,7 @@ import Product from '../models/Product.model';
 import { redisClient } from '../utils/redis';
 import { publishEvent } from '../utils/rabbitmq';
 import logger from '../utils/logger';
+import mongoose from "mongoose";
 
 const CACHE_TTL = 300; // 5 minutes
 
@@ -150,32 +151,51 @@ export class ProductController {
   static async getProductById(req: Request, res: Response) {
     try {
       const { id } = req.params;
-
+  
+      // Case 1: Không có id
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          error: "Product ID is missing",
+        });
+      }
+  
+      // Case 2: id không phải ObjectId
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid Product ID",
+          received: id,
+        });
+      }
+  
       const product = await Product.findById(id);
-
+  
       if (!product) {
         return res.status(404).json({
           success: false,
-          error: 'Product not found',
+          error: "Product not found",
         });
       }
-
+  
       // Increment views
       product.views += 1;
       await product.save();
-
-      res.json({
+  
+      return res.json({
         success: true,
         data: product,
       });
+  
     } catch (error: any) {
-      logger.error('Get product error:', error);
-      res.status(500).json({
+      logger.error("Get product error:", error);
+      return res.status(500).json({
         success: false,
-        error: 'Failed to fetch product',
+        error: "Failed to fetch product",
       });
     }
   }
+  
 
   // Create product
   static async createProduct(req: Request, res: Response) {

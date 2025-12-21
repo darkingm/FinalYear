@@ -439,7 +439,53 @@ export class UserController {
       });
     }
   }
+// File: services/user-service/src/controllers/user.controller.ts
 
+// Add this method to UserController class
+static async getDashboardStats(req: Request, res: Response) {
+  try {
+    const userId = req.headers['x-user-id'] as string;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+      });
+    }
+
+    // Get user profile
+    const profile = await UserProfile.findOne({ where: { userId } });
+    
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: 'Profile not found',
+      });
+    }
+
+    // TODO: Get orders from order-service via HTTP call or RabbitMQ
+    // For now, return basic stats from profile
+    res.json({
+      success: true,
+      data: {
+        totalOrders: 0, // Will be populated from order-service
+        activeOrders: 0,
+        completedOrders: 0,
+        totalSpent: 0,
+        totalEarned: profile.totalSales || 0,
+        totalPurchases: profile.totalPurchases || 0,
+        rating: profile.rating || 0,
+        reviewCount: profile.reviewCount || 0,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Get dashboard stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch dashboard statistics',
+    });
+  }
+}
   // Search users
   static async searchUsers(req: Request, res: Response) {
     try {
@@ -496,6 +542,197 @@ export class UserController {
       res.status(500).json({
         success: false,
         error: 'Failed to search users',
+        details: error.message,
+      });
+    }
+  }
+  // Get user balances
+  static async getBalances(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      const requestUserId = req.headers['x-user-id'] as string;
+
+      // User can only view their own balances
+      if (userId !== requestUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You can only view your own balances',
+        });
+      }
+
+      // Get user profile
+      const profile = await UserProfile.findOne({ where: { userId } });
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found',
+        });
+      }
+
+      // Get coin balances from metadata or return empty array
+      // In a real implementation, you would have a separate Wallet or Balance model
+      const balances = (profile as any).coinBalances || [];
+
+      res.json({
+        success: true,
+        data: {
+          balances,
+          userId,
+        },
+      });
+    } catch (error: any) {
+      logger.error('Get balances error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch balances',
+        details: error.message,
+      });
+    }
+  }
+
+  // Add balance
+  static async addBalance(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      const requestUserId = req.headers['x-user-id'] as string;
+      const { coinId, amount, source } = req.body;
+
+      // User can only modify their own balances
+      if (userId !== requestUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You can only modify your own balances',
+        });
+      }
+
+      if (!coinId || !amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid coinId or amount',
+        });
+      }
+
+      // Get user profile
+      const profile = await UserProfile.findOne({ where: { userId } });
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found',
+        });
+      }
+
+      // In a real implementation, you would update a Wallet or Balance model
+      // For now, we'll store in profile metadata
+      const coinBalances = (profile as any).coinBalances || [];
+      const existingBalance = coinBalances.find((b: any) => b.coinId === coinId);
+
+      if (existingBalance) {
+        existingBalance.balance = parseFloat(existingBalance.balance) + parseFloat(amount);
+      } else {
+        coinBalances.push({
+          coinId,
+          balance: parseFloat(amount),
+        });
+      }
+
+      // Update profile metadata
+      (profile as any).coinBalances = coinBalances;
+      await profile.save();
+
+      // Publish event
+      await publishEvent('wallet.balance.added', {
+        userId,
+        coinId,
+        amount,
+        source: source || 'MANUAL',
+      });
+
+      res.json({
+        success: true,
+        data: {
+          coinId,
+          balance: existingBalance ? existingBalance.balance : parseFloat(amount),
+        },
+        message: 'Balance added successfully',
+      });
+    } catch (error: any) {
+      logger.error('Add balance error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to add balance',
+        details: error.message,
+      });
+    }
+  }
+
+  // Deduct balance
+  static async deductBalance(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      const requestUserId = req.headers['x-user-id'] as string;
+      const { coinId, amount, orderId } = req.body;
+
+      // User can only modify their own balances
+      if (userId !== requestUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You can only modify your own balances',
+        });
+      }
+
+      if (!coinId || !amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid coinId or amount',
+        });
+      }
+
+      // Get user profile
+      const profile = await UserProfile.findOne({ where: { userId } });
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found',
+        });
+      }
+
+      // Check balance
+      const coinBalances = (profile as any).coinBalances || [];
+      const existingBalance = coinBalances.find((b: any) => b.coinId === coinId);
+
+      if (!existingBalance || parseFloat(existingBalance.balance) < parseFloat(amount)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient balance',
+        });
+      }
+
+      // Deduct balance
+      existingBalance.balance = parseFloat(existingBalance.balance) - parseFloat(amount);
+      (profile as any).coinBalances = coinBalances;
+      await profile.save();
+
+      // Publish event
+      await publishEvent('wallet.balance.deducted', {
+        userId,
+        coinId,
+        amount,
+        orderId,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          coinId,
+          balance: existingBalance.balance,
+        },
+        message: 'Balance deducted successfully',
+      });
+    } catch (error: any) {
+      logger.error('Deduct balance error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to deduct balance',
         details: error.message,
       });
     }

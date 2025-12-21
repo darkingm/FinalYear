@@ -19,7 +19,7 @@ export interface IProduct extends Document {
   location: string;
   tags: string[];
   views: number;
-  likes: number[];
+  likes: string[];
   rating?: number;
   reviews?: number;
   tokenized: boolean;

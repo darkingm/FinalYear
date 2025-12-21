@@ -4,6 +4,7 @@ import {
   getCoinById,
   getCoinPriceHistory,
   searchCoins,
+  getAllCoins,
 } from '../services/coinmarket.service';
 import logger from '../utils/logger';
 
@@ -35,6 +36,30 @@ export class CoinController {
       });
     } catch (error: any) {
       logger.error('Get top 10 coins error:', error.message || error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch coin data',
+        message: error.message || 'An unexpected error occurred',
+      });
+    }
+  }
+
+  // Get all coins with limit
+  static async getAllCoins(req: Request, res: Response) {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const coins = await getAllCoins(limit);
+
+      res.json({
+        success: true,
+        data: {
+          coins,
+          count: coins.length,
+          limit,
+        },
+      });
+    } catch (error: any) {
+      logger.error('Get all coins error:', error.message || error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch coin data',
@@ -126,4 +151,3 @@ export class CoinController {
     }
   }
 }
-

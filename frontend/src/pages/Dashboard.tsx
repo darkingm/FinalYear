@@ -54,16 +54,41 @@ const DashboardPage = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, ordersRes] = await Promise.all([
-        axios.get('/api/v1/users/dashboard/stats'),
-        axios.get('/api/v1/orders/recent', { params: { limit: 5 } })
-      ]);
+      // ✅ SỬA: Tính stats từ orders thay vì gọi endpoint không tồn tại
+      const ordersRes = await axios.get('/api/v1/orders/recent', { params: { limit: 100 } });
+      const orders = ordersRes.data.data || [];
       
-      setStats(statsRes.data.data);
-      setRecentOrders(ordersRes.data.data);
-    } catch (error) {
+      // ✅ Tính toán stats từ orders
+      const calculatedStats: DashboardStats = {
+        totalOrders: orders.length,
+        totalSpent: orders.reduce((sum: number, order: any) => {
+          return sum + (order.totalAmountUSD || order.total || 0);
+        }, 0),
+        activeOrders: orders.filter((order: any) => 
+          ['pending', 'processing'].includes(order.status?.toLowerCase())
+        ).length,
+        completedOrders: orders.filter((order: any) => 
+          order.status?.toLowerCase() === 'completed'
+        ).length,
+      };
+      
+      setStats(calculatedStats);
+      setRecentOrders(orders.slice(0, 5));
+    } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      console.error('Error response:', error.response?.data);
+      // ✅ Không hiển thị toast nếu chỉ là lỗi stats endpoint
+      if (error.response?.status !== 404) {
+        toast.error('Failed to load dashboard data');
+      }
+      // Set default values
+      setStats({
+        totalOrders: 0,
+        totalSpent: 0,
+        activeOrders: 0,
+        completedOrders: 0,
+      });
+      setRecentOrders([]);
     } finally {
       setLoading(false);
     }
@@ -261,16 +286,16 @@ const DashboardPage = () => {
                   recentOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                        {order.orderNumber}
+                        {order.orderNumber || order.id}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                        {new Date(order.date).toLocaleDateString()}
+                        {new Date(order.date || order.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                        {order.items} items
+                        {order.items || order.items?.length || 0} items
                       </td>
                       <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">
-                        ${order.total.toFixed(2)}
+                        ${(order.total || order.totalAmountUSD || 0).toFixed(2)}
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
@@ -380,4 +405,3 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
-

@@ -177,6 +177,26 @@ export const getTop10Coins = async () => {
   }
 };
 
+export const getAllCoins = async (limit: number = 100) => {
+  try {
+    // Fallback to database
+    const coins = await Coin.find()
+      .sort({ marketCapRank: 1 })
+      .limit(limit)
+      .lean();
+
+    if (!coins || coins.length === 0) {
+      logger.warn('No coins found in database. Returning empty array.');
+      return [];
+    }
+
+    return coins;
+  } catch (error: any) {
+    logger.error('Error getting all coins:', error.message);
+    return [];
+  }
+};
+
 export const getCoinById = async (coinId: string) => {
   try {
     const coin = await Coin.findOne({ coinId }).lean();
@@ -227,4 +247,3 @@ export const searchCoins = async (query: string) => {
     throw error;
   }
 };
-

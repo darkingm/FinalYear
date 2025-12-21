@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import Payment, { PaymentMethod, PaymentStatus } from '../models/Payment.model';
 import { publishEvent } from '../utils/rabbitmq';
 import logger from '../utils/logger';
+import { WalletService } from '../services/wallet.service';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
@@ -161,6 +162,76 @@ export class PaymentController {
       });
     }
   }
+
+  // Process coin payment
+  static async processCoinPayment(req: Request, res: Response) {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      const { orderId, coinId, coinSymbol, amount } = req.body;
+
+      if (!orderId || !coinId || !amount) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields: orderId, coinId, amount',
+        });
+      }
+
+      // Check balance
+      const hasBalance = await WalletService.checkBalance(userId, coinId, amount);
+      if (!hasBalance) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient balance',
+        });
+      }
+
+      // Deduct balance
+      const deducted = await WalletService.deductBalance(userId, coinId, amount, orderId);
+      if (!deducted) {
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to process payment',
+        });
+      }
+
+      // Create payment record
+      const payment = await Payment.create({
+        userId,
+        orderId,
+        amount,
+        currency: coinSymbol.toUpperCase(),
+        paymentMethod: PaymentMethod.COIN,
+        status: PaymentStatus.COMPLETED,
+        metadata: {
+          coinId,
+          coinSymbol,
+        },
+      });
+
+      // Publish event
+      await publishEvent('payment.completed', {
+        paymentId: payment.id,
+        orderId,
+        userId,
+        amount,
+        currency: coinSymbol,
+        paymentMethod: 'COIN',
+      });
+
+      res.json({
+        success: true,
+        data: payment,
+        message: 'Payment processed successfully',
+      });
+    } catch (error: any) {
+      logger.error('Process coin payment error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process payment',
+        details: error.message,
+      });
+    }
+  }
 }
 
 // Handle successful payment
@@ -216,4 +287,3 @@ async function handlePaymentFailure(paymentIntent: Stripe.PaymentIntent): Promis
     logger.error('Handle payment failure error:', error);
   }
 }
-

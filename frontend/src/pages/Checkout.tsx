@@ -20,15 +20,6 @@ import {
   FiPackage,
 } from 'react-icons/fi';
 
-// Coin data - prices in USD
-const COINS = [
-  { symbol: 'BTC', name: 'Bitcoin', logo: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png', priceUSD: 43000 },
-  { symbol: 'ETH', name: 'Ethereum', logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', priceUSD: 2300 },
-  { symbol: 'USDT', name: 'Tether', logo: 'https://assets.coingecko.com/coins/images/325/small/Tether.png', priceUSD: 1 },
-  { symbol: 'BNB', name: 'Binance Coin', logo: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png', priceUSD: 320 },
-  { symbol: 'XRP', name: 'Ripple', logo: 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png', priceUSD: 0.52 },
-];
-
 type CheckoutStep = 'address' | 'payment' | 'review' | 'confirmation';
 
 const CheckoutPage = () => {
@@ -37,6 +28,8 @@ const CheckoutPage = () => {
   const { items, totalPrice } = useSelector((state: RootState) => state.cart);
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
   
+  // ✅ DI CHUYỂN TẤT CẢ HOOKS VÀO ĐÂY
+  const [availableCoins, setAvailableCoins] = useState<any[]>([]);
   const [step, setStep] = useState<CheckoutStep>('address');
   const [loading, setLoading] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -61,6 +54,41 @@ const CheckoutPage = () => {
     cardName: '',
   });
 
+  // ✅ DI CHUYỂN fetchAvailableCoins VÀO ĐÂY
+  const fetchAvailableCoins = async () => {
+    try {
+      const response = await axios.get('/api/v1/coins/top10');
+      if (response.data?.success && response.data.data?.coins) {
+        const coins = response.data.data.coins.map((coin: any) => ({
+          symbol: coin.symbol,
+          name: coin.name,
+          logo: coin.image,
+          priceUSD: coin.currentPrice,
+          coinId: coin.coinId,
+        }));
+        setAvailableCoins(coins);
+        if (coins.length > 0 && !selectedCoin) {
+          setSelectedCoin(coins[0].symbol);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching coins:', error);
+      // Set default coin if API fails
+      setAvailableCoins([{
+        symbol: 'USDT',
+        name: 'Tether',
+        logo: 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
+        priceUSD: 1,
+        coinId: 'tether',
+      }]);
+    }
+  };
+
+  // ✅ DI CHUYỂN useEffect VÀO ĐÂY
+  useEffect(() => {
+    fetchAvailableCoins();
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/auth');
@@ -72,8 +100,9 @@ const CheckoutPage = () => {
     }
   }, [isAuthenticated, items, navigate, step]);
 
-  const selectedCoinData = COINS.find(c => c.symbol === selectedCoin) || COINS[2];
-  const totalInCoins = (totalPrice / selectedCoinData.priceUSD).toFixed(6);
+  // ✅ Sử dụng availableCoins thay vì COINS
+  const selectedCoinData = availableCoins.find(c => c.symbol === selectedCoin) || availableCoins[0] || { symbol: 'USDT', priceUSD: 1 };
+  const totalInCoins = (totalPrice / (selectedCoinData.priceUSD || 1)).toFixed(6);
   const shippingFee = 0; // Free shipping for now
   const tax = totalPrice * 0.1; // 10% tax
   const finalTotal = totalPrice + shippingFee + tax;
@@ -114,6 +143,10 @@ const CheckoutPage = () => {
 
     setLoading(true);
     try {
+      const selectedCoinData = availableCoins.find(c => c.symbol === selectedCoin);
+      const coinId = selectedCoinData?.coinId || 'usdt';
+      const coinSymbol = selectedCoinData?.symbol || 'USDT';
+
       const orderData = {
         items: items.map(item => ({
           productId: item.id,
@@ -122,22 +155,16 @@ const CheckoutPage = () => {
           quantity: item.quantity,
           image: item.image,
         })),
-        shippingAddress: {
-          fullName: shippingAddress.fullName,
-          phone: shippingAddress.phone,
-          email: shippingAddress.email,
-          address: shippingAddress.address,
-          city: shippingAddress.city,
-          state: shippingAddress.state,
-          country: shippingAddress.country,
-          postalCode: shippingAddress.postalCode,
-        },
-        paymentMethod: {
-          type: paymentMethod,
-          coinSymbol: paymentMethod === 'COIN' ? selectedCoin : undefined,
-          coinAmount: paymentMethod === 'COIN' ? totalInCoins : undefined,
-          usdAmount: finalTotal,
-        },
+        shippingName: shippingAddress.fullName,
+        shippingEmail: shippingAddress.email,
+        shippingPhone: shippingAddress.phone,
+        shippingAddress: shippingAddress.address,
+        shippingCity: shippingAddress.city,
+        shippingCountry: shippingAddress.country,
+        shippingPostalCode: shippingAddress.postalCode,
+        paymentMethod: paymentMethod,
+        coinId: paymentMethod === 'COIN' ? coinId : null,
+        coinSymbol: paymentMethod === 'COIN' ? coinSymbol : null,
         totalAmountUSD: finalTotal,
         totalAmountCoin: paymentMethod === 'COIN' ? parseFloat(totalInCoins) : undefined,
         subtotal: totalPrice,
@@ -148,12 +175,32 @@ const CheckoutPage = () => {
       const response = await axios.post('/api/v1/orders', orderData);
       const order = response.data.data;
 
+      // If coin payment, process payment
+      if (paymentMethod === 'COIN' && order.id) {
+        try {
+          await axios.post('/api/v1/payments/coin', {
+            orderId: order.id,
+            coinId: coinId,
+            coinSymbol: coinSymbol,
+            amount: parseFloat(totalInCoins),
+          });
+        } catch (paymentError: any) {
+          console.error('Coin payment error:', paymentError);
+          toast.error(paymentError.response?.data?.error || 'Payment processing failed');
+          return;
+        }
+      }
+
       setOrderId(order.id);
       dispatch(clearCart());
       toast.success('Order placed successfully!');
       setStep('confirmation');
     } catch (error: any) {
+      // ✅ THÊM: Error logging chi tiết
       console.error('Error placing order:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Request payload:', orderData);
       toast.error(error.response?.data?.error || 'Failed to place order. Please try again.');
     } finally {
       setLoading(false);
@@ -454,27 +501,35 @@ const CheckoutPage = () => {
                         <p className="text-gray-600 dark:text-gray-400 mb-4">
                           Select a cryptocurrency to pay with:
                         </p>
-                        <div className="grid grid-cols-2 gap-4">
-                          {COINS.map((coin) => (
-                            <button
-                              key={coin.symbol}
-                              onClick={() => setSelectedCoin(coin.symbol)}
-                              className={`p-4 border-2 rounded-lg transition-all ${
-                                selectedCoin === coin.symbol
-                                  ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/20'
-                                  : 'border-gray-300 dark:border-gray-600 hover:border-primary-400'
-                              }`}
-                            >
-                              <div className="flex items-center space-x-3">
-                                <img src={coin.logo} alt={coin.symbol} className="w-8 h-8" />
-                                <div className="text-left">
-                                  <div className="font-bold text-gray-900 dark:text-white">{coin.symbol}</div>
-                                  <div className="text-sm text-gray-600 dark:text-gray-400">{coin.name}</div>
+                        {availableCoins.length > 0 ? (
+                          <div className="grid grid-cols-2 gap-4">
+                            {availableCoins.map((coin) => (
+                              <button
+                                key={coin.symbol}
+                                onClick={() => setSelectedCoin(coin.symbol)}
+                                className={`p-4 border-2 rounded-lg transition-all ${
+                                  selectedCoin === coin.symbol
+                                    ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                                    : 'border-gray-300 dark:border-gray-600 hover:border-primary-400'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <img src={coin.logo} alt={coin.symbol} className="w-8 h-8" onError={(e) => {
+                                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32';
+                                  }} />
+                                  <div className="text-left">
+                                    <div className="font-bold text-gray-900 dark:text-white">{coin.symbol}</div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">{coin.name}</div>
+                                  </div>
                                 </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                            Loading coins...
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -719,4 +774,3 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
-

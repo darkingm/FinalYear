@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import Token from '../models/Token.model';
 import Transaction from '../models/Transaction.model';
 import Wallet from '../models/Wallet.model';
+import balanceService from './BalanceService';
+import multiChainService from './MultiChainService';
 import logger from '../utils/logger';
 import { publishEvent } from '../utils/rabbitmq';
 
@@ -81,6 +83,7 @@ class BlockchainService {
       // Create transaction record
       const transaction = await Transaction.create({
         txHash,
+        networkId: 'ethereum_mainnet', // Default network for legacy tokens
         blockNumber,
         blockTimestamp: new Date(),
         from: '0x0000000000000000000000000000000000000000', // Mint from zero address
@@ -92,6 +95,7 @@ class BlockchainService {
         contractAddress: this.contractAddress,
         type: 'MINT',
         status: 'CONFIRMED',
+        confirmations: 1,
         metadata: {
           productId: data.productId,
           assetValue: data.assetValue,
@@ -168,6 +172,7 @@ class BlockchainService {
       // Create transaction record
       await Transaction.create({
         txHash,
+        networkId: 'ethereum_mainnet', // Default network for legacy tokens
         blockNumber,
         blockTimestamp: new Date(),
         from: data.fromAddress,
@@ -177,8 +182,9 @@ class BlockchainService {
         gasPrice: ethers.parseUnits('20', 'gwei').toString(),
         tokenId: data.tokenId,
         contractAddress: this.contractAddress,
-        type: 'TRANSFER',
+        type: 'TRANSFER_TOKEN',
         status: 'CONFIRMED',
+        confirmations: 1,
       });
 
       // Update token ownership
@@ -264,16 +270,45 @@ class BlockchainService {
     ).join('');
   }
 
-  // Get wallet balance (simulate)
-  async getWalletBalance(address: string): Promise<string> {
-    const wallet = await Wallet.findOne({ address });
-    return wallet?.balance || '0';
+  // Get wallet balance (legacy - for backward compatibility)
+  async getWalletBalance(address: string, networkId?: string): Promise<string> {
+    try {
+      // If networkId provided, use multi-chain service
+      if (networkId) {
+        const balance = await balanceService.getNativeBalance(address, networkId);
+        return balance.balance;
+      }
+
+      // Legacy: get from database
+      const wallet = await Wallet.findOne({ address });
+      return wallet?.balance || '0';
+    } catch (error) {
+      logger.error('Get wallet balance error:', error);
+      // Fallback to database
+      const wallet = await Wallet.findOne({ address });
+      return wallet?.balance || '0';
+    }
   }
 
   // Verify transaction
-  async verifyTransaction(txHash: string): Promise<boolean> {
-    const tx = await Transaction.findOne({ txHash });
-    return tx?.status === 'CONFIRMED';
+  async verifyTransaction(txHash: string, networkId?: string): Promise<boolean> {
+    try {
+      // If networkId provided, verify on blockchain
+      if (networkId) {
+        const provider = multiChainService.getProvider(networkId);
+        const tx = await provider.getTransaction(txHash);
+        return tx !== null && tx.status === 'confirmed';
+      }
+
+      // Legacy: check database
+      const tx = await Transaction.findOne({ txHash });
+      return tx?.status === 'CONFIRMED';
+    } catch (error) {
+      logger.error('Verify transaction error:', error);
+      // Fallback to database
+      const tx = await Transaction.findOne({ txHash });
+      return tx?.status === 'CONFIRMED';
+    }
   }
 }
 
