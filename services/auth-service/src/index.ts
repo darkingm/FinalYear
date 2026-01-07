@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.routes';
 import logger from './utils/logger';
 import { redisClient, connectRedis } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
+import { validateEnvironmentVariables } from './utils/envValidator';
 
 const app: Application = express();
 const PORT = process.env.AUTH_SERVICE_PORT || 3001;
@@ -33,6 +34,16 @@ app.use('/api/auth', authRoutes);
 // Start server
 const startServer = async () => {
   try {
+    // Validate environment variables
+    if (!validateEnvironmentVariables()) {
+      logger.error('❌ Environment validation failed. Please fix the errors above.');
+      if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+      } else {
+        logger.warn('⚠️  Continuing in development mode despite validation errors...');
+      }
+    }
+
     // Connect to PostgreSQL (required - app won't work without it)
     logger.info('Connecting to PostgreSQL...');
     const dbConnected = await testConnection();

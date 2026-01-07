@@ -5,6 +5,7 @@ export enum PaymentMethod {
   CREDIT_CARD = 'CREDIT_CARD',
   COIN = 'COIN',
   P2P = 'P2P',
+  VNPAY = 'VNPAY',
 }
 
 export enum PaymentStatus {
@@ -31,6 +32,10 @@ interface PaymentAttributes {
   
   // P2P specific
   p2pTradeId?: string;
+  
+  // VNPay specific
+  vnpayTransactionId?: string;
+  vnpayTxnRef?: string;
   
   // Metadata
   metadata?: any;
@@ -59,6 +64,8 @@ class Payment extends Model<PaymentAttributes, PaymentCreationAttributes> implem
   declare stripePaymentIntentId?: string;
   declare stripeCustomerId?: string;
   declare p2pTradeId?: string;
+  declare vnpayTransactionId?: string;
+  declare vnpayTxnRef?: string;
   
   declare metadata?: any;
   declare errorMessage?: string;
@@ -113,6 +120,15 @@ Payment.init(
     p2pTradeId: {
       type: DataTypes.STRING,
       field: 'p2p_trade_id',
+    },
+    
+    vnpayTransactionId: {
+      type: DataTypes.STRING,
+      field: 'vnpay_transaction_id',
+    },
+    vnpayTxnRef: {
+      type: DataTypes.STRING,
+      field: 'vnpay_txn_ref',
     },
     
     metadata: {

@@ -10,8 +10,16 @@ import { publishEvent } from '../utils/rabbitmq';
 import { redisClient } from '../utils/redis';
 import logger from '../utils/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key-change-in-production';
+// Validate environment variables on startup
+import { validateEnvironmentVariables, getEnvVar } from '../utils/envValidator';
+
+// Validate on module load
+if (process.env.NODE_ENV !== 'test') {
+  validateEnvironmentVariables();
+}
+
+const JWT_SECRET = getEnvVar('JWT_SECRET', 'your-super-secret-jwt-key-change-in-production');
+const JWT_REFRESH_SECRET = getEnvVar('JWT_REFRESH_SECRET', 'your-super-secret-refresh-key-change-in-production');
 
 // Helper functions
 const generateAccessToken = (user: User): string => {
@@ -90,7 +98,7 @@ export class AuthController {
         username,
         password,
         fullName,
-        role: 'USER'
+        role: 'USER',
         isEmailVerified: false,
       });
 

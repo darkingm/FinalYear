@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { logout } from '../../store/slices/authSlice';
+import { clearCartLocal } from '../../store/slices/cartSlice';
 import { toggleTheme, setLanguage } from '../../store/slices/themeSlice';
 import AuthModal from '../../components/AuthModal';
 import { 
@@ -68,6 +69,7 @@ const Header = () => {
   };
 
   const handleLogout = () => {
+    dispatch(clearCartLocal()); // Clear cart when logout
     dispatch(logout());
     navigate('/');
     setUserMenuOpen(false);

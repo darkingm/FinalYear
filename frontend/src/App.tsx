@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from './store';
 import { setTheme } from './store/slices/themeSlice';
+import { useCartSync } from './hooks/useCartSync';
 
 // Layouts
 import MainLayout from './layouts/MainLayout';
@@ -35,6 +36,9 @@ import TradingPage from './pages/Trading';
 function App() {
   const dispatch = useDispatch();
   const theme = useSelector((state: RootState) => state.theme.mode);
+  
+  // Sync cart with backend when authenticated
+  useCartSync();
 
   // Initialize theme on mount
   useEffect(() => {

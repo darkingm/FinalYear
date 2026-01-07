@@ -9,8 +9,8 @@ services:
     image: postgres:16-alpine
     container_name: tokenasset-postgres
     environment:
-      POSTGRES_PASSWORD: 1
-      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
     ports:
       - "5432:5432"
     volumes:
@@ -109,7 +109,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - DATABASE_URL=postgresql://postgres:1@postgres:5432/auth_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/auth_db
     env_file:
       - .env
     depends_on:
@@ -136,7 +136,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3002
-      - DATABASE_URL=postgresql://postgres:1@postgres:5432/user_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/user_db
     env_file:
       - .env
     depends_on:
@@ -215,7 +215,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3005
-      - DATABASE_URL=postgresql://postgres:1@postgres:5432/order_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/order_db
     env_file:
       - .env
     depends_on:
@@ -242,7 +242,13 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3006
-      - DATABASE_URL=postgresql://postgres:1@postgres:5432/payment_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/payment_db
+      - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-U5CW5POH}
+      - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-84NWU0ONLFEQ7SQZYFUXSGRNA2PWZIJB}
+      - VNPAY_URL=${VNPAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:3000/payment/vnpay/return}
+      - VNPAY_IPN_URL=${VNPAY_IPN_URL:-http://localhost:3006/api/v1/payments/vnpay/ipn}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     env_file:
       - .env
     depends_on:
@@ -270,9 +276,12 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3007
+      - MONGODB_URI=mongodb://mongodb:27017/blockchain_db
     env_file:
       - .env
     depends_on:
+      mongodb:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:

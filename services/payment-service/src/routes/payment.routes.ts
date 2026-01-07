@@ -1,6 +1,7 @@
 import express from 'express';
 import { body } from 'express-validator';
 import { PaymentController } from '../controllers/payment.controller';
+import { VNPayController } from '../controllers/vnpay.controller';
 import { validate } from '../middleware/validate.middleware';
 
 const router = express.Router();
@@ -19,6 +20,7 @@ router.post(
   ],
   PaymentController.createPaymentIntent
 );
+
 // Process coin payment
 router.post(
   '/coin',
@@ -31,6 +33,28 @@ router.post(
   ],
   PaymentController.processCoinPayment
 );
+
+// VNPay routes
+router.post(
+  '/vnpay/create',
+  [
+    body('amount').isFloat({ min: 0 }).withMessage('Amount must be positive'),
+    body('orderId').isString().withMessage('Order ID is required'),
+    body('orderDescription').optional().isString(),
+    validate,
+  ],
+  VNPayController.createPaymentUrl
+);
+
+// VNPay return URL (no auth required, verified by hash)
+router.get('/vnpay/return', VNPayController.handleReturn);
+
+// VNPay IPN (no auth required, verified by hash)
+router.get('/vnpay/ipn', VNPayController.handleIPN);
+
+// Get VNPay payment status
+router.get('/vnpay/:paymentId/status', VNPayController.getPaymentStatus);
+
 // Get payment
 router.get('/:id', PaymentController.getPayment);
 

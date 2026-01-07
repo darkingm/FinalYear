@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { clearCartLocal } from './cartSlice';
 
 interface User {
   id: string;
@@ -104,6 +105,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      // Cart will be cleared by middleware or component
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;

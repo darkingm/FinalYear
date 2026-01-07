@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
-import { removeFromCart, updateQuantity, clearCart } from '../store/slices/cartSlice';
+import { removeFromCartAsync, updateCartItemAsync, clearCartAsync } from '../store/thunks/cartThunks';
 import { FiTrash2, FiPlus, FiMinus, FiShoppingBag } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
@@ -12,17 +12,25 @@ const CartPage = () => {
   const dispatch = useDispatch();
   const { items, totalItems, totalPrice } = useSelector((state: RootState) => state.cart);
 
-  const handleRemove = (id: string) => {
-    dispatch(removeFromCart(id));
-    toast.success('Item removed from cart');
+  const handleRemove = async (id: string) => {
+    try {
+      await dispatch(removeFromCartAsync(id) as any);
+      toast.success('Item removed from cart');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to remove item');
+    }
   };
 
-  const handleQuantityChange = (id: string, newQuantity: number) => {
+  const handleQuantityChange = async (id: string, newQuantity: number) => {
     if (newQuantity < 1) {
       handleRemove(id);
       return;
     }
-    dispatch(updateQuantity({ id, quantity: newQuantity }));
+    try {
+      await dispatch(updateCartItemAsync({ id, quantity: newQuantity }) as any);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update quantity');
+    }
   };
 
   const handleCheckout = () => {

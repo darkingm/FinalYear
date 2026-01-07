@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { FiSearch, FiFilter, FiShoppingCart } from 'react-icons/fi';
 import axios from '../../api/axios';
-import { addToCart } from '../../store/slices/cartSlice';
+import { addToCartAsync } from '../../store/thunks/cartThunks';
 import toast from 'react-hot-toast';
 
 interface Product {
@@ -26,6 +26,15 @@ interface Product {
   reviews: number;
 }
 
+interface TopCoin {
+  id: string;
+  symbol: string;
+  name: string;
+  image: string;
+  currentPrice: number;
+  priceChangePercentage24h: number;
+}
+
 const ProductListPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -34,6 +43,8 @@ const ProductListPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [topCoins, setTopCoins] = useState<TopCoin[]>([]);
+  const [loadingCoins, setLoadingCoins] = useState(true);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedCoin, setSelectedCoin] = useState('all');
@@ -62,6 +73,24 @@ const ProductListPage = () => {
     { value: 'XRP', label: 'Ripple (XRP)' },
   ];
 
+  // Fetch top coins
+  useEffect(() => {
+    const fetchTopCoins = async () => {
+      try {
+        setLoadingCoins(true);
+        const response = await axios.get('/api/v1/coins/top10');
+        if (response.data?.success && response.data.data?.coins) {
+          setTopCoins(response.data.data.coins);
+        }
+      } catch (error) {
+        console.error('Error fetching top coins:', error);
+      } finally {
+        setLoadingCoins(false);
+      }
+    };
+    fetchTopCoins();
+  }, []);
+
   useEffect(() => {
     setPage(1);
     setProducts([]);
@@ -74,6 +103,12 @@ const ProductListPage = () => {
       setSearchQuery(search);
     }
   }, [searchParams]);
+
+  const handleCoinFilter = (coinSymbol: string) => {
+    setSelectedCoin(coinSymbol);
+    setPage(1);
+    setProducts([]);
+  };
 
   const fetchProducts = async (pageNum: number = 1, append: boolean = false) => {
     try {
@@ -123,7 +158,7 @@ const ProductListPage = () => {
     fetchProducts(1, false);
   };
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = async (product: Product) => {
     // ✅ Đảm bảo ID là string
     const productId = String(product._id || product.id).trim();
     
@@ -132,15 +167,20 @@ const ProductListPage = () => {
       return;
     }
 
-    dispatch(addToCart({
-      id: productId, // ✅ String ID
-      name: product.title,
-      price: product.priceInUSD,
-      quantity: 1,
-      image: product.images?.[0] || product.image || 'https://via.placeholder.com/400',
-    }));
-    
-    toast.success(`${product.title} added to cart!`);
+    try {
+      await dispatch(addToCartAsync({
+        productId: productId,
+        name: product.title,
+        price: product.priceInUSD,
+        quantity: 1,
+        image: product.images?.[0] || product.image || 'https://via.placeholder.com/400',
+        priceInCoins: product.priceInCoins,
+      }) as any);
+      
+      toast.success(`${product.title} added to cart!`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add to cart');
+    }
   };
 
   if (loading) {
@@ -188,6 +228,64 @@ const ProductListPage = () => {
               <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             </div>
           </form>
+
+          {/* Top Coins Filter Buttons */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Tìm sản phẩm theo đồng coin:
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleCoinFilter('all')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedCoin === 'all'
+                    ? 'bg-primary-600 text-white shadow-md'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                Tất cả
+              </button>
+              {loadingCoins ? (
+                <div className="flex items-center space-x-2 px-4 py-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                  <span className="text-sm text-gray-500">Đang tải...</span>
+                </div>
+              ) : (
+                topCoins.map((coin) => (
+                  <button
+                    key={coin.id}
+                    onClick={() => handleCoinFilter(coin.symbol.toUpperCase())}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center space-x-2 ${
+                      selectedCoin === coin.symbol.toUpperCase()
+                        ? 'bg-primary-600 text-white shadow-md'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {coin.image && (
+                      <img
+                        src={coin.image}
+                        alt={coin.symbol}
+                        className="w-5 h-5 rounded-full"
+                      />
+                    )}
+                    <span>{coin.symbol.toUpperCase()}</span>
+                    {coin.priceChangePercentage24h && (
+                      <span
+                        className={`text-xs ${
+                          coin.priceChangePercentage24h >= 0
+                            ? 'text-green-500'
+                            : 'text-red-500'
+                        }`}
+                      >
+                        {coin.priceChangePercentage24h >= 0 ? '+' : ''}
+                        {coin.priceChangePercentage24h.toFixed(2)}%
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
 
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

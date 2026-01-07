@@ -5,11 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import { FiArrowRight, FiTrendingUp, FiTrendingDown, FiDollarSign } from 'react-icons/fi';
 import P2PTrading from './components/P2PTrading';
 import Wallet from './components/Wallet';
+import Swap from './components/Swap';
 
 const TradingPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'p2p' | 'wallet'>('p2p');
+  const [activeTab, setActiveTab] = useState<'p2p' | 'wallet' | 'swap'>('swap');
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-16">
@@ -25,6 +26,16 @@ const TradingPage = () => {
 
           {/* Tabs */}
           <div className="flex space-x-4 mb-8 border-b border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setActiveTab('swap')}
+              className={`px-6 py-3 font-semibold transition-colors ${
+                activeTab === 'swap'
+                  ? 'text-primary-600 border-b-2 border-primary-600'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-primary-600'
+              }`}
+            >
+              {t('trading.swap', 'Swap Coin')}
+            </button>
             <button
               onClick={() => setActiveTab('p2p')}
               className={`px-6 py-3 font-semibold transition-colors ${
@@ -48,6 +59,7 @@ const TradingPage = () => {
           </div>
 
           {/* Content */}
+          {activeTab === 'swap' && <Swap />}
           {activeTab === 'p2p' && <P2PTrading />}
           {activeTab === 'wallet' && <Wallet />}
         </motion.div>

@@ -37,7 +37,14 @@ export const authMiddleware = async (
     }
 
     // Verify token
-    const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret || jwtSecret === 'your-super-secret-jwt-key-change-in-production') {
+      logger.error('SECURITY ERROR: Invalid or default JWT_SECRET configured!');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+      });
+    }
     const decoded = jwt.verify(token, jwtSecret) as any;
 
     // Check if user session exists in Redis
