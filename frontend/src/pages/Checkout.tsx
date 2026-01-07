@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
-import { clearCart } from '../store/slices/cartSlice';
+import { clearCartAsync } from '../store/thunks/cartThunks';
 import axios from '../api/axios';
 import toast from 'react-hot-toast';
 import {
@@ -192,7 +192,7 @@ const CheckoutPage = () => {
       }
 
       setOrderId(order.id);
-      dispatch(clearCart());
+      await dispatch(clearCartAsync() as any);
       toast.success('Order placed successfully!');
       setStep('confirmation');
     } catch (error: any) {

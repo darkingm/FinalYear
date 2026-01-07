@@ -42,9 +42,9 @@ export interface IToken extends Document {
 
 const TokenSchema = new Schema<IToken>(
   {
-    tokenId: { type: String, required: true, unique: true, index: true },
-    productId: { type: String, required: true, index: true },
-    ownerId: { type: String, required: true, index: true },
+    tokenId: { type: String, required: true, unique: true },
+    productId: { type: String, required: true },
+    ownerId: { type: String, required: true },
     ownerAddress: { type: String, required: true },
     
     name: { type: String, required: true },

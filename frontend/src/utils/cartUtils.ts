@@ -1,5 +1,5 @@
 import { Dispatch } from '@reduxjs/toolkit';
-import { addToCart } from '../store/slices/cartSlice';
+import { addToCartAsync } from '../store/thunks/cartThunks';
 import toast from 'react-hot-toast';
 
 interface Product {
@@ -13,7 +13,7 @@ interface Product {
   images?: string[];
 }
 
-export const handleAddToCart = (
+export const handleAddToCart = async (
   product: Product,
   dispatch: Dispatch,
   quantity: number = 1
@@ -36,13 +36,17 @@ export const handleAddToCart = (
     return;
   }
 
-  dispatch(addToCart({
-    id: productId,
-    name: productName,
-    price: productPrice,
-    quantity: quantity,
-    image: productImage,
-  }));
-  
-  toast.success(`${productName} added to cart!`);
+  try {
+    await dispatch(addToCartAsync({
+      productId: productId,
+      name: productName,
+      price: productPrice,
+      quantity: quantity,
+      image: productImage,
+    }) as any);
+    
+    toast.success(`${productName} added to cart!`);
+  } catch (error: any) {
+    toast.error(error.message || 'Failed to add to cart');
+  }
 };

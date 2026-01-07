@@ -42,8 +42,8 @@ export interface IWallet extends Document {
 
 const WalletAddressSchema = new Schema<IWalletAddress>(
   {
-    networkId: { type: String, required: true, index: true },
-    address: { type: String, required: true, index: true },
+    networkId: { type: String, required: true },
+    address: { type: String, required: true },
     encryptedPrivateKey: { type: String, required: true },
     balance: { type: String, default: '0' },
     tokenBalances: [
@@ -87,9 +87,10 @@ const WalletSchema = new Schema<IWallet>(
   }
 );
 
-// Indexes
+// Indexes - avoid duplicates by not using index: true in schema
 WalletSchema.index({ 'addresses.networkId': 1, 'addresses.address': 1 }, { unique: true, sparse: true });
-WalletSchema.index({ 'addresses.networkId': 1 });
+WalletAddressSchema.index({ networkId: 1 });
+WalletAddressSchema.index({ address: 1 });
 
 export default mongoose.model<IWallet>('Wallet', WalletSchema);
 

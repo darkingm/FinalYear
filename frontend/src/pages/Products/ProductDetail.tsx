@@ -15,7 +15,7 @@ import {
   FiMinus
 } from 'react-icons/fi';
 import axios from '../../api/axios';
-import { addToCart } from '../../store/slices/cartSlice';
+import { addToCartAsync } from '../../store/thunks/cartThunks';
 import { RootState } from '../../store';
 import toast from 'react-hot-toast';
 
@@ -124,17 +124,17 @@ const ProductDetailPage = () => {
 
     setAddingToCart(true);
     try {
-      dispatch(addToCart({
-        id: product.id,
+      await dispatch(addToCartAsync({
+        productId: product.id,
         name: product.title,
         price: product.priceInUSD,
         quantity: quantity,
         image: product.images[0] || 'https://via.placeholder.com/400',
-      }));
+      }) as any);
       
       toast.success(`${product.title} added to cart!`);
-    } catch (err) {
-      toast.error('Failed to add to cart');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add to cart');
     } finally {
       setAddingToCart(false);
     }

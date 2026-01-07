@@ -5,7 +5,7 @@ import { useDispatch } from 'react-redux';
 import { FiShoppingCart, FiHeart, FiStar } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 import axios from '../../../api/axios';
-import { addToCart } from '../../../store/slices/cartSlice';
+import { addToCartAsync } from '../../../store/thunks/cartThunks';
 import toast from 'react-hot-toast';
 import { handleAddToCart } from '../../../utils/cartUtils';
 
