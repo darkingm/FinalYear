@@ -737,4 +737,100 @@ static async getDashboardStats(req: Request, res: Response) {
       });
     }
   }
+
+  // Withdraw funds to external wallet
+  static async withdraw(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      const requestUserId = req.headers['x-user-id'] as string;
+      const { coinId, coinSymbol, amount, walletAddress, network, walletType } = req.body;
+
+      // User can only withdraw their own funds
+      if (userId !== requestUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You can only withdraw your own funds',
+        });
+      }
+
+      // Validate inputs
+      if (!coinId || !coinSymbol || !amount || amount <= 0 || !walletAddress || !network) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid withdrawal parameters',
+        });
+      }
+
+      // Validate wallet address format (basic validation)
+      if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress) && !/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(walletAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid wallet address format',
+        });
+      }
+
+      // Get user profile
+      const profile = await UserProfile.findOne({ where: { userId } });
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found',
+        });
+      }
+
+      // Check balance (including fee)
+      const coinBalances = (profile as any).coinBalances || [];
+      const existingBalance = coinBalances.find((b: any) => b.coinId === coinId);
+      const withdrawalFee = 0.001; // Can be made configurable
+
+      if (!existingBalance || parseFloat(existingBalance.balance) < parseFloat(amount) + withdrawalFee) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient balance (including withdrawal fee)',
+        });
+      }
+
+      // Deduct balance (amount + fee)
+      const totalDeduct = parseFloat(amount) + withdrawalFee;
+      existingBalance.balance = parseFloat(existingBalance.balance) - totalDeduct;
+      (profile as any).coinBalances = coinBalances;
+      await profile.save();
+
+      // Publish event for blockchain service to process withdrawal
+      await publishEvent('wallet.withdrawal.requested', {
+        userId,
+        coinId,
+        coinSymbol,
+        amount: parseFloat(amount),
+        fee: withdrawalFee,
+        walletAddress,
+        network,
+        walletType: walletType || 'manual',
+      });
+
+      res.json({
+        success: true,
+        data: {
+          transactionId: `WTH-${Date.now()}-${userId}`,
+          coinId,
+          coinSymbol,
+          amount: parseFloat(amount),
+          fee: withdrawalFee,
+          totalDeducted: totalDeduct,
+          walletAddress,
+          network,
+          status: 'pending',
+          balance: existingBalance.balance,
+        },
+        message: 'Withdrawal request submitted successfully',
+      });
+    } catch (error: any) {
+      logger.error('Withdrawal error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Withdrawal failed',
+        details: error.message,
+      });
+    }
+  }
 }

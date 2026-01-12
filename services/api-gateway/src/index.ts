@@ -137,6 +137,40 @@ app.use('/api/v1/coins', createProxyMiddleware({
   },
 }));
 
+// Cart Service - Authentication required
+app.use('/api/v1/cart', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.order,
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/cart': '/api/cart' },
+  timeout: 30000,
+  proxyTimeout: 30000,
+  onProxyReq: (proxyReq, req: any, res) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Email', req.user.email || '');
+      proxyReq.setHeader('X-User-Username', req.user.username || '');
+    }
+    // Rewrite body for POST/PUT/PATCH requests
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res: any) => {
+    logger.error('Cart Service Proxy Error:', err);
+    if (!res.headersSent) {
+      res.status(503).json({ 
+        success: false,
+        error: 'Cart service unavailable',
+        details: err.message 
+      });
+    }
+  },
+}));
+
 // Order Service - Authentication required
 app.use('/api/v1/orders', authMiddleware, createProxyMiddleware({
   target: serviceRegistry.order,

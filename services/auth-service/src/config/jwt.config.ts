@@ -10,16 +10,28 @@ export interface JWTPayload {
 export interface TokenConfig {
   secret: Secret;
   expiresIn: string | number;
+  algorithm: 'HS256';
+}
+
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`❌ Missing required environment variable: ${name}`);
+  }
+  return value;
 }
 
 export const jwtConfig = {
   access: {
-    secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m'
+    secret: requireEnv('JWT_SECRET'),
+    expiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
+    algorithm: 'HS256'
   } as TokenConfig,
-  
+
   refresh: {
-    secret: process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key-change-in-production',
-    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+    secret: requireEnv('JWT_REFRESH_SECRET'),
+    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
+    algorithm: 'HS256'
   } as TokenConfig
 };

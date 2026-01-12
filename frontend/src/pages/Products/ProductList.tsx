@@ -168,7 +168,7 @@ const ProductListPage = () => {
     }
 
     try {
-      await dispatch(addToCartAsync({
+      const result = await dispatch(addToCartAsync({
         productId: productId,
         name: product.title,
         price: product.priceInUSD,
@@ -177,8 +177,13 @@ const ProductListPage = () => {
         priceInCoins: product.priceInCoins,
       }) as any);
       
-      toast.success(`${product.title} added to cart!`);
+      if (addToCartAsync.rejected.match(result)) {
+        toast.error(result.payload as string || 'Failed to add to cart');
+      } else {
+        toast.success(`${product.title} added to cart!`);
+      }
     } catch (error: any) {
+      console.error('Error adding to cart:', error);
       toast.error(error.message || 'Failed to add to cart');
     }
   };
@@ -232,7 +237,7 @@ const ProductListPage = () => {
           {/* Top Coins Filter Buttons */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Tìm sản phẩm theo đồng coin:
+              {t('products.filter_by_coin', 'Filter by Coin')}:
             </label>
             <div className="flex flex-wrap gap-2">
               <button
@@ -243,12 +248,12 @@ const ProductListPage = () => {
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
-                Tất cả
+                {t('products.all', 'All')}
               </button>
               {loadingCoins ? (
                 <div className="flex items-center space-x-2 px-4 py-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-                  <span className="text-sm text-gray-500">Đang tải...</span>
+                  <span className="text-sm text-gray-500">{t('common.loading', 'Loading...')}</span>
                 </div>
               ) : (
                 topCoins.map((coin) => (
@@ -346,13 +351,22 @@ const ProductListPage = () => {
           </div>
         </motion.div>
 
-        {/* Results Count */}
-        <div className="mb-6 text-gray-600 dark:text-gray-400">
-          {products.length} {t('products.results') || 'results'}
-        </div>
+        {/* Results Count & Loading State */}
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+              <p className="text-gray-600 dark:text-gray-400">{t('common.loading', 'Loading...')}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mb-6 text-gray-600 dark:text-gray-400 font-medium">
+              {products.length} {t('products.results') || 'results'}
+            </div>
 
-        {/* Products Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+            {/* Products Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
           {products.map((product, index) => (
             <motion.div
               key={product.id}
@@ -363,14 +377,23 @@ const ProductListPage = () => {
               onClick={() => navigate(`/products/${product.id}`)}
             >
               {/* Product Image */}
-              <div className="relative h-48 overflow-hidden">
-                <img
-                  src={product.images[0]}
-                  alt={product.title}
-                  className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
-                />
-                <div className="absolute top-2 right-2 px-2 py-1 bg-white dark:bg-gray-800 rounded-full text-xs font-semibold">
-                  {product.condition}
+              <div className="relative h-48 overflow-hidden bg-gray-100 dark:bg-gray-700">
+                {product.images && product.images.length > 0 ? (
+                  <img
+                    src={product.images[0]}
+                    alt={product.title}
+                    className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/400x300?text=No+Image';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-400">
+                    <span className="text-sm">No Image</span>
+                  </div>
+                )}
+                <div className="absolute top-2 right-2 px-2 py-1 bg-white dark:bg-gray-800 rounded-full text-xs font-semibold shadow-sm">
+                  {product.condition || 'New'}
                 </div>
               </div>
 
@@ -383,24 +406,37 @@ const ProductListPage = () => {
                 {/* Price */}
                 <div className="mb-3">
                   <div className="flex items-center space-x-2 mb-1">
-                    <img
-                      src={product.coinLogo}
-                      alt={product.coinSymbol}
-                      className="w-5 h-5"
-                    />
+                    {product.coinLogo && (
+                      <img
+                        src={product.coinLogo}
+                        alt={product.coinSymbol}
+                        className="w-5 h-5 rounded-full"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
                     <div className="text-xl font-bold text-primary-600 dark:text-primary-400">
-                      {product.priceInCoins} {product.coinSymbol}
+                      {product.priceInCoins?.toFixed(4) || '0'} {product.coinSymbol || 'N/A'}
                     </div>
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                    ≈ ${product.priceInUSD.toLocaleString()}
+                    ≈ ${(product.priceInUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
 
                 {/* Seller & Location */}
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  <div>{product.seller}</div>
-                  <div>{product.location}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-3 space-y-1">
+                  {product.seller && (
+                    <div className="truncate" title={product.seller}>
+                      <span className="font-medium">Seller:</span> {product.seller}
+                    </div>
+                  )}
+                  {product.location && (
+                    <div className="truncate" title={product.location}>
+                      <span className="font-medium">📍</span> {product.location}
+                    </div>
+                  )}
                 </div>
 
                 {/* Add to Cart Button */}
@@ -420,7 +456,9 @@ const ProductListPage = () => {
               </div>
             </motion.div>
           ))}
-        </div>
+            </div>
+          </>
+        )}
 
         {/* Load More Button */}
         {hasMore && !loading && (

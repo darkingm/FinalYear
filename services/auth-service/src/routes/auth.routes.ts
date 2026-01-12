@@ -10,12 +10,10 @@ import RefreshToken from '../models/RefreshToken.model';
 import { publishEvent } from '../utils/rabbitmq';
 import { redisClient } from '../utils/redis';
 import logger from '../utils/logger';
+import { jwtConfig } from '../config/jwt.config';
+import { hashToken, calculateExpiresAt } from '../utils/token.utils';
 
 const router = express.Router();
-
-// JWT Configuration
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key-change-in-production';
 
 // Helper functions for OAuth (same logic as in controller)
 const generateAccessToken = (user: User): string => {
@@ -27,29 +25,39 @@ const generateAccessToken = (user: User): string => {
       fullName: user.fullName,
       role: user.role,
     },
-    JWT_SECRET as string,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+    jwtConfig.access.secret,
+    {
+      expiresIn: jwtConfig.access.expiresIn,
+      algorithm: jwtConfig.access.algorithm,
+    }
   );
 };
 
 const generateRefreshToken = async (user: User, ipAddress: string): Promise<string> => {
-  const token = jwt.sign(
+  const refreshToken = jwt.sign(
     { id: user.id },
-    JWT_REFRESH_SECRET as string,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    jwtConfig.refresh.secret,
+    {
+      expiresIn: jwtConfig.refresh.expiresIn,
+      algorithm: jwtConfig.refresh.algorithm,
+    }
   );
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
+  // Hash token trước khi lưu vào DB (nhất quán với controller)
+  const hashedToken = hashToken(refreshToken);
+
+  // Tính expiresAt dựa trên JWT config (nhất quán với controller)
+  const expiresAt = calculateExpiresAt(jwtConfig.refresh.expiresIn as string);
 
   await RefreshToken.create({
     userId: user.id,
-    token,
+    token: hashedToken,
     expiresAt,
     createdByIp: ipAddress,
   });
 
-  return token;
+  // Trả về plain token để client sử dụng
+  return refreshToken;
 };
 
 // Middleware to check if OAuth is configured
@@ -159,6 +167,7 @@ router.get(
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false,
+    prompt: 'select_account', // Always show account selection screen
   })
 );
 

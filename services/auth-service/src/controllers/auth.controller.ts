@@ -9,17 +9,17 @@ import { sendEmail } from '../services/email.service';
 import { publishEvent } from '../utils/rabbitmq';
 import { redisClient } from '../utils/redis';
 import logger from '../utils/logger';
-
+import { jwtConfig } from '../config/jwt.config';
 // Validate environment variables on startup
 import { validateEnvironmentVariables, getEnvVar } from '../utils/envValidator';
+import { hashToken, calculateExpiresAt } from '../utils/token.utils';
 
 // Validate on module load
 if (process.env.NODE_ENV !== 'test') {
   validateEnvironmentVariables();
 }
 
-const JWT_SECRET = getEnvVar('JWT_SECRET', 'your-super-secret-jwt-key-change-in-production');
-const JWT_REFRESH_SECRET = getEnvVar('JWT_REFRESH_SECRET', 'your-super-secret-refresh-key-change-in-production');
+
 
 // Helper functions
 const generateAccessToken = (user: User): string => {
@@ -30,30 +30,45 @@ const generateAccessToken = (user: User): string => {
       username: user.username,
       role: user.role,
     },
-    JWT_SECRET as string,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+    jwtConfig.access.secret,
+    {
+      expiresIn: jwtConfig.access.expiresIn,
+      algorithm: jwtConfig.access.algorithm,
+    }
   );
 };
 
-const generateRefreshToken = async (user: User, ipAddress: string): Promise<string> => {
-  const token = jwt.sign(
+
+const generateRefreshToken = async (
+  user: User,
+  ipAddress: string
+): Promise<string> => {
+  const refreshToken = jwt.sign(
     { id: user.id },
-    JWT_REFRESH_SECRET as string,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    jwtConfig.refresh.secret,
+    {
+      expiresIn: jwtConfig.refresh.expiresIn,
+      algorithm: jwtConfig.refresh.algorithm,
+    }
   );
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
+  // Hash token trước khi lưu vào DB
+  const hashedToken = hashToken(refreshToken);
+
+  // Tính expiresAt dựa trên JWT config
+  const expiresAt = calculateExpiresAt(jwtConfig.refresh.expiresIn as string);
 
   await RefreshToken.create({
     userId: user.id,
-    token,
+    token: hashedToken,
     expiresAt,
     createdByIp: ipAddress,
   });
 
-  return token;
+  // Trả về plain token để client sử dụng
+  return refreshToken;
 };
+
 
 const generateOTP = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -335,12 +350,28 @@ export class AuthController {
         });
       }
 
-      // Verify refresh token
-      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as any;
+      // Verify JWT token trước
+      let decoded: any;
+      try {
+        decoded = jwt.verify(
+          refreshToken,
+          jwtConfig.refresh.secret,
+          { algorithms: [jwtConfig.refresh.algorithm] }
+        ) as any;
+      } catch (jwtError: any) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid refresh token',
+        });
+      }
 
+      // Hash token để tìm trong DB
+      const hashedToken = hashToken(refreshToken);
+      
       const tokenRecord = await RefreshToken.findOne({
-        where: { token: refreshToken },
+        where: { token: hashedToken },
       });
+
 
       // Fix: Replace isActive() with manual check
       if (!tokenRecord) {
@@ -374,9 +405,11 @@ export class AuthController {
       const newRefreshToken = await generateRefreshToken(user, ipAddress);
 
       // Revoke old refresh token
+      // Lưu hashed token của refresh token mới vào replacedByToken
+      const hashedNewRefreshToken = hashToken(newRefreshToken);
       tokenRecord.revokedAt = new Date();
       tokenRecord.revokedByIp = ipAddress;
-      tokenRecord.replacedByToken = newRefreshToken;
+      tokenRecord.replacedByToken = hashedNewRefreshToken;
       await tokenRecord.save();
 
       res.json({
@@ -402,8 +435,11 @@ export class AuthController {
       const token = req.headers.authorization?.replace('Bearer ', '');
 
       if (refreshToken) {
+        // Hash token trước khi tìm kiếm để khớp với dữ liệu trong DB
+        const hashedToken = hashToken(refreshToken);
+
         const tokenRecord = await RefreshToken.findOne({
-          where: { token: refreshToken },
+          where: { token: hashedToken },
         });
 
         if (tokenRecord) {
@@ -415,7 +451,11 @@ export class AuthController {
 
       if (token) {
         try {
-          const decoded = jwt.verify(token, JWT_SECRET) as any;
+          const decoded = jwt.verify(
+              token,
+              jwtConfig.access.secret,
+              { algorithms: [jwtConfig.access.algorithm] }
+            ) as any;
           
           // Remove session from Redis (if available)
           try {

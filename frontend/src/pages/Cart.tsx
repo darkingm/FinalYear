@@ -10,12 +10,16 @@ import toast from 'react-hot-toast';
 const CartPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { items, totalItems, totalPrice } = useSelector((state: RootState) => state.cart);
+  const { items, totalItems, totalPrice, loading, error } = useSelector((state: RootState) => state.cart);
 
   const handleRemove = async (id: string) => {
     try {
-      await dispatch(removeFromCartAsync(id) as any);
-      toast.success('Item removed from cart');
+      const result = await dispatch(removeFromCartAsync(id) as any);
+      if (removeFromCartAsync.rejected.match(result)) {
+        toast.error(result.payload as string || 'Failed to remove item');
+      } else {
+        toast.success('Item removed from cart');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to remove item');
     }
@@ -27,7 +31,10 @@ const CartPage = () => {
       return;
     }
     try {
-      await dispatch(updateCartItemAsync({ id, quantity: newQuantity }) as any);
+      const result = await dispatch(updateCartItemAsync({ id, quantity: newQuantity }) as any);
+      if (updateCartItemAsync.rejected.match(result)) {
+        toast.error(result.payload as string || 'Failed to update quantity');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update quantity');
     }
@@ -51,8 +58,18 @@ const CartPage = () => {
         >
           Shopping Cart ({totalItems})
         </motion.h1>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-400 text-red-700 dark:text-red-400 rounded-lg">
+            {error}
+          </div>
+        )}
         
-        {items.length === 0 ? (
+        {loading && items.length === 0 ? (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+          </div>
+        ) : items.length === 0 ? (
           <div className="text-center py-16">
             <FiShoppingBag className="w-24 h-24 text-gray-400 mx-auto mb-4" />
             <p className="text-xl text-gray-600 dark:text-gray-400 mb-4">

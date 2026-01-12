@@ -57,6 +57,20 @@ router.post('/:userId/balances/add', UserController.addBalance);
 // Deduct balance
 router.post('/:userId/balances/deduct', UserController.deductBalance);
 
+// Withdraw funds to external wallet
+router.post(
+  '/:userId/withdraw',
+  [
+    body('coinId').notEmpty().withMessage('Coin ID is required'),
+    body('coinSymbol').notEmpty().withMessage('Coin symbol is required'),
+    body('amount').isFloat({ min: 0.00000001 }).withMessage('Amount must be positive'),
+    body('walletAddress').notEmpty().withMessage('Wallet address is required'),
+    body('network').notEmpty().withMessage('Network is required'),
+    validate,
+  ],
+  UserController.withdraw
+);
+
 // Update profile (requires auth)
 router.put(
   '/profile',

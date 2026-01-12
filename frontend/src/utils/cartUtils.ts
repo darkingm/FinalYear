@@ -37,7 +37,7 @@ export const handleAddToCart = async (
   }
 
   try {
-    await dispatch(addToCartAsync({
+    const result = await dispatch(addToCartAsync({
       productId: productId,
       name: productName,
       price: productPrice,
@@ -45,8 +45,13 @@ export const handleAddToCart = async (
       image: productImage,
     }) as any);
     
-    toast.success(`${productName} added to cart!`);
+    if (addToCartAsync.rejected.match(result)) {
+      toast.error(result.payload as string || 'Failed to add to cart');
+    } else {
+      toast.success(`${productName} added to cart!`);
+    }
   } catch (error: any) {
+    console.error('Error adding to cart:', error);
     toast.error(error.message || 'Failed to add to cart');
   }
 };

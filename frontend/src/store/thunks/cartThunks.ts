@@ -1,6 +1,25 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import axios from '../../api/axios';
-import { RootState } from '../index';
+
+// Define RootState interface inline to avoid circular dependency
+// This matches the actual store structure
+interface RootState {
+  auth: {
+    isAuthenticated: boolean;
+    user: {
+      id: string;
+      email: string;
+      username: string;
+      fullName: string;
+      role: string;
+    } | null;
+  };
+  cart: {
+    items: any[];
+    totalItems: number;
+    totalPrice: number;
+  };
+}
 
 interface BackendCartItem {
   id: string;
@@ -66,7 +85,12 @@ export const fetchCart = createAsyncThunk(
       if (error.response?.status === 401) {
         return { items: [], totalItems: 0, totalPrice: 0 };
       }
-      return rejectWithValue(error.response?.data?.error || 'Failed to fetch cart');
+      // Network error or other errors
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || 'Failed to fetch cart. Please try again.';
+      console.error('Error fetching cart:', error);
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -94,8 +118,14 @@ export const addToCartAsync = createAsyncThunk(
       }
 
       // Get product details if needed
-      const productResponse = await axios.get(`/api/v1/products/${item.productId}`);
-      const product = productResponse.data.data.product;
+      let product = null;
+      try {
+        const productResponse = await axios.get(`/api/v1/products/${item.productId}`);
+        product = productResponse.data.data?.product;
+      } catch (productError: any) {
+        // If product fetch fails, continue with provided data
+        console.warn('Failed to fetch product details:', productError);
+      }
 
       const response = await axios.post('/api/v1/cart', {
         productId: item.productId,
@@ -125,7 +155,11 @@ export const addToCartAsync = createAsyncThunk(
 
       return rejectWithValue('Failed to add item to cart');
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to add item to cart');
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || 'Failed to add item to cart. Please try again.';
+      console.error('Error adding to cart:', error);
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -168,7 +202,11 @@ export const updateCartItemAsync = createAsyncThunk(
 
       return rejectWithValue('Failed to update cart item');
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to update cart item');
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || 'Failed to update cart item. Please try again.';
+      console.error('Error updating cart item:', error);
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -186,7 +224,11 @@ export const removeFromCartAsync = createAsyncThunk(
       await axios.delete(`/api/v1/cart/${id}`);
       return id;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to remove item from cart');
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || 'Failed to remove item from cart. Please try again.';
+      console.error('Error removing from cart:', error);
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -204,7 +246,11 @@ export const clearCartAsync = createAsyncThunk(
       await axios.delete('/api/v1/cart');
       return true;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to clear cart');
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || 'Failed to clear cart. Please try again.';
+      console.error('Error clearing cart:', error);
+      return rejectWithValue(errorMessage);
     }
   }
 );

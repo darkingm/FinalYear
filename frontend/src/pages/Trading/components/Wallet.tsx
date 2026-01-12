@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { RootState } from '../../../store';
 import axios from '../../../api/axios';
 import toast from 'react-hot-toast';
 import { FiDollarSign, FiRefreshCw, FiArrowUp, FiArrowDown } from 'react-icons/fi';
+import WithdrawalModal from '../../../components/WithdrawalModal';
 
 const Wallet = () => {
+  const { t } = useTranslation();
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [selectedCoin, setSelectedCoin] = useState<any>(null);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -62,7 +67,7 @@ const Wallet = () => {
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Số Dư Ví
+            {t('wallet.title') || 'My Wallet'}
           </h2>
           <button
             onClick={fetchBalances}
@@ -78,37 +83,73 @@ const Wallet = () => {
           </div>
         ) : balances.length === 0 ? (
           <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-            Chưa có số dư nào
+            {t('wallet.no_balance') || 'No balance available'}
           </p>
         ) : (
           <div className="space-y-4">
             {balances.map((balance) => (
               <div
                 key={balance.coinId || balance.symbol}
-                className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-between items-center"
+                className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
               >
-                <div>
-                  <div className="flex items-center space-x-3">
-                    <span className="font-bold text-lg">{balance.symbol || 'N/A'}</span>
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                      {balance.name || 'Unknown'}
-                    </span>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <div className="flex items-center space-x-3">
+                      <span className="font-bold text-lg">{balance.symbol || 'N/A'}</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {balance.name || 'Unknown'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                      {balance.balance?.toFixed(8) || '0.00000000'}
+                    </p>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                    {balance.balance?.toFixed(8) || '0.00000000'}
-                  </p>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('wallet.balance') || 'USD Value'}</p>
+                    <p className="text-xl font-semibold text-primary-600">
+                      ${balance.usdValue?.toFixed(2) || '0.00'}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Giá trị USD</p>
-                  <p className="text-xl font-semibold text-primary-600">
-                    ${balance.usdValue?.toFixed(2) || '0.00'}
-                  </p>
-                </div>
+                <button
+                  onClick={() => {
+                    setSelectedCoin({
+                      coinId: balance.coinId || balance.symbol,
+                      symbol: balance.symbol,
+                      name: balance.name,
+                      balance: parseFloat(balance.balance || '0'),
+                    });
+                    setWithdrawModalOpen(true);
+                  }}
+                  className="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors"
+                >
+                  <FiArrowUp className="w-4 h-4" />
+                  <span>{t('wallet.withdraw') || 'Withdraw'}</span>
+                </button>
               </div>
             ))}
           </div>
         )}
       </motion.div>
+
+      {/* Withdrawal Modal */}
+      {selectedCoin && (
+        <WithdrawalModal
+          isOpen={withdrawModalOpen}
+          onClose={() => {
+            setWithdrawModalOpen(false);
+            setSelectedCoin(null);
+          }}
+          coinId={selectedCoin.coinId}
+          coinSymbol={selectedCoin.symbol}
+          coinName={selectedCoin.name}
+          balance={selectedCoin.balance}
+          userId={user?.id || user?.userId || ''}
+          onSuccess={() => {
+            fetchBalances();
+          }}
+        />
+      )}
     </div>
   );
 };
