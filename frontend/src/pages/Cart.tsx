@@ -1,9 +1,10 @@
 // frontend/src/pages/Cart.tsx - CODE HOÀN CHỈNH
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
-import { removeFromCartAsync, updateCartItemAsync, clearCartAsync } from '../store/thunks/cartThunks';
+import { fetchCart, removeFromCartAsync, updateCartItemAsync, clearCartAsync } from '../store/thunks/cartThunks';
 import { FiTrash2, FiPlus, FiMinus, FiShoppingBag } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
@@ -11,6 +12,14 @@ const CartPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { items, totalItems, totalPrice, loading, error } = useSelector((state: RootState) => state.cart);
+  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+
+  // Fetch cart when component mounts or user changes
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      dispatch(fetchCart() as any);
+    }
+  }, [isAuthenticated, user?.id, dispatch]);
 
   const handleRemove = async (id: string) => {
     try {

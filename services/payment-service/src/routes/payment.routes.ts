@@ -2,6 +2,7 @@ import express from 'express';
 import { body } from 'express-validator';
 import { PaymentController } from '../controllers/payment.controller';
 import { VNPayController } from '../controllers/vnpay.controller';
+import { PayPalController } from '../controllers/paypal.controller';
 import { validate } from '../middleware/validate.middleware';
 
 const router = express.Router();
@@ -54,6 +55,23 @@ router.get('/vnpay/ipn', VNPayController.handleIPN);
 
 // Get VNPay payment status
 router.get('/vnpay/:paymentId/status', VNPayController.getPaymentStatus);
+
+// PayPal routes
+router.post(
+  '/paypal/create',
+  [
+    body('amount').isFloat({ min: 0 }).withMessage('Amount must be positive'),
+    body('orderId').isString().withMessage('Order ID is required'),
+    body('description').optional().isString(),
+    validate,
+  ],
+  PayPalController.createPayment
+);
+
+router.post('/paypal/capture/:orderId', PayPalController.capturePayment);
+
+// PayPal webhook (no auth required, verified by signature)
+router.post('/paypal/webhook', PayPalController.webhook);
 
 // Get payment
 router.get('/:id', PaymentController.getPayment);

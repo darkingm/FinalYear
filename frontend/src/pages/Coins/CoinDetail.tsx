@@ -107,31 +107,120 @@ const CoinDetail = () => {
 
   const fetchChartData = async () => {
     try {
-      // ✅ SỬA: Thay /chart bằng /history và convert timeRange sang days
       const days = getDaysFromTimeRange(timeRange);
+      
+      // Try to fetch from CoinGecko API directly for better OHLC data
+      try {
+        const coinGeckoId = id?.toLowerCase() || coin?.symbol?.toLowerCase();
+        if (coinGeckoId) {
+          // Map timeRange to CoinGecko interval
+          const intervalMap: Record<TimeRange, string> = {
+            '1m': '1',
+            '5m': '1',
+            '15m': '1',
+            '30m': '1',
+            '1h': '1',
+            '4h': '1',
+            '1d': '1',
+            '1w': '7',
+            '1M': '30',
+            '1y': '365',
+          };
+          
+          const coinGeckoResponse = await fetch(
+            `https://api.coingecko.com/api/v3/coins/${coinGeckoId}/ohlc?vs_currency=usd&days=${intervalMap[timeRange] || '7'}`
+          );
+          
+          if (coinGeckoResponse.ok) {
+            const ohlcData = await coinGeckoResponse.json();
+            if (Array.isArray(ohlcData) && ohlcData.length > 0) {
+              const formattedData = ohlcData.map((item: number[]) => ({
+                time: Math.floor(item[0] / 1000), // Convert ms to seconds
+                open: item[1],
+                high: item[2],
+                low: item[3],
+                close: item[4],
+              }));
+              setChartData(formattedData);
+              return;
+            }
+          }
+        }
+      } catch (coinGeckoError) {
+        console.warn('CoinGecko API failed, trying backend:', coinGeckoError);
+      }
+      
+      // Fallback to backend API
       const response = await axios.get(`/api/v1/coins/${id}/history`, {
         params: { days }
       });
       
-      // ✅ Xử lý response data từ backend
       if (response.data.success && response.data.data.history) {
-        // Convert history data sang format cho chart
-        const formattedData = response.data.data.history.map((item: any) => ({
-          time: new Date(item.timestamp).getTime() / 1000,
-          open: item.price,
-          high: item.price * 1.02, // Approximate
-          low: item.price * 0.98, // Approximate
-          close: item.price,
-        }));
-        setChartData(formattedData);
-      } else {
-        generateMockChartData();
+        const history = response.data.data.history;
+        
+        // Create OHLC data from price history
+        // Group by time intervals and calculate OHLC
+        const interval = getIntervalFromTimeRange(timeRange);
+        const grouped: { [key: number]: any[] } = {};
+        
+        history.forEach((item: any) => {
+          const timestamp = new Date(item.timestamp).getTime();
+          const intervalTime = Math.floor(timestamp / interval) * interval;
+          
+          if (!grouped[intervalTime]) {
+            grouped[intervalTime] = [];
+          }
+          grouped[intervalTime].push(item.price);
+        });
+        
+        const formattedData = Object.keys(grouped)
+          .map(Number)
+          .sort()
+          .map((intervalTime) => {
+            const prices = grouped[intervalTime];
+            const open = prices[0];
+            const close = prices[prices.length - 1];
+            const high = Math.max(...prices);
+            const low = Math.min(...prices);
+            
+            return {
+              time: Math.floor(intervalTime / 1000),
+              open,
+              high,
+              low,
+              close,
+            };
+          });
+        
+        if (formattedData.length > 0) {
+          setChartData(formattedData);
+          return;
+        }
       }
+      
+      // If all else fails, generate mock data
+      generateMockChartData();
     } catch (error) {
       console.error('Error fetching chart data:', error);
-      // Generate mock data for demonstration
       generateMockChartData();
     }
+  };
+
+  // Helper to get interval in milliseconds
+  const getIntervalFromTimeRange = (range: TimeRange): number => {
+    const intervals: Record<TimeRange, number> = {
+      '1m': 60 * 1000,
+      '5m': 5 * 60 * 1000,
+      '15m': 15 * 60 * 1000,
+      '30m': 30 * 60 * 1000,
+      '1h': 60 * 60 * 1000,
+      '4h': 4 * 60 * 60 * 1000,
+      '1d': 24 * 60 * 60 * 1000,
+      '1w': 7 * 24 * 60 * 60 * 1000,
+      '1M': 30 * 24 * 60 * 60 * 1000,
+      '1y': 365 * 24 * 60 * 60 * 1000,
+    };
+    return intervals[range] || 60 * 60 * 1000;
   };
 
   const generateMockChartData = () => {

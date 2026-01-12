@@ -25,8 +25,9 @@ interface WalletOption {
 
 const WALLET_OPTIONS: WalletOption[] = [
   { id: 'metamask', name: 'MetaMask', icon: '🦊', type: 'metamask' },
-  { id: 'walletconnect', name: 'WalletConnect', icon: '🔗', type: 'walletconnect' },
+  { id: 'okx', name: 'OKX Wallet', icon: '🔷', type: 'walletconnect' },
   { id: 'coinbase', name: 'Coinbase Wallet', icon: '📱', type: 'coinbase' },
+  { id: 'walletconnect', name: 'WalletConnect', icon: '🔗', type: 'walletconnect' },
   { id: 'trust', name: 'Trust Wallet', icon: '🛡️', type: 'trust' },
   { id: 'cold', name: 'Cold Wallet (Manual)', icon: '❄️', type: 'cold' },
 ];
@@ -133,11 +134,11 @@ const WithdrawalModal = ({
       } finally {
         setConnecting(false);
       }
-    } else if (wallet.type === 'coinbase' || wallet.type === 'trust') {
-      // For Coinbase Wallet and Trust Wallet, user can enter address manually
-      // or we can try to detect if they're using the browser extension
+    } else if (wallet.type === 'coinbase' || wallet.type === 'trust' || wallet.id === 'okx') {
+      // For Coinbase Wallet, Trust Wallet, and OKX Wallet
       try {
         setConnecting(true);
+        // Check for Coinbase Wallet
         if (wallet.type === 'coinbase' && (window as any).ethereum?.isCoinbaseWallet) {
           const accounts = await (window as any).ethereum.request({
             method: 'eth_requestAccounts',
@@ -147,12 +148,31 @@ const WithdrawalModal = ({
             setManualAddress(accounts[0]);
             toast.success(`${wallet.name} connected successfully`);
             setStep('details');
+            return;
           }
-        } else {
-          // Manual address entry for other wallets
-          toast.info(`Please enter your ${wallet.name} address manually`);
-          setStep('details');
         }
+        
+        // Check for OKX Wallet
+        if (wallet.id === 'okx' && (window as any).okxwallet) {
+          try {
+            const accounts = await (window as any).okxwallet.request({
+              method: 'eth_requestAccounts',
+            });
+            if (accounts && accounts.length > 0) {
+              setConnectedAddress(accounts[0]);
+              setManualAddress(accounts[0]);
+              toast.success(`${wallet.name} connected successfully`);
+              setStep('details');
+              return;
+            }
+          } catch (okxError) {
+            console.warn('OKX Wallet connection failed:', okxError);
+          }
+        }
+        
+        // Manual address entry for other wallets
+        toast.info(`Please enter your ${wallet.name} address manually`);
+        setStep('details');
       } catch (error: any) {
         console.error(`Error connecting ${wallet.name}:`, error);
         toast.info(`Please enter your ${wallet.name} address manually`);

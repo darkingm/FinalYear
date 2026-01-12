@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { RootState } from '../../store';
 import axios from '../../api/axios';
 import toast from 'react-hot-toast';
+import CoinBalance from '../../components/CoinBalance';
 import {
   UserIcon,
   EnvelopeIcon,
