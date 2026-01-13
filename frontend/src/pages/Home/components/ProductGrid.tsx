@@ -30,48 +30,103 @@ const ProductGrid = () => {
   const dispatch = useDispatch();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCoinCategory, setSelectedCoinCategory] = useState<string>('all');
+  const [coinCategories, setCoinCategories] = useState<string[]>([]);
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [selectedCoinCategory]);
+
+  // Update prices periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      updateProductPrices();
+    }, 30000); // Update every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [products]);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/v1/products/featured');
+      const params: any = {};
+      if (selectedCoinCategory !== 'all') {
+        params.coinSymbol = selectedCoinCategory;
+      }
+      const response = await axios.get('/api/v1/products/featured', { params });
       const backendProducts = response.data.data.products || [];
       
       // ✅ Transform backend data - đảm bảo ID là string unique
-      const transformedProducts = backendProducts.map((p: any) => ({
-        id: String(p._id || p.id), // ✅ Convert ObjectId sang string
-        title: p.title,
-        description: p.description || '', // ✅ Thêm description
-        image: p.images?.[0] || 'https://via.placeholder.com/400',
-        priceInCoins: p.priceInCoins || 0,
-        priceInUSD: p.priceInUSD || 0,
-        coinSymbol: p.coinSymbol || 'BTC',
-        coinLogo: p.coinLogo || 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
-        seller: p.sellerName || 'Verified Seller',
-        rating: p.rating || 4.5,
-        reviews: p.reviews || 0,
-        condition: p.condition || 'NEW',
-        stock: p.quantity || 0,
-      }));
-      
-      // ✅ Debug: Log để kiểm tra IDs
-      console.log('Products loaded:', transformedProducts.map(p => ({ 
-        id: p.id, 
-        idType: typeof p.id,
-        title: p.title 
-      })));
+      const transformedProducts = await Promise.all(
+        backendProducts.map(async (p: any) => {
+          // Fetch current coin price for real-time USD value
+          let currentPriceUSD = p.priceInUSD || 0;
+          try {
+            const coinResponse = await axios.get(`/api/v1/coins/${p.coinSymbol?.toLowerCase() || 'bitcoin'}`);
+            const coinData = coinResponse.data.data;
+            if (coinData?.currentPrice) {
+              currentPriceUSD = p.priceInCoins * coinData.currentPrice;
+            }
+          } catch (error) {
+            // Use existing price if API fails
+          }
+
+          return {
+            id: String(p._id || p.id),
+            title: p.title,
+            description: p.description || '',
+            image: p.images?.[0] || 'https://via.placeholder.com/400',
+            priceInCoins: p.priceInCoins || 0,
+            priceInUSD: currentPriceUSD,
+            coinSymbol: p.coinSymbol || 'BTC',
+            coinLogo: p.coinLogo || 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+            seller: p.sellerName || 'Verified Seller',
+            rating: p.rating || 4.5,
+            reviews: p.reviews || 0,
+            condition: p.condition || 'NEW',
+            stock: p.quantity || 0,
+          };
+        })
+      );
       
       setProducts(transformedProducts);
+      
+      // Extract unique coin categories
+      const uniqueCoins = Array.from(new Set(transformedProducts.map(p => p.coinSymbol)));
+      setCoinCategories(uniqueCoins);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products. Please check if product service is running.');
       setProducts([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateProductPrices = async () => {
+    if (products.length === 0) return;
+    
+    try {
+      const updatedProducts = await Promise.all(
+        products.map(async (product) => {
+          try {
+            const coinResponse = await axios.get(`/api/v1/coins/${product.coinSymbol?.toLowerCase() || 'bitcoin'}`);
+            const coinData = coinResponse.data.data;
+            if (coinData?.currentPrice) {
+              return {
+                ...product,
+                priceInUSD: product.priceInCoins * coinData.currentPrice,
+              };
+            }
+          } catch (error) {
+            // Keep existing price if update fails
+          }
+          return product;
+        })
+      );
+      setProducts(updatedProducts);
+    } catch (error) {
+      console.error('Error updating prices:', error);
     }
   };
 
@@ -97,10 +152,14 @@ const ProductGrid = () => {
     );
   }
 
+  const filteredProducts = selectedCoinCategory === 'all' 
+    ? products 
+    : products.filter(p => p.coinSymbol === selectedCoinCategory);
+
   return (
     <div>
       {/* Section Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -110,7 +169,7 @@ const ProductGrid = () => {
             {t('home.recommended_products')}
           </motion.h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Discover amazing tokenized real-world assets
+            Sản phẩm được phân loại theo loại coin thanh toán
           </p>
         </div>
 
@@ -122,18 +181,62 @@ const ProductGrid = () => {
         </Link>
       </div>
 
+      {/* Coin Category Filter */}
+      {coinCategories.length > 0 && (
+        <div className="mb-6">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedCoinCategory('all')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedCoinCategory === 'all'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              Tất cả
+            </button>
+            {coinCategories.map((coin) => (
+              <button
+                key={coin}
+                onClick={() => setSelectedCoinCategory(coin)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 ${
+                  selectedCoinCategory === coin
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+              >
+                <span>{coin}</span>
+                <span className="text-xs opacity-75">
+                  ({products.filter(p => p.coinSymbol === coin).length})
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Empty State */}
-      {products.length === 0 && !loading && (
+      {filteredProducts.length === 0 && !loading && (
         <div className="text-center py-12">
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            {t('home.no_products') || 'No products available. Please start the product service.'}
+            {selectedCoinCategory === 'all'
+              ? (t('home.no_products') || 'No products available. Please start the product service.')
+              : `Không có sản phẩm nào được thanh toán bằng ${selectedCoinCategory}.`}
           </p>
+          {selectedCoinCategory !== 'all' && (
+            <button
+              onClick={() => setSelectedCoinCategory('all')}
+              className="text-primary-600 dark:text-primary-400 hover:underline"
+            >
+              Xem tất cả sản phẩm
+            </button>
+          )}
         </div>
       )}
 
       {/* Products Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {products.map((product, index) => (
+        {filteredProducts.map((product, index) => (
           <motion.div
             key={product.id}
             initial={{ opacity: 0, y: 20 }}

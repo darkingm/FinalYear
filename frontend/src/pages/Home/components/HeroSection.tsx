@@ -1,15 +1,34 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FiArrowRight, FiShield, FiTrendingUp, FiZap } from 'react-icons/fi';
+import { useSelector } from 'react-redux';
+import { useEffect, useState } from 'react';
+import { FiArrowRight, FiShield, FiTrendingUp, FiZap, FiDollarSign, FiCoins } from 'react-icons/fi';
+import { RootState } from '../../../store';
+import axios from '../../../api/axios';
 
 interface HeroSectionProps {
   onLoginClick?: () => void;
   onRegisterClick?: () => void;
 }
 
+interface CoinBalance {
+  coinId: string;
+  coinSymbol: string;
+  coinName: string;
+  balance: number;
+  usdValue?: number;
+  priceUSD?: number;
+  image?: string;
+}
+
 const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
   const { t } = useTranslation();
+  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const [balances, setBalances] = useState<CoinBalance[]>([]);
+  const [totalUSDValue, setTotalUSDValue] = useState(0);
+  const [totalAssets, setTotalAssets] = useState(0);
+  const [loadingBalances, setLoadingBalances] = useState(false);
 
   const floatingAnimation = {
     y: [0, -20, 0],
@@ -17,6 +36,77 @@ const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
       duration: 3,
       repeat: Infinity,
       ease: "easeInOut"
+    }
+  };
+
+  // Get greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Chúc buổi sáng tốt lành';
+    if (hour < 18) return 'Chúc buổi chiều tốt lành';
+    return 'Chúc buổi tối tốt lành';
+  };
+
+  // Fetch user balances when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      fetchBalances();
+    }
+  }, [isAuthenticated, user]);
+
+  const fetchBalances = async () => {
+    try {
+      setLoadingBalances(true);
+      const userId = user?.id || user?.userId;
+      if (!userId) return;
+      
+      const response = await axios.get(`/api/v1/users/${userId}/balances`);
+      if (response.data.success) {
+        const balancesData = response.data.data.balances || [];
+        
+        // Fetch current prices for each coin
+        const balancesWithPrices = await Promise.all(
+          balancesData.map(async (balance: any) => {
+            try {
+              const coinResponse = await axios.get(`/api/v1/coins/${balance.coinId || balance.coinSymbol?.toLowerCase()}`);
+              const coinData = coinResponse.data.data;
+              const priceUSD = coinData?.currentPrice || balance.priceUSD || 0;
+              const usdValue = (balance.balance || 0) * priceUSD;
+              
+              return {
+                ...balance,
+                coinId: balance.coinId || balance.coinSymbol?.toLowerCase(),
+                coinSymbol: balance.coinSymbol || balance.symbol,
+                coinName: balance.coinName || balance.name || balance.coinSymbol,
+                balance: parseFloat(balance.balance?.toString() || '0'),
+                priceUSD,
+                usdValue,
+                image: coinData?.image || balance.image,
+              };
+            } catch (error) {
+              return {
+                ...balance,
+                coinId: balance.coinId || balance.coinSymbol?.toLowerCase(),
+                coinSymbol: balance.coinSymbol || balance.symbol,
+                coinName: balance.coinName || balance.name || balance.coinSymbol,
+                balance: parseFloat(balance.balance?.toString() || '0'),
+                priceUSD: balance.priceUSD || 0,
+                usdValue: (balance.balance || 0) * (balance.priceUSD || 0),
+                image: balance.image,
+              };
+            }
+          })
+        );
+
+        setBalances(balancesWithPrices);
+        const total = balancesWithPrices.reduce((sum, b) => sum + (b.usdValue || 0), 0);
+        setTotalUSDValue(total);
+        setTotalAssets(balancesWithPrices.filter(b => b.balance > 0).length);
+      }
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+    } finally {
+      setLoadingBalances(false);
     }
   };
 
@@ -66,64 +156,179 @@ const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
               <span className="block text-yellow-300">With Cryptocurrency</span>
             </motion.h1>
 
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="text-xl text-gray-100 mb-8"
-            >
-              {t('home.hero_subtitle')}
-            </motion.p>
+            {isAuthenticated && user ? (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="mb-6"
+                >
+                  <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
+                    Hello, {user.fullName || user.username}!
+                  </h2>
+                  <p className="text-xl text-yellow-300 font-medium">
+                    {getGreeting()}
+                  </p>
+                </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="flex flex-wrap gap-4"
-            >
-              {onLoginClick ? (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onLoginClick}
-                  className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold flex items-center space-x-2 shadow-xl hover:shadow-2xl transition-shadow"
+                {/* User Stats */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"
                 >
-                  <span>{t('nav.login')}</span>
-                  <FiArrowRight />
-                </motion.button>
-              ) : (
-                <Link to="/products">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold flex items-center space-x-2 shadow-xl hover:shadow-2xl transition-shadow"
+                  {/* Total Balance */}
+                  <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <FiDollarSign className="w-6 h-6 text-yellow-300" />
+                      <span className="text-sm text-gray-200">Tổng giá trị tài sản</span>
+                    </div>
+                    {loadingBalances ? (
+                      <div className="h-8 bg-white/10 rounded animate-pulse"></div>
+                    ) : (
+                      <p className="text-2xl font-bold text-white">
+                        ${totalUSDValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Number of Assets */}
+                  <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <FiCoins className="w-6 h-6 text-yellow-300" />
+                      <span className="text-sm text-gray-200">Số lượng coin đang nắm giữ</span>
+                    </div>
+                    {loadingBalances ? (
+                      <div className="h-8 bg-white/10 rounded animate-pulse"></div>
+                    ) : (
+                      <p className="text-2xl font-bold text-white">
+                        {totalAssets} {totalAssets === 1 ? 'coin' : 'coins'}
+                      </p>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Top Coins */}
+                {balances.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="mb-8"
                   >
-                    <span>{t('home.get_started')}</span>
-                    <FiArrowRight />
-                  </motion.button>
-                </Link>
-              )}
-              {onRegisterClick ? (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onRegisterClick}
-                  className="bg-white/10 backdrop-blur-lg text-white px-8 py-4 rounded-lg font-semibold border-2 border-white/30 hover:bg-white/20 transition-colors"
+                    <p className="text-sm text-gray-200 mb-3">Coin đang nắm giữ:</p>
+                    <div className="flex flex-wrap gap-3">
+                      {balances.slice(0, 4).map((balance) => (
+                        balance.balance > 0 && (
+                          <div
+                            key={balance.coinId}
+                            className="bg-white/10 backdrop-blur-lg rounded-lg px-4 py-2 border border-white/20 flex items-center space-x-2"
+                          >
+                            {balance.image && (
+                              <img src={balance.image} alt={balance.coinSymbol} className="w-6 h-6 rounded-full" />
+                            )}
+                            <span className="text-white font-medium">{balance.coinSymbol}</span>
+                            <span className="text-gray-200 text-sm">
+                              {balance.balance.toFixed(4)}
+                            </span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="flex flex-wrap gap-4"
                 >
-                  {t('nav.register')}
-                </motion.button>
-              ) : (
-                <Link to="/about">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="bg-white/10 backdrop-blur-lg text-white px-8 py-4 rounded-lg font-semibold border-2 border-white/30 hover:bg-white/20 transition-colors"
-                  >
-                    {t('home.learn_more')}
-                  </motion.button>
-                </Link>
-              )}
-            </motion.div>
+                  <Link to="/products">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold flex items-center space-x-2 shadow-xl hover:shadow-2xl transition-shadow"
+                    >
+                      <span>Khám phá sản phẩm</span>
+                      <FiArrowRight />
+                    </motion.button>
+                  </Link>
+                  <Link to="/profile">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="bg-white/10 backdrop-blur-lg text-white px-8 py-4 rounded-lg font-semibold border-2 border-white/30 hover:bg-white/20 transition-colors"
+                    >
+                      Xem hồ sơ
+                    </motion.button>
+                  </Link>
+                </motion.div>
+              </>
+            ) : (
+              <>
+                <motion.p
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-xl text-gray-100 mb-8"
+                >
+                  {t('home.hero_subtitle')}
+                </motion.p>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="flex flex-wrap gap-4"
+                >
+                  {onLoginClick ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={onLoginClick}
+                      className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold flex items-center space-x-2 shadow-xl hover:shadow-2xl transition-shadow"
+                    >
+                      <span>{t('nav.login')}</span>
+                      <FiArrowRight />
+                    </motion.button>
+                  ) : (
+                    <Link to="/products">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold flex items-center space-x-2 shadow-xl hover:shadow-2xl transition-shadow"
+                      >
+                        <span>{t('home.get_started')}</span>
+                        <FiArrowRight />
+                      </motion.button>
+                    </Link>
+                  )}
+                  {onRegisterClick ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={onRegisterClick}
+                      className="bg-white/10 backdrop-blur-lg text-white px-8 py-4 rounded-lg font-semibold border-2 border-white/30 hover:bg-white/20 transition-colors"
+                    >
+                      {t('nav.register')}
+                    </motion.button>
+                  ) : (
+                    <Link to="/about">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="bg-white/10 backdrop-blur-lg text-white px-8 py-4 rounded-lg font-semibold border-2 border-white/30 hover:bg-white/20 transition-colors"
+                      >
+                        {t('home.learn_more')}
+                      </motion.button>
+                    </Link>
+                  )}
+                </motion.div>
+              </>
+            )}
 
             {/* Stats */}
             <motion.div

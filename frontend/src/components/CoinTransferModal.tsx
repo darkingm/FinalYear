@@ -22,12 +22,14 @@ const CoinTransferModal = ({ isOpen, onClose, coinSymbol = 'BTC' }: CoinTransfer
   });
 
   const networks = [
-    { value: 'ethereum', label: 'Ethereum (ERC-20)', fee: '0.005 ETH' },
-    { value: 'binance-smart-chain', label: 'Binance Smart Chain (BEP-20)', fee: '0.0005 BNB' },
-    { value: 'polygon', label: 'Polygon (MATIC)', fee: '0.01 MATIC' },
-    { value: 'arbitrum', label: 'Arbitrum', fee: '0.001 ETH' },
-    { value: 'optimism', label: 'Optimism', fee: '0.001 ETH' },
-    { value: 'avalanche', label: 'Avalanche C-Chain', fee: '0.01 AVAX' },
+    { value: 'ethereum', label: 'Ethereum (ERC-20)', fee: '0.005 ETH', feeUSD: '~$12' },
+    { value: 'binance-smart-chain', label: 'Binance Smart Chain (BEP-20)', fee: '0.0005 BNB', feeUSD: '~$0.15' },
+    { value: 'tron', label: 'TRON (TRC-20)', fee: '0.1 TRX', feeUSD: '~$0.01' },
+    { value: 'polygon', label: 'Polygon (MATIC)', fee: '0.01 MATIC', feeUSD: '~$0.008' },
+    { value: 'arbitrum', label: 'Arbitrum', fee: '0.001 ETH', feeUSD: '~$2.5' },
+    { value: 'optimism', label: 'Optimism', fee: '0.001 ETH', feeUSD: '~$2.5' },
+    { value: 'avalanche', label: 'Avalanche C-Chain', fee: '0.01 AVAX', feeUSD: '~$0.35' },
+    { value: 'solana', label: 'Solana', fee: '0.000005 SOL', feeUSD: '~$0.0001' },
   ];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -146,7 +148,7 @@ const CoinTransferModal = ({ isOpen, onClose, coinSymbol = 'BTC' }: CoinTransfer
               >
                 {networks.map((network) => (
                   <option key={network.value} value={network.value}>
-                    {network.label} (Fee: {network.fee})
+                    {network.label} - Fee: {network.fee} {network.feeUSD}
                   </option>
                 ))}
               </select>
@@ -166,7 +168,7 @@ const CoinTransferModal = ({ isOpen, onClose, coinSymbol = 'BTC' }: CoinTransfer
               >
                 {networks.map((network) => (
                   <option key={network.value} value={network.value}>
-                    {network.label} (Fee: {network.fee})
+                    {network.label} - Fee: {network.fee} {network.feeUSD}
                   </option>
                 ))}
               </select>
@@ -212,13 +214,33 @@ const CoinTransferModal = ({ isOpen, onClose, coinSymbol = 'BTC' }: CoinTransfer
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {t('blockchain.estimated_fee') || 'Estimated Fee'}
+                  {t('blockchain.estimated_fee') || 'Estimated Fee (From Network)'}
                 </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {networks.find(n => n.value === formData.fromNetwork)?.fee}
+                  {networks.find(n => n.value === formData.fromNetwork)?.fee} ({networks.find(n => n.value === formData.fromNetwork)?.feeUSD})
                 </span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('blockchain.estimated_fee_to') || 'Estimated Fee (To Network)'}
+                </span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {networks.find(n => n.value === formData.toNetwork)?.fee} ({networks.find(n => n.value === formData.toNetwork)?.feeUSD})
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {t('blockchain.total_fee') || 'Total Estimated Fee'}
+                </span>
+                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                  {(() => {
+                    const fromFee = networks.find(n => n.value === formData.fromNetwork);
+                    const toFee = networks.find(n => n.value === formData.toNetwork);
+                    return `${fromFee?.fee} + ${toFee?.fee}`;
+                  })()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mt-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   {t('blockchain.estimated_time') || 'Estimated Time'}
                 </span>

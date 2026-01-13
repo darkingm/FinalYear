@@ -31,6 +31,13 @@ const CoinBalance = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       fetchBalances();
+      
+      // Set up real-time price updates every 30 seconds
+      const interval = setInterval(() => {
+        updatePrices();
+      }, 30000);
+
+      return () => clearInterval(interval);
     } else {
       setLoading(false);
     }
@@ -96,6 +103,37 @@ const CoinBalance = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updatePrices = async () => {
+    if (balances.length === 0) return;
+    
+    try {
+      const updatedBalances = await Promise.all(
+        balances.map(async (balance) => {
+          try {
+            const coinResponse = await axios.get(`/api/v1/coins/${balance.coinId || balance.coinSymbol.toLowerCase()}`);
+            const coinData = coinResponse.data.data;
+            const priceUSD = coinData?.currentPrice || balance.priceUSD || 0;
+            const usdValue = balance.balance * priceUSD;
+            
+            return {
+              ...balance,
+              priceUSD,
+              usdValue,
+            };
+          } catch (error) {
+            return balance;
+          }
+        })
+      );
+
+      setBalances(updatedBalances);
+      const total = updatedBalances.reduce((sum, b) => sum + (b.usdValue || 0), 0);
+      setTotalUSDValue(total);
+    } catch (error) {
+      console.error('Error updating prices:', error);
     }
   };
 

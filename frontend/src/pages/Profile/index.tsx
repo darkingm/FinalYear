@@ -19,6 +19,9 @@ import {
   EyeSlashIcon,
   CameraIcon,
   CheckCircleIcon,
+  TruckIcon,
+  PackageIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 
 interface UserProfile {
@@ -77,6 +80,8 @@ export default function Profile() {
     showEmail: false,
     showPhone: false,
   });
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   // ✅ SỬA: Loại bỏ navigate khỏi dependency array (navigate là stable)
   useEffect(() => {
@@ -90,7 +95,30 @@ export default function Profile() {
       return;
     }
     fetchProfile();
+    fetchOrders();
   }, [user]); // ✅ CHỈ giữ user trong dependency
+
+  const fetchOrders = async () => {
+    try {
+      setLoadingOrders(true);
+      const response = await axios.get('/api/v1/orders');
+      if (response.data.success) {
+        const ordersData = response.data.data.orders || [];
+        // Filter to show only active orders (not completed or cancelled)
+        const activeOrders = ordersData.filter((order: any) => 
+          !['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(order.orderStatus)
+        );
+        setOrders(activeOrders);
+      }
+    } catch (error: any) {
+      console.error('Error fetching orders:', error);
+      if (error.response?.status !== 404) {
+        toast.error('Failed to load orders');
+      }
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
 
   const fetchProfile = async () => {
     // ✅ THÊM: Guard để tránh gọi API nhiều lần
@@ -517,6 +545,39 @@ export default function Profile() {
                 </div>
               </div>
             )}
+
+            {/* Active Orders */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Đơn hàng đang xử lý
+                </h2>
+                <button
+                  onClick={() => navigate('/orders')}
+                  className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                >
+                  Xem tất cả
+                </button>
+              </div>
+              {loadingOrders ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : orders.length > 0 ? (
+                <div className="space-y-4">
+                  {orders.map((order) => (
+                    <OrderTrackingCard key={order.id} order={order} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <PackageIcon className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-2" />
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Không có đơn hàng đang xử lý
+                  </p>
+                </div>
+              )}
+            </div>
           </motion.div>
 
           {/* Sidebar */}
@@ -649,5 +710,120 @@ function PrivacyToggle({
         />
       </button>
     </div>
+  );
+}
+
+function OrderTrackingCard({ order }: { order: any }) {
+  const navigate = useNavigate();
+  
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
+      case 'CONFIRMED':
+      case 'PROCESSING':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
+      case 'SHIPPING':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300';
+      case 'DELIVERED':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <ClockIcon className="w-5 h-5" />;
+      case 'CONFIRMED':
+      case 'PROCESSING':
+        return <PackageIcon className="w-5 h-5" />;
+      case 'SHIPPING':
+        return <TruckIcon className="w-5 h-5" />;
+      case 'DELIVERED':
+        return <CheckCircleIcon className="w-5 h-5" />;
+      default:
+        return <PackageIcon className="w-5 h-5" />;
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'Đang chờ xử lý';
+      case 'CONFIRMED':
+        return 'Đã xác nhận';
+      case 'PROCESSING':
+        return 'Đang xử lý';
+      case 'SHIPPING':
+        return 'Đang vận chuyển';
+      case 'DELIVERED':
+        return 'Đã giao hàng';
+      default:
+        return status;
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+      onClick={() => navigate(`/orders/${order.id}`)}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-3">
+          {getStatusIcon(order.orderStatus)}
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white">
+              {order.orderNumber}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {new Date(order.date || order.createdAt).toLocaleDateString('vi-VN')}
+            </p>
+          </div>
+        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(order.orderStatus)}`}>
+          {getStatusIcon(order.orderStatus)}
+          <span>{getStatusText(order.orderStatus)}</span>
+        </span>
+      </div>
+
+      {order.trackingNumber && (
+        <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <TruckIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Mã vận đơn:</span>
+            <span className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
+              {order.trackingNumber}
+            </span>
+          </div>
+          {order.shippedAt && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Đã gửi: {new Date(order.shippedAt).toLocaleDateString('vi-VN')}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <span className="text-gray-500 dark:text-gray-400">Tổng tiền: </span>
+          <span className="font-semibold text-gray-900 dark:text-white">
+            ${order.total?.toFixed(2) || order.totalInUSD?.toFixed(2) || '0.00'}
+          </span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/orders/${order.id}`);
+          }}
+          className="text-primary-600 dark:text-primary-400 hover:underline"
+        >
+          Xem chi tiết →
+        </button>
+      </div>
+    </motion.div>
   );
 }

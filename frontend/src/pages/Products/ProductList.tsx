@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { FiSearch, FiFilter, FiShoppingCart } from 'react-icons/fi';
+import { FiSearch, FiFilter, FiShoppingCart, FiImage, FiZap } from 'react-icons/fi';
 import axios from '../../api/axios';
 import { addToCartAsync } from '../../store/thunks/cartThunks';
 import toast from 'react-hot-toast';
@@ -51,6 +51,9 @@ const ProductListPage = () => {
   const [sortBy, setSortBy] = useState('newest');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [useElasticsearch, setUseElasticsearch] = useState(false);
+  const [imageSearchOpen, setImageSearchOpen] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const categories = [
     { value: 'all', label: 'All Categories' },
@@ -122,7 +125,12 @@ const ProductListPage = () => {
         page: pageNum,
         limit: 20,
       };
-      if (searchQuery) params.search = searchQuery;
+      if (searchQuery) {
+        params.search = searchQuery;
+        if (useElasticsearch) {
+          params.useElasticsearch = 'true';
+        }
+      }
       if (selectedCategory !== 'all') params.category = selectedCategory;
       if (selectedCoin !== 'all') params.coinSymbol = selectedCoin;
       if (sortBy) params.sort = sortBy;
@@ -150,6 +158,40 @@ const ProductListPage = () => {
 
   const handleLoadMore = () => {
     fetchProducts(page + 1, true);
+  };
+
+  const handleImageSearch = async (file: File) => {
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      // Convert to base64 for API
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64 = reader.result as string;
+          const response = await axios.post('/api/v1/ai/products/image-search', {
+            imageBase64: base64.split(',')[1],
+          });
+          
+          if (response.data.success) {
+            setProducts(response.data.data.products || []);
+            toast.success(`Tìm thấy ${response.data.data.products?.length || 0} sản phẩm tương tự`);
+            setImageSearchOpen(false);
+          }
+        } catch (error: any) {
+          console.error('Image search error:', error);
+          toast.error('Tính năng tìm kiếm bằng hình ảnh chưa được triển khai trên server. Vui lòng liên hệ admin.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Image search error:', error);
+      setLoading(false);
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -222,17 +264,92 @@ const ProductListPage = () => {
         >
           {/* Search Bar */}
           <form onSubmit={handleSearch} className="mb-6">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t('products.search_placeholder') || 'Search products...'}
-                className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
-              />
-              <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <div className="relative flex items-center space-x-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('products.search_placeholder') || 'Search products...'}
+                  className="w-full px-4 py-3 pl-12 pr-32 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                />
+                <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setUseElasticsearch(!useElasticsearch)}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                      useElasticsearch
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                    }`}
+                    title="Sử dụng Elasticsearch để tìm kiếm tốt hơn"
+                  >
+                    <FiZap className="w-3 h-3 inline mr-1" />
+                    ES
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImageSearchOpen(true)}
+                className="px-4 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+                title="Tìm kiếm bằng hình ảnh với AI"
+              >
+                <FiImage className="w-5 h-5" />
+                <span className="hidden md:inline">Tìm bằng ảnh</span>
+              </button>
             </div>
+            {useElasticsearch && (
+              <p className="mt-2 text-xs text-primary-600 dark:text-primary-400 flex items-center space-x-1">
+                <FiZap className="w-3 h-3" />
+                <span>Đang sử dụng Elasticsearch để tìm kiếm chính xác hơn</span>
+              </p>
+            )}
           </form>
+
+          {/* Image Search Modal */}
+          {imageSearchOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  Tìm kiếm bằng hình ảnh
+                </h3>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setImageFile(file);
+                      handleImageSearch(file);
+                    }
+                  }}
+                  className="w-full mb-4"
+                />
+                {imageFile && (
+                  <div className="mb-4">
+                    <img
+                      src={URL.createObjectURL(imageFile)}
+                      alt="Preview"
+                      className="w-full h-48 object-cover rounded-lg"
+                    />
+                  </div>
+                )}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setImageSearchOpen(false);
+                      setImageFile(null);
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Top Coins Filter Buttons */}
           <div className="mb-6">
