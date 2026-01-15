@@ -5,9 +5,15 @@ import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import rateLimit from 'express-rate-limit';
 import { authMiddleware } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
+import { 
+  rateLimitMiddleware, 
+  authRateLimitMiddleware,
+  loginRateLimitMiddleware,
+  registerRateLimitMiddleware,
+  otpRateLimitMiddleware 
+} from './middleware/rateLimit.middleware';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { serviceRegistry } from './config/services';
@@ -30,16 +36,9 @@ app.use(morgan('combined', {
   stream: { write: (message) => logger.info(message.trim()) }
 }));
 
-// Rate limiting BEFORE body parsing to avoid issues
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use('/api/', limiter);
+// In-memory rate limiting BEFORE body parsing (trước Redis)
+// General rate limit cho tất cả API endpoints
+app.use('/api/', rateLimitMiddleware);
 
 // Body parsing - After rate limit, before routes
 app.use(express.json({ limit: '10mb' }));
@@ -58,6 +57,14 @@ app.get('/health', (req, res) => {
 // API Routes with Proxies
 
 // Auth Service - No authentication required
+// Apply specific rate limits for auth endpoints
+app.use('/api/v1/auth', authRateLimitMiddleware);
+app.use('/api/v1/auth/login', loginRateLimitMiddleware);
+app.use('/api/v1/auth/register', registerRateLimitMiddleware);
+app.use('/api/v1/auth/verify-email', otpRateLimitMiddleware);
+app.use('/api/v1/auth/resend-otp', otpRateLimitMiddleware);
+app.use('/api/v1/auth/forgot-password', otpRateLimitMiddleware);
+
 app.use('/api/v1/auth', (req, res, next) => {
   // Log incoming request
   logger.info(`Auth request: ${req.method} ${req.path}`, { body: req.body });

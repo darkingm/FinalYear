@@ -13,6 +13,8 @@ import { jwtConfig } from '../config/jwt.config';
 // Validate environment variables on startup
 import { validateEnvironmentVariables, getEnvVar } from '../utils/envValidator';
 import { hashToken, calculateExpiresAt } from '../utils/token.utils';
+// Cache service and brute force protection
+import { getUserByEmail, cacheSession, invalidateUserCache } from '../services/cache.service';
 
 // Validate on module load
 if (process.env.NODE_ENV !== 'test') {
@@ -80,12 +82,8 @@ export class AuthController {
     try {
       const { email, username, password, fullName, phoneNumber } = req.body;
 
-      // Check if user exists
-      const existingUser = await User.findOne({
-        where: {
-          email,
-        },
-      });
+      // Check if user exists using cache-first strategy
+      const existingUser = await getUserByEmail(email);
 
       if (existingUser) {
         return res.status(400).json({
@@ -94,6 +92,7 @@ export class AuthController {
         });
       }
 
+      // Check username (direct DB query for uniqueness check)
       const existingUsername = await User.findOne({
         where: {
           username,
@@ -117,6 +116,9 @@ export class AuthController {
         isEmailVerified: false,
       });
 
+      // Invalidate cache for new user
+      await invalidateUserCache(user.id, email, username);
+
       // Generate OTP
       const otp = generateOTP();
       const expiresAt = new Date();
@@ -131,7 +133,7 @@ export class AuthController {
         attempts: 0,
       });
 
-      // Send verification email (non-blocking)
+      // Send verification email (non-blocking, async via queue)
       sendEmail({
         to: email,
         subject: 'Verify Your Email - TokenAsset',
@@ -141,7 +143,7 @@ export class AuthController {
           <p>This code will expire in 10 minutes.</p>
         `,
       }).catch((emailError: any) => {
-        logger.error('Failed to send verification email:', emailError.message);
+        logger.error('Failed to enqueue verification email:', emailError.message);
       });
 
       // Publish event (non-blocking)
@@ -250,9 +252,14 @@ export class AuthController {
       const { email, password } = req.body;
       const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
 
-      const user = await User.findOne({ where: { email } });
+      // Use cache-first strategy for user lookup
+      const user = await getUserByEmail(email);
 
       if (!user) {
+        // Track failed attempt
+        if ((req as any).trackFailedLogin) {
+          await (req as any).trackFailedLogin();
+        }
         return res.status(401).json({
           success: false,
           error: 'Invalid credentials',
@@ -260,6 +267,10 @@ export class AuthController {
       }
 
       if (!user.password) {
+        // Track failed attempt
+        if ((req as any).trackFailedLogin) {
+          await (req as any).trackFailedLogin();
+        }
         return res.status(401).json({
           success: false,
           error: 'Please use OAuth login (Google/Facebook)',
@@ -269,6 +280,10 @@ export class AuthController {
       const isValidPassword = await user.validatePassword(password);
 
       if (!isValidPassword) {
+        // Track failed attempt
+        if ((req as any).trackFailedLogin) {
+          await (req as any).trackFailedLogin();
+        }
         return res.status(401).json({
           success: false,
           error: 'Invalid credentials',
@@ -282,35 +297,37 @@ export class AuthController {
         });
       }
 
+      // Clear failed attempts on successful login
+      if ((req as any).clearFailedLogin) {
+        await (req as any).clearFailedLogin();
+      }
+
       // Generate tokens
       const accessToken = generateAccessToken(user);
       const refreshToken = await generateRefreshToken(user, ipAddress);
 
-      // Store session in Redis (if available)
-      try {
-        await redisClient.setEx(
-          `session:${user.id}`,
-          7 * 24 * 60 * 60, // 7 days
-          JSON.stringify({
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-          })
-        );
-      } catch (redisError: any) {
-        logger.warn('Failed to store session in Redis:', redisError.message);
-        // Continue without Redis session
-      }
+      // Store session in cache
+      await cacheSession(user.id, {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
 
-      // Update last login
-      user.lastLoginAt = new Date();
-      await user.save();
+      // Update last login asynchronously (via RabbitMQ event, not blocking)
+      publishEvent('user.login.update', {
+        userId: user.id,
+        lastLoginAt: new Date().toISOString(),
+      }).catch((eventError: any) => {
+        logger.error('Failed to publish login update event:', eventError.message);
+      });
 
-      // Publish event
-      await publishEvent('user.logged_in', {
+      // Publish login event (non-blocking)
+      publishEvent('user.logged_in', {
         userId: user.id,
         email: user.email,
         timestamp: new Date(),
+      }).catch((eventError: any) => {
+        logger.error('Failed to publish user.logged_in event:', eventError.message);
       });
 
       res.json({

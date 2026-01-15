@@ -32,9 +32,28 @@ export const connectRabbitMQ = async (): Promise<void> => {
     connection = await amqp.connect(RABBITMQ_URL);
     channel = await connection.createChannel();
 
+    // Setup exchange for events
     await channel.assertExchange('tokenasset_events', 'topic', { durable: true });
 
+    // Setup email queue
+    await channel.assertQueue('email_queue', {
+      durable: true, // Queue survives broker restart
+      arguments: {
+        'x-message-ttl': 86400000, // 24 hours TTL for messages
+        'x-max-priority': 10, // Support priority messages
+      },
+    });
+
+    // Setup dead letter queue for failed emails
+    await channel.assertQueue('email_queue_dlq', {
+      durable: true,
+    });
+
+    // Bind email queue to exchange (optional, for event-based emails)
+    await channel.bindQueue('email_queue', 'tokenasset_events', 'email.send');
+
     logger.info('✅ RabbitMQ connected successfully');
+    logger.info('✅ Email queue setup completed');
 
     connection.on('error', (err) => {
       logger.error('RabbitMQ connection error:', err);
@@ -111,6 +130,65 @@ export const publishEvent = async (eventName: string, data: any): Promise<void> 
   } catch (error: any) {
     logger.error('Failed to publish event:', error.message);
     // Don't throw - allow app to continue
+  }
+};
+
+// Publish email to queue (SMTP chỉ nhận và enqueue, không retry logic phức tạp)
+export const enqueueEmail = async (emailData: {
+  to: string;
+  subject: string;
+  text?: string;
+  html?: string;
+  priority?: number; // 0-10, higher = more priority
+}): Promise<void> => {
+  try {
+    if (!channel || !connection) {
+      logger.warn('RabbitMQ not available. Email not enqueued:', emailData.to);
+      return;
+    }
+
+    const message = JSON.stringify({
+      ...emailData,
+      timestamp: new Date().toISOString(),
+      attempts: 0, // Track retry attempts
+    });
+
+    const published = channel.sendToQueue(
+      'email_queue',
+      Buffer.from(message),
+      {
+        persistent: true,
+        priority: emailData.priority || 0,
+      }
+    );
+
+    if (!published) {
+      logger.warn('RabbitMQ channel buffer full. Email may not be enqueued:', emailData.to);
+    } else {
+      logger.info('Email enqueued:', {
+        to: emailData.to,
+        subject: emailData.subject,
+        priority: emailData.priority || 0,
+      });
+    }
+  } catch (error: any) {
+    logger.error('Failed to enqueue email:', error.message);
+    // Log error but don't throw - allow app to continue
+    // Email will be logged for manual retry if needed
+  }
+};
+
+// Get queue length for monitoring
+export const getEmailQueueLength = async (): Promise<number> => {
+  try {
+    if (!channel) {
+      return 0;
+    }
+    const queueInfo = await channel.checkQueue('email_queue');
+    return queueInfo.messageCount;
+  } catch (error: any) {
+    logger.error('Failed to get email queue length:', error.message);
+    return 0;
   }
 };
 

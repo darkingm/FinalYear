@@ -5,6 +5,13 @@ import fs from 'fs';
 import { body } from 'express-validator';
 import { UserController } from '../controllers/user.controller';
 import { validate } from '../middleware/validate.middleware';
+// Rate limiting
+import {
+  rateLimitMiddleware,
+  profileUpdateRateLimitMiddleware,
+  avatarUploadRateLimitMiddleware,
+  searchRateLimitMiddleware,
+} from '../middleware/rateLimit.middleware';
 
 const router = express.Router();
 
@@ -74,6 +81,7 @@ router.post(
 // Update profile (requires auth)
 router.put(
   '/profile',
+  profileUpdateRateLimitMiddleware, // Rate limiting
   [
     body('fullName').optional().trim().isLength({ min: 2 }).withMessage('Full name must be at least 2 characters'),
     body('bio').optional().trim().isLength({ max: 500 }).withMessage('Bio must not exceed 500 characters'),
@@ -87,6 +95,7 @@ router.put(
 // Upload avatar (requires auth)
 router.put(
   '/profile/avatar',
+  avatarUploadRateLimitMiddleware, // Rate limiting
   upload.single('avatar'),
   UserController.uploadAvatar
 );
@@ -105,6 +114,6 @@ router.put(
 );
 
 // Search users
-router.get('/search', UserController.searchUsers);
+router.get('/search', searchRateLimitMiddleware, UserController.searchUsers); // Rate limiting
 
 export default router;

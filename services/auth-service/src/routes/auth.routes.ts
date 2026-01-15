@@ -12,6 +12,14 @@ import { redisClient } from '../utils/redis';
 import logger from '../utils/logger';
 import { jwtConfig } from '../config/jwt.config';
 import { hashToken, calculateExpiresAt } from '../utils/token.utils';
+// Rate limiting and brute force protection
+import {
+  loginRateLimitMiddleware,
+  registerRateLimitMiddleware,
+  otpRateLimitMiddleware,
+  passwordResetRateLimitMiddleware,
+} from '../middleware/rateLimit.middleware';
+import { bruteForceProtection } from '../middleware/bruteForce.middleware';
 
 const router = express.Router();
 
@@ -82,6 +90,7 @@ const requireOAuth = (provider: 'google' | 'facebook') => {
 // Register
 router.post(
   '/register',
+  registerRateLimitMiddleware, // Rate limiting
   [
     body('email').isEmail().withMessage('Valid email required'),
     body('username').isLength({ min: 3, max: 20 }).withMessage('Username must be 3-20 characters'),
@@ -95,6 +104,7 @@ router.post(
 // Verify email
 router.post(
   '/verify-email',
+  otpRateLimitMiddleware, // Rate limiting
   [
     body('email').isEmail().withMessage('Valid email required'),
     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
@@ -106,6 +116,8 @@ router.post(
 // Login
 router.post(
   '/login',
+  loginRateLimitMiddleware, // Rate limiting
+  bruteForceProtection, // Brute force protection
   [
     body('email').isEmail().withMessage('Valid email required'),
     body('password').notEmpty().withMessage('Password required'),
@@ -130,6 +142,7 @@ router.post('/logout', AuthController.logout);
 // Request password reset
 router.post(
   '/request-password-reset',
+  passwordResetRateLimitMiddleware, // Rate limiting
   [
     body('email').isEmail().withMessage('Valid email required'),
     validate,
@@ -152,6 +165,7 @@ router.post(
 // Resend OTP
 router.post(
   '/resend-otp',
+  otpRateLimitMiddleware, // Rate limiting
   [
     body('email').isEmail().withMessage('Valid email required'),
     body('type').isIn(['EMAIL_VERIFICATION', 'PASSWORD_RESET']).withMessage('Invalid OTP type'),

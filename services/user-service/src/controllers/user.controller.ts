@@ -6,6 +6,14 @@ import { publishEvent } from '../utils/rabbitmq';
 import logger from '../utils/logger';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
+// Cache service
+import { 
+  getUserProfileById, 
+  invalidateUserProfileCache, 
+  updateCachedUserProfile,
+  getCachedDashboardStats,
+  getCachedUserBalances 
+} from '../services/cache.service';
 
 const CACHE_TTL = 300; // 5 minutes
 
@@ -23,8 +31,8 @@ export class UserController {
         });
       }
 
-      // Check if profile already exists
-      const existing = await UserProfile.findOne({ where: { userId } });
+      // Check if profile already exists using cache
+      const existing = await getUserProfileById(userId);
       if (existing) {
         return res.json({
           success: true,
@@ -56,10 +64,15 @@ export class UserController {
         isSuspended: false,
       });
 
-      // Publish event
-      await publishEvent('user.profile.created', {
+      // Update cache
+      await updateCachedUserProfile(userId, profile);
+
+      // Publish event (non-blocking)
+      publishEvent('user.profile.created', {
         userId,
         username: profile.username,
+      }).catch((eventError: any) => {
+        logger.error('Failed to publish user.profile.created event:', eventError.message);
       });
 
       res.status(201).json({
@@ -104,23 +117,8 @@ export class UserController {
         });
       }
 
-      // Try cache
-      const cacheKey = `user:profile:${userId}`;
-      try {
-        const cached = await redisClient.get(cacheKey);
-        if (cached) {
-          return res.json({
-            success: true,
-            data: JSON.parse(cached),
-            cached: true,
-          });
-        }
-      } catch (redisError) {
-        // Redis not available, continue without cache
-        logger.warn('Redis cache miss, continuing without cache');
-      }
-
-      let profile = await UserProfile.findOne({ where: { userId } });
+      // Use cache-first strategy
+      let profile = await getUserProfileById(userId);
 
       // ✅ Auto-create profile if not found
       if (!profile) {
@@ -185,13 +183,9 @@ export class UserController {
         });
 
         logger.info(`Auto-created profile for user ${userId} with email ${finalEmail}`);
-      }
-
-      // Cache result
-      try {
-        await redisClient.setEx(cacheKey, CACHE_TTL, JSON.stringify(profile));
-      } catch (redisError) {
-        // Continue without cache
+        
+        // Update cache for newly created profile
+        await updateCachedUserProfile(userId, profile);
       }
 
       res.json({
@@ -278,7 +272,8 @@ export class UserController {
         });
       }
 
-      const profile = await UserProfile.findOne({ where: { userId } });
+      // Use cache-first strategy
+      let profile = await getUserProfileById(userId);
 
       if (!profile) {
         return res.status(404).json({
@@ -302,23 +297,16 @@ export class UserController {
 
       await profile.save();
 
-      // Clear cache
-      try {
-        await redisClient.del(`user:profile:${userId}`);
-      } catch (redisError) {
-        // Continue without cache
-      }
+      // Update cache
+      await updateCachedUserProfile(userId, profile);
 
-      // Publish event
-      try {
-        await publishEvent('user.profile.updated', {
-          userId,
-          username: profile.username,
-        });
-      } catch (eventError) {
-        // Continue without event
-        logger.warn('Failed to publish event:', eventError);
-      }
+      // Publish event (non-blocking)
+      publishEvent('user.profile.updated', {
+        userId,
+        username: profile.username,
+      }).catch((eventError: any) => {
+        logger.warn('Failed to publish event:', eventError.message);
+      });
 
       res.json({
         success: true,
@@ -348,7 +336,8 @@ export class UserController {
 
       const { showCoinBalance, showJoinDate, showEmail, showPhone } = req.body;
 
-      const profile = await UserProfile.findOne({ where: { userId } });
+      // Use cache-first strategy
+      let profile = await getUserProfileById(userId);
 
       if (!profile) {
         return res.status(404).json({
@@ -364,12 +353,8 @@ export class UserController {
 
       await profile.save();
 
-      // Clear cache
-      try {
-        await redisClient.del(`user:profile:${userId}`);
-      } catch (redisError) {
-        // Continue without cache
-      }
+      // Update cache
+      await updateCachedUserProfile(userId, profile);
 
       res.json({
         success: true,

@@ -10,6 +10,9 @@ import logger from './utils/logger';
 import { redisClient, connectRedis } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
 import { validateEnvironmentVariables } from './utils/envValidator';
+// Email worker and monitoring
+import { startEmailWorker } from './workers/email.worker';
+import { startMonitoring, getHealthCheck } from './utils/monitoring';
 
 const app: Application = express();
 const PORT = process.env.AUTH_SERVICE_PORT || 3001;
@@ -25,8 +28,9 @@ app.use(passport.initialize());
 setupPassport();
 
 // Routes
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', service: 'auth-service' });
+app.get('/health', async (req, res) => {
+  const health = await getHealthCheck();
+  res.status(health.status === 'healthy' ? 200 : 503).json(health);
 });
 
 app.use('/api/auth', authRoutes);
@@ -69,9 +73,16 @@ const startServer = async () => {
     try {
       logger.info('Connecting to RabbitMQ...');
       await connectRabbitMQ();
+      
+      // Start email worker after RabbitMQ connection
+      logger.info('Starting email worker...');
+      await startEmailWorker();
     } catch (error: any) {
       logger.warn('⚠️  RabbitMQ connection failed, continuing without events:', error.message);
     }
+
+    // Start monitoring service
+    startMonitoring();
 
     app.listen(PORT, () => {
       logger.info(`🚀 Auth Service running on port ${PORT}`);

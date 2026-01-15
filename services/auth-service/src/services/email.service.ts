@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { enqueueEmail } from '../utils/rabbitmq';
 import logger from '../utils/logger';
 
 interface EmailOptions {
@@ -6,67 +6,39 @@ interface EmailOptions {
   subject: string;
   text?: string;
   html?: string;
+  priority?: number; // 0-10, higher = more priority
 }
 
-let transporter: nodemailer.Transporter | null = null;
-
-// Initialize transporter
-const initTransporter = () => {
-  if (transporter) return transporter;
-
-  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_PORT === '465',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
-  } else {
-    // For development - use ethereal email
-    logger.warn('SMTP not configured, emails will be logged only');
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      auth: {
-        user: 'ethereal.user@ethereal.email',
-        pass: 'ethereal.password',
-      },
-    });
-  }
-
-  return transporter;
-};
-
+/**
+ * Enqueue email to RabbitMQ queue
+ * SMTP chỉ nhận và enqueue, không retry logic phức tạp
+ * Retry logic sẽ được xử lý ở email worker
+ */
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
   try {
-    const emailTransporter = initTransporter();
-
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@tokenasset.com',
+    // Enqueue email to RabbitMQ
+    await enqueueEmail({
       to: options.to,
       subject: options.subject,
       text: options.text,
       html: options.html,
-    };
+      priority: options.priority || 0,
+    });
 
-    const info = await emailTransporter.sendMail(mailOptions);
-    
-    logger.info('Email sent:', {
-      messageId: info.messageId,
+    logger.info('Email enqueued:', {
+      to: options.to,
+      subject: options.subject,
+      priority: options.priority || 0,
+    });
+  } catch (error: any) {
+    // Log error but don't throw - email is logged for manual retry if needed
+    logger.error('Email enqueue error:', {
+      error: error.message,
       to: options.to,
       subject: options.subject,
     });
-
-    // Log preview URL for development
-    if (process.env.NODE_ENV === 'development') {
-      logger.info('Preview URL:', nodemailer.getTestMessageUrl(info));
-    }
-  } catch (error) {
-    logger.error('Email send error:', error);
-    throw new Error('Failed to send email');
+    // Don't throw - allow app to continue
+    // Email failure won't block the main flow
   }
 };
 

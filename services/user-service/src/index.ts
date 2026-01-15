@@ -9,6 +9,8 @@ import adminRoutes from './routes/admin.routes';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { connectRabbitMQ, subscribeToEvents } from './utils/rabbitmq';
+// Monitoring
+import { startMonitoring, getHealthCheck } from './utils/monitoring';
 
 dotenv.config();
 
@@ -25,8 +27,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
 // Routes
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', service: 'user-service' });
+app.get('/health', async (req, res) => {
+  const health = await getHealthCheck();
+  res.status(health.status === 'healthy' ? 200 : 503).json(health);
 });
 
 app.use('/api/users', userRoutes);
@@ -62,6 +65,9 @@ const startServer = async () => {
     } catch (error: any) {
       logger.warn('RabbitMQ connection failed, continuing without events:', error.message);
     }
+
+    // Start monitoring service
+    startMonitoring();
 
     app.listen(PORT, () => {
       logger.info(`User Service running on port ${PORT}`);
