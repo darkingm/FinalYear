@@ -10,6 +10,7 @@ import {
   FiEdit,
   FiTrash2,
   FiEye,
+  FiTag,
 } from 'react-icons/fi';
 import axios from '../../api/axios';
 import toast from 'react-hot-toast';
@@ -145,15 +146,26 @@ const SellerDashboard = () => {
               {t('seller.manage_products') || 'Manage your products and sales'}
             </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/seller/products/new')}
-            className="flex items-center space-x-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <FiPlus className="w-5 h-5" />
-            <span>{t('seller.add_product') || 'Add Product'}</span>
-          </motion.button>
+          <div className="flex space-x-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate('/seller/vouchers')}
+              className="flex items-center space-x-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <FiTag className="w-5 h-5" />
+              <span>Vouchers</span>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate('/seller/products/new')}
+              className="flex items-center space-x-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <FiPlus className="w-5 h-5" />
+              <span>{t('seller.add_product') || 'Add Product'}</span>
+            </motion.button>
+          </div>
         </div>
 
         {/* Stats Grid */}

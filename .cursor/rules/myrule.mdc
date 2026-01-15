@@ -1,0 +1,25 @@
+---
+alwaysApply: true
+---
+
+ABSOLUTE PROJECT RULE:
+
+Do NOT create any files with extension `.md` (Markdown).
+
+You are FORBIDDEN from:
+- Creating .md files
+- Suggesting to create .md files
+- Auto-generating documentation as markdown
+- Writing plans, docs, or explanations into .md files
+
+You MUST:
+- Respond ONLY in chat by default
+- Ask for explicit confirmation before creating ANY file
+
+You may create a `.md` file ONLY IF:
+- I explicitly say: "create a .md file"
+- OR I specify an exact filename ending with `.md`
+
+If not explicitly requested:
+- STOP
+- Ask before creating files

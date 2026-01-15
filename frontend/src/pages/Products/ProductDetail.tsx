@@ -124,16 +124,24 @@ const ProductDetailPage = () => {
 
     setAddingToCart(true);
     try {
-      await dispatch(addToCartAsync({
+      const result = await dispatch(addToCartAsync({
         productId: product.id,
         name: product.title,
         price: product.priceInUSD,
         quantity: quantity,
-        image: product.images[0] || 'https://via.placeholder.com/400',
+        image: product.images && product.images[0] ? product.images[0] : 'https://via.placeholder.com/400',
+        priceInCoins: product.priceInCoins,
+        sellerId: product.sellerId,
+        sellerName: product.sellerName,
       }) as any);
       
-      toast.success(`${product.title} added to cart!`);
+      if (addToCartAsync.rejected.match(result)) {
+        toast.error(result.payload as string || 'Failed to add to cart');
+      } else {
+        toast.success(`${product.title} added to cart!`);
+      }
     } catch (err: any) {
+      console.error('Add to cart error:', err);
       toast.error(err.message || 'Failed to add to cart');
     } finally {
       setAddingToCart(false);

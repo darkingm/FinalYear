@@ -19,6 +19,7 @@ import CheckoutPage from './pages/Checkout';
 import ProfilePage from './pages/Profile';
 import SellerApplyPage from './pages/Seller/Apply';
 import SellerDashboard from './pages/Seller/Dashboard';
+import SellerVouchers from './pages/Seller/Vouchers';
 import AddProduct from './pages/Seller/AddProduct';
 import DashboardPage from './pages/Dashboard';
 import AdminDashboard from './pages/Dashboard/Admin';
@@ -29,7 +30,6 @@ import CoinListPage from './pages/Coins/CoinList';
 import CoinDetailPage from './pages/Coins/CoinDetail';
 import OrderListPage from './pages/Orders/OrderList';
 import OrderDetailPage from './pages/Orders/OrderDetail';
-import SquarePage from './pages/Square';
 import OAuthCallback from './pages/Auth/OAuthCallback';
 import TradingPage from './pages/Trading';
 
@@ -62,7 +62,6 @@ function App() {
         <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="coins" element={<CoinListPage />} />
         <Route path="coins/:id" element={<CoinDetailPage />} />
-        <Route path="square" element={<SquarePage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="trading" element={<TradingPage />} />
@@ -88,6 +87,7 @@ function App() {
         <Route path="orders/:id" element={<OrderDetailPage />} />
         <Route path="seller/apply" element={<SellerApplyPage />} />
         <Route path="seller/dashboard" element={<SellerDashboard />} />
+        <Route path="seller/vouchers" element={<SellerVouchers />} />
         <Route path="seller/products/new" element={<AddProduct />} />
         <Route path="seller/products/:id/edit" element={<AddProduct />} />
         <Route path="dashboard" element={<DashboardPage />} />

@@ -117,25 +117,45 @@ export const addToCartAsync = createAsyncThunk(
         return rejectWithValue('User not authenticated');
       }
 
-      // Get product details if needed
+      // Get product details (required for priceInCoins, sellerId, etc.)
       let product = null;
       try {
         const productResponse = await axios.get(`/api/v1/products/${item.productId}`);
-        product = productResponse.data.data?.product;
+        product = productResponse.data.data?.product || productResponse.data.data;
+        
+        if (!product) {
+          console.error('Product not found in response:', productResponse.data);
+          return rejectWithValue('Product not found');
+        }
       } catch (productError: any) {
-        // If product fetch fails, continue with provided data
-        console.warn('Failed to fetch product details:', productError);
+        // If product fetch fails, cannot add to cart
+        console.error('Failed to fetch product details:', productError);
+        const errorMsg = productError.response?.data?.error || productError.message || 'Failed to fetch product details';
+        return rejectWithValue(`Failed to fetch product details: ${errorMsg}. Please try again.`);
+      }
+
+      // Validate required fields - with better error messages
+      const priceInCoins = product.priceInCoins || item.priceInCoins;
+      if (!priceInCoins && priceInCoins !== 0) {
+        console.error('Missing priceInCoins:', { product, item });
+        return rejectWithValue('Product price information is missing. Please refresh the page and try again.');
+      }
+
+      const sellerId = product.sellerId || product.seller?.id || item.sellerId;
+      if (!sellerId) {
+        console.error('Missing sellerId:', { product, item });
+        return rejectWithValue('Seller information is missing. Please refresh the page and try again.');
       }
 
       const response = await axios.post('/api/v1/cart', {
         productId: item.productId,
-        productTitle: item.name,
-        productImage: item.image,
-        sellerId: product?.sellerId || item.sellerId || '',
-        sellerName: product?.seller?.name || item.sellerName || '',
+        productTitle: item.name || product.title || product.name || 'Product',
+        productImage: item.image || (product.images && product.images[0]) || product.image || '',
+        sellerId: sellerId,
+        sellerName: product.sellerName || product.seller?.name || product.seller?.fullName || item.sellerName || 'Unknown Seller',
         quantity: item.quantity || 1,
-        priceInCoins: item.priceInCoins || product?.priceInCoins || 0,
-        priceInUSD: item.price,
+        priceInCoins: priceInCoins,
+        priceInUSD: item.price || product.priceInUSD || product.price || 0,
       });
 
       if (response.data.success) {

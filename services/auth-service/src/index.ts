@@ -4,8 +4,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import passport from 'passport';
 import { sequelize, testConnection } from './database';
+import { userSequelize, testUserConnection } from './database/userDatabase';
 import { setupPassport } from './config/passport';
 import authRoutes from './routes/auth.routes';
+import userRoutes from './routes/user.routes';
 import logger from './utils/logger';
 import { redisClient, connectRedis } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
@@ -34,6 +36,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // Start server
 const startServer = async () => {
@@ -49,17 +52,26 @@ const startServer = async () => {
     }
 
     // Connect to PostgreSQL (required - app won't work without it)
-    logger.info('Connecting to PostgreSQL...');
+    logger.info('Connecting to PostgreSQL (auth_db)...');
     const dbConnected = await testConnection();
     if (!dbConnected) {
-      logger.error('Failed to connect to PostgreSQL after retries. Exiting...');
+      logger.error('Failed to connect to PostgreSQL (auth_db) after retries. Exiting...');
       process.exit(1);
     }
     
     // Sync database models (only if needed - init.sql already created tables)
     // Don't use alter: true if you already ran init.sql
     // await sequelize.sync({ alter: true });
-    logger.info('✅ Database connection established - using init.sql schema');
+    logger.info('✅ Database connection established (auth_db) - using init.sql schema');
+
+    // Connect to user_db (for user profiles)
+    logger.info('Connecting to PostgreSQL (user_db)...');
+    const userDbConnected = await testUserConnection();
+    if (!userDbConnected) {
+      logger.warn('⚠️  Failed to connect to PostgreSQL (user_db). User profile features may not work.');
+    } else {
+      logger.info('✅ Database connection established (user_db)');
+    }
 
     // Connect to Redis (optional - app can work without it)
     try {
@@ -98,6 +110,7 @@ const startServer = async () => {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received');
   await sequelize.close();
+  await userSequelize.close();
   await redisClient.disconnect();
   process.exit(0);
 });

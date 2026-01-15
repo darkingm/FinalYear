@@ -7,6 +7,8 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import chatRoutes from './routes/chat.routes';
 import ticketRoutes from './routes/ticket.routes';
+import postRoutes from './routes/post.routes';
+import commentRoutes from './routes/comment.routes';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
@@ -42,6 +44,8 @@ app.get('/health', (req, res) => {
 
 app.use('/api/chats', chatRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/comments', commentRoutes);
 
 // Setup Socket.IO handlers
 setupSocketHandlers(io);
@@ -53,7 +57,15 @@ const startServer = async () => {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
     const dbName = process.env.MONGODB_DB_CHAT || 'chat_db';
     await mongoose.connect(`${mongoUri}/${dbName}`);
-    logger.info('MongoDB connected');
+    logger.info(`MongoDB connected: ${mongoUri}/${dbName}`);
+    
+    // Also connect to social database if different
+    const socialDbName = process.env.MONGODB_DB_SOCIAL || 'social_db';
+    if (socialDbName !== dbName) {
+      // Use same connection but different database
+      const socialConnection = mongoose.createConnection(`${mongoUri}/${socialDbName}`);
+      logger.info(`Social database connection ready: ${mongoUri}/${socialDbName}`);
+    }
 
     // Connect to Redis
     await redisClient.connect();

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import { useEffect, useState } from 'react';
-import { FiArrowRight, FiShield, FiTrendingUp, FiZap, FiDollarSign, FiCoins } from 'react-icons/fi';
+import { FiArrowRight, FiShield, FiTrendingUp, FiZap, FiDollarSign, FiPieChart } from 'react-icons/fi';
 import { RootState } from '../../../store';
 import axios from '../../../api/axios';
 
@@ -20,6 +20,8 @@ interface CoinBalance {
   usdValue?: number;
   priceUSD?: number;
   image?: string;
+  priceChangePercentage24h?: number;
+  purchasePrice?: number;
 }
 
 const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
@@ -82,6 +84,8 @@ const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
                 priceUSD,
                 usdValue,
                 image: coinData?.image || balance.image,
+                priceChangePercentage24h: coinData?.priceChangePercentage24h || balance.priceChangePercentage24h,
+                purchasePrice: balance.purchasePrice || balance.priceUSD, // Use current price as fallback
               };
             } catch (error) {
               return {
@@ -93,6 +97,8 @@ const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
                 priceUSD: balance.priceUSD || 0,
                 usdValue: (balance.balance || 0) * (balance.priceUSD || 0),
                 image: balance.image,
+                priceChangePercentage24h: balance.priceChangePercentage24h,
+                purchasePrice: balance.purchasePrice || balance.priceUSD,
               };
             }
           })
@@ -194,24 +200,10 @@ const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
                     )}
                   </div>
 
-                  {/* Number of Assets */}
-                  <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <FiCoins className="w-6 h-6 text-yellow-300" />
-                      <span className="text-sm text-gray-200">Số lượng coin đang nắm giữ</span>
-                    </div>
-                    {loadingBalances ? (
-                      <div className="h-8 bg-white/10 rounded animate-pulse"></div>
-                    ) : (
-                      <p className="text-2xl font-bold text-white">
-                        {totalAssets} {totalAssets === 1 ? 'coin' : 'coins'}
-                      </p>
-                    )}
-                  </div>
                 </motion.div>
 
-                {/* Top Coins */}
-                {balances.length > 0 && (
+                {/* Coin Holdings with Logo, Quantity, and Price Change */}
+                {balances.length > 0 && balances.filter(b => b.balance > 0).length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -219,23 +211,50 @@ const HeroSection = ({ onLoginClick, onRegisterClick }: HeroSectionProps) => {
                     className="mb-8"
                   >
                     <p className="text-sm text-gray-200 mb-3">Coin đang nắm giữ:</p>
-                    <div className="flex flex-wrap gap-3">
-                      {balances.slice(0, 4).map((balance) => (
-                        balance.balance > 0 && (
-                          <div
-                            key={balance.coinId}
-                            className="bg-white/10 backdrop-blur-lg rounded-lg px-4 py-2 border border-white/20 flex items-center space-x-2"
-                          >
-                            {balance.image && (
-                              <img src={balance.image} alt={balance.coinSymbol} className="w-6 h-6 rounded-full" />
-                            )}
-                            <span className="text-white font-medium">{balance.coinSymbol}</span>
-                            <span className="text-gray-200 text-sm">
-                              {balance.balance.toFixed(4)}
-                            </span>
-                          </div>
-                        )
-                      ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {balances
+                        .filter(b => b.balance > 0)
+                        .slice(0, 4)
+                        .map((balance) => {
+                          // Calculate price change percentage
+                          // Use priceChangePercentage24h from coin data if available
+                          // Otherwise, calculate from purchase price if stored
+                          const priceChange = balance.priceChangePercentage24h || 
+                            (balance.purchasePrice && balance.priceUSD 
+                              ? ((balance.priceUSD - balance.purchasePrice) / balance.purchasePrice) * 100 
+                              : 0);
+                          const isPositive = priceChange >= 0;
+
+                          return (
+                            <div
+                              key={balance.coinId}
+                              className="bg-white/10 backdrop-blur-lg rounded-lg px-4 py-3 border border-white/20 flex items-center justify-between"
+                            >
+                              <div className="flex items-center space-x-3">
+                                {balance.image && (
+                                  <img 
+                                    src={balance.image} 
+                                    alt={balance.coinSymbol} 
+                                    className="w-8 h-8 rounded-full"
+                                  />
+                                )}
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-white font-medium">{balance.coinSymbol}</span>
+                                    <span className="text-gray-200 text-sm">
+                                      {balance.balance.toFixed(4)}
+                                    </span>
+                                  </div>
+                                  {priceChange !== 0 && (
+                                    <div className={`text-xs font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                                      {isPositive ? '+' : ''}{priceChange.toFixed(2)}%
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
                   </motion.div>
                 )}

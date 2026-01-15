@@ -3,7 +3,9 @@ import { Transaction } from 'sequelize';
 import Order, { OrderStatus, PaymentStatus } from '../models/Order.model';
 import OrderItem from '../models/OrderItem.model';
 import CartItem from '../models/Cart.model';
+import Voucher from '../models/Voucher.model';
 import { sequelize } from '../database';
+import { VoucherService } from '../services/voucher.service';
 import { publishEvent } from '../utils/rabbitmq';
 import logger from '../utils/logger';
 
@@ -25,6 +27,7 @@ export class OrderController {
         paymentMethod,
         coinId,       
         coinSymbol,
+        voucherCode,
         notes,
       } = req.body;
 
@@ -54,8 +57,63 @@ export class OrderController {
       const shippingFeeInCoins = 0.01;
       const shippingFeeInUSD = 10;
 
-      const totalInCoins = subtotalInCoins + shippingFeeInCoins;
-      const totalInUSD = subtotalInUSD + shippingFeeInUSD;
+      // Apply voucher if provided
+      let voucherDiscountInCoins = 0;
+      let voucherDiscountInUSD = 0;
+      let shippingDiscountInCoins = 0;
+      let shippingDiscountInUSD = 0;
+      let appliedVoucher = null;
+
+      if (voucherCode) {
+        try {
+          // Get product IDs and categories from cart
+          const productIds = cartItems.map((item) => item.productId);
+          // Note: Categories would need to be fetched from product service
+          // For now, we'll skip category check
+
+          const totalAmount = subtotalInUSD + shippingFeeInUSD;
+          const validation = await VoucherService.validateVoucher(
+            voucherCode,
+            userId,
+            totalAmount,
+            productIds
+          );
+
+          if (validation.valid && validation.voucher) {
+            appliedVoucher = validation.voucher;
+            const { discountAmount, shippingDiscount } = VoucherService.calculateDiscount(
+              validation.voucher,
+              subtotalInUSD,
+              shippingFeeInUSD
+            );
+
+            // Calculate discount in coins (proportional)
+            const discountRatio = discountAmount / subtotalInUSD;
+            voucherDiscountInUSD = discountAmount;
+            voucherDiscountInCoins = subtotalInCoins * discountRatio;
+
+            // Shipping discount
+            shippingDiscountInUSD = shippingDiscount;
+            shippingDiscountInCoins = shippingDiscount > 0 ? shippingFeeInCoins : 0;
+          } else {
+            await transaction.rollback();
+            return res.status(400).json({
+              success: false,
+              error: validation.error || 'Invalid voucher',
+            });
+          }
+        } catch (voucherError: any) {
+          logger.error('Voucher validation error:', voucherError);
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            error: 'Failed to validate voucher',
+          });
+        }
+      }
+
+      const totalInCoins = subtotalInCoins + shippingFeeInCoins - voucherDiscountInCoins - shippingDiscountInCoins;
+      const totalInUSD = subtotalInUSD + shippingFeeInUSD - voucherDiscountInUSD - shippingDiscountInUSD;
 
       // Create order
       const order = await Order.create(
@@ -76,7 +134,9 @@ export class OrderController {
           totalInCoins,
           totalInUSD,
           paymentMethod,
-          
+          voucherCode: appliedVoucher?.code || null,
+          voucherDiscount: voucherDiscountInUSD > 0 ? voucherDiscountInUSD : null,
+          voucherDiscountInCoins: voucherDiscountInCoins > 0 ? voucherDiscountInCoins : null,
           paymentStatus: PaymentStatus.PENDING,
           orderStatus: OrderStatus.PENDING,
           notes,
@@ -116,6 +176,21 @@ export class OrderController {
         where: { userId },
         transaction,
       });
+
+      // Record voucher usage if applied
+      if (appliedVoucher) {
+        try {
+          await VoucherService.recordUsage(
+            appliedVoucher.id,
+            userId,
+            order.id,
+            voucherDiscountInUSD + shippingDiscountInUSD
+          );
+        } catch (voucherUsageError: any) {
+          logger.error('Failed to record voucher usage:', voucherUsageError);
+          // Don't fail the order if voucher usage recording fails
+        }
+      }
 
       await transaction.commit();
 

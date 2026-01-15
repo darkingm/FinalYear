@@ -217,6 +217,8 @@ const ProductListPage = () => {
         quantity: 1,
         image: product.images?.[0] || product.image || 'https://via.placeholder.com/400',
         priceInCoins: product.priceInCoins,
+        sellerId: product.sellerId,
+        sellerName: product.sellerName,
       }) as any);
       
       if (addToCartAsync.rejected.match(result)) {

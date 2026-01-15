@@ -116,12 +116,6 @@ const Header = () => {
               {t('Makets') || 'Coins'}
             </Link>
             <Link 
-              to="/square" 
-              className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-            >
-              Square
-            </Link>
-            <Link 
                 to="/trading" 
                 className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
               >

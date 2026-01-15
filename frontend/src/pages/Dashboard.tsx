@@ -54,33 +54,63 @@ const DashboardPage = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // ✅ SỬA: Tính stats từ orders thay vì gọi endpoint không tồn tại
-      const ordersRes = await axios.get('/api/v1/orders/recent', { params: { limit: 100 } });
-      const orders = ordersRes.data.data || [];
+      setLoading(true);
       
-      // ✅ Tính toán stats từ orders
-      const calculatedStats: DashboardStats = {
-        totalOrders: orders.length,
-        totalSpent: orders.reduce((sum: number, order: any) => {
-          return sum + (order.totalAmountUSD || order.total || 0);
-        }, 0),
-        activeOrders: orders.filter((order: any) => 
-          ['pending', 'processing'].includes(order.status?.toLowerCase())
-        ).length,
-        completedOrders: orders.filter((order: any) => 
-          order.status?.toLowerCase() === 'completed'
-        ).length,
+      // Try to get stats from user service
+      let statsData: DashboardStats = {
+        totalOrders: 0,
+        totalSpent: 0,
+        activeOrders: 0,
+        completedOrders: 0,
       };
-      
-      setStats(calculatedStats);
-      setRecentOrders(orders.slice(0, 5));
+
+      try {
+        const statsRes = await axios.get('/api/v1/users/dashboard/stats');
+        if (statsRes.data.success && statsRes.data.data) {
+          statsData = {
+            totalOrders: statsRes.data.data.totalOrders || 0,
+            totalSpent: statsRes.data.data.totalSpent || 0,
+            activeOrders: statsRes.data.data.activeOrders || 0,
+            completedOrders: statsRes.data.data.completedOrders || 0,
+          };
+        }
+      } catch (statsError: any) {
+        console.warn('Failed to fetch dashboard stats, calculating from orders:', statsError.message);
+        // Fallback: calculate from orders
+        try {
+          const ordersRes = await axios.get('/api/v1/orders/recent', { params: { limit: 100 } });
+          const orders = ordersRes.data.data || [];
+          
+          statsData = {
+            totalOrders: orders.length,
+            totalSpent: orders.reduce((sum: number, order: any) => {
+              return sum + (order.totalAmountUSD || order.total || 0);
+            }, 0),
+            activeOrders: orders.filter((order: any) => 
+              ['pending', 'processing'].includes(order.status?.toLowerCase())
+            ).length,
+            completedOrders: orders.filter((order: any) => 
+              order.status?.toLowerCase() === 'completed'
+            ).length,
+          };
+        } catch (ordersError: any) {
+          console.error('Failed to fetch orders:', ordersError);
+        }
+      }
+
+      setStats(statsData);
+
+      // Fetch recent orders
+      try {
+        const ordersRes = await axios.get('/api/v1/orders/recent', { params: { limit: 5 } });
+        setRecentOrders(ordersRes.data.data || []);
+      } catch (ordersError: any) {
+        console.error('Failed to fetch recent orders:', ordersError);
+        setRecentOrders([]);
+      }
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
-      console.error('Error response:', error.response?.data);
-      // ✅ Không hiển thị toast nếu chỉ là lỗi stats endpoint
-      if (error.response?.status !== 404) {
-        toast.error('Failed to load dashboard data');
-      }
+      toast.error('Failed to load dashboard data');
       // Set default values
       setStats({
         totalOrders: 0,

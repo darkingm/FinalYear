@@ -1,4 +1,6 @@
 import express, { Application } from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -6,12 +8,21 @@ import mongoose from 'mongoose';
 import cron from 'node-cron';
 import coinRoutes from './routes/coin.routes';
 import { fetchCoinData } from './services/coinmarket.service';
+import realtimePriceService from './services/realtimePrice.service';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 
 dotenv.config();
 
 const app: Application = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
 const PORT = process.env.COIN_MARKET_SERVICE_PORT || 3004;
 
 // Middleware
@@ -25,6 +36,10 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/coins', coinRoutes);
+
+// Initialize RealtimePriceService
+realtimePriceService.initialize(io);
+logger.info('RealtimePriceService initialized');
 
 // Cron job to update coin prices every 1 minute
 cron.schedule('*/1 * * * *', async () => {
@@ -72,8 +87,9 @@ const startServer = async () => {
       logger.error('Initial coin data fetch failed:', error.message);
     });
 
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       logger.info(`Coin Market Service running on port ${PORT}`);
+      logger.info(`WebSocket available at ws://localhost:${PORT}`);
       logger.info('Service is ready to accept requests');
     });
   } catch (error: any) {
@@ -85,8 +101,10 @@ const startServer = async () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received');
+  realtimePriceService.stop();
   await mongoose.connection.close();
   await redisClient.disconnect();
+  io.close();
   process.exit(0);
 });
 

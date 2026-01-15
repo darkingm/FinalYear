@@ -46,16 +46,53 @@ export class CartController {
   static async addToCart(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User ID required',
+        });
+      }
+
       const {
         productId,
         productTitle,
         productImage,
         sellerId,
         sellerName,
-        quantity,
+        quantity = 1,
         priceInCoins,
         priceInUSD,
       } = req.body;
+
+      // Validate required fields
+      if (!productId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Product ID is required',
+        });
+      }
+
+      if (!priceInCoins && priceInCoins !== 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Price in coins is required',
+        });
+      }
+
+      if (!priceInUSD && priceInUSD !== 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Price in USD is required',
+        });
+      }
+
+      if (!sellerId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Seller ID is required',
+        });
+      }
 
       // Check if item already in cart
       let cartItem = await CartItem.findOne({
@@ -66,19 +103,21 @@ export class CartController {
         // Update quantity
         cartItem.quantity += quantity;
         await cartItem.save();
+        logger.info('Cart item quantity updated:', { userId, productId, newQuantity: cartItem.quantity });
       } else {
         // Create new cart item
         cartItem = await CartItem.create({
           userId,
           productId,
-          productTitle,
-          productImage,
+          productTitle: productTitle || 'Product',
+          productImage: productImage || 'https://via.placeholder.com/400',
           sellerId,
-          sellerName,
+          sellerName: sellerName || 'Unknown Seller',
           quantity,
-          priceInCoins,
-          priceInUSD,
+          priceInCoins: parseFloat(priceInCoins.toString()),
+          priceInUSD: parseFloat(priceInUSD.toString()),
         });
+        logger.info('New cart item created:', { userId, productId });
       }
 
       res.status(201).json({

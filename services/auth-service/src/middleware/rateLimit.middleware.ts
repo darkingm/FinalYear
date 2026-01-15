@@ -200,3 +200,78 @@ export const passwordResetRateLimitMiddleware = async (
   }
 };
 
+// Profile update - 20 updates per hour
+const profileUpdateLimiter = createRedisRateLimiter(20, 3600, 300);
+
+// Avatar upload - 10 uploads per hour
+const avatarUploadLimiter = createRedisRateLimiter(10, 3600, 600);
+
+// Search users - 60 searches per 15 minutes
+const searchLimiter = createRedisRateLimiter(60, 900, 60);
+
+// Profile update rate limiter
+export const profileUpdateRateLimitMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const clientId = getClientId(req);
+    await profileUpdateLimiter.consume(clientId);
+    next();
+  } catch (rateLimiterRes: any) {
+    const secs = Math.round(rateLimiterRes.msBeforeNext / 1000) || 1;
+    logger.warn(`Profile update rate limit exceeded for IP: ${getClientId(req)}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many profile update requests',
+      message: `Too many profile updates. Please try again in ${secs} seconds.`,
+      retryAfter: secs,
+    });
+  }
+};
+
+// Avatar upload rate limiter
+export const avatarUploadRateLimitMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const clientId = getClientId(req);
+    await avatarUploadLimiter.consume(clientId);
+    next();
+  } catch (rateLimiterRes: any) {
+    const secs = Math.round(rateLimiterRes.msBeforeNext / 1000) || 1;
+    logger.warn(`Avatar upload rate limit exceeded for IP: ${getClientId(req)}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many avatar upload requests',
+      message: `Too many avatar uploads. Please try again in ${secs} seconds.`,
+      retryAfter: secs,
+    });
+  }
+};
+
+// Search rate limiter
+export const searchRateLimitMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const clientId = getClientId(req);
+    await searchLimiter.consume(clientId);
+    next();
+  } catch (rateLimiterRes: any) {
+    const secs = Math.round(rateLimiterRes.msBeforeNext / 1000) || 1;
+    logger.warn(`Search rate limit exceeded for IP: ${getClientId(req)}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many search requests',
+      message: `Too many searches. Please try again in ${secs} seconds.`,
+      retryAfter: secs,
+    });
+  }
+};
+

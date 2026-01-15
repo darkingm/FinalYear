@@ -53,6 +53,11 @@ const CheckoutPage = () => {
     cvv: '',
     cardName: '',
   });
+  const [voucherCode, setVoucherCode] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [voucherDiscount, setVoucherDiscount] = useState(0);
+  const [voucherShippingDiscount, setVoucherShippingDiscount] = useState(0);
+  const [validatingVoucher, setValidatingVoucher] = useState(false);
 
   // ✅ DI CHUYỂN fetchAvailableCoins VÀO ĐÂY
   const fetchAvailableCoins = async () => {
@@ -89,6 +94,23 @@ const CheckoutPage = () => {
     fetchAvailableCoins();
   }, []);
 
+  // Realtime price updates
+  const coinIdsForPrices = availableCoins.map(coin => coin.coinId || coin.symbol.toLowerCase());
+  const { prices: realtimePrices, connected: pricesConnected } = useRealtimePrices({
+    coinIds: coinIdsForPrices,
+    enabled: paymentMethod === 'COIN' && availableCoins.length > 0,
+    onPriceUpdate: (update) => {
+      // Update availableCoins with new price
+      setAvailableCoins(prev => prev.map(coin => {
+        const coinId = coin.coinId || coin.symbol.toLowerCase();
+        if (coinId === update.coinId || coin.symbol.toLowerCase() === update.coinId) {
+          return { ...coin, priceUSD: update.priceUSD };
+        }
+        return coin;
+      }));
+    },
+  });
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/auth');
@@ -102,10 +124,17 @@ const CheckoutPage = () => {
 
   // ✅ Sử dụng availableCoins thay vì COINS
   const selectedCoinData = availableCoins.find(c => c.symbol === selectedCoin) || availableCoins[0] || { symbol: 'USDT', priceUSD: 1 };
-  const totalInCoins = (totalPrice / (selectedCoinData.priceUSD || 1)).toFixed(6);
+  
+  // Use realtime price if available, otherwise use cached price
+  const currentCoinPrice = realtimePrices[selectedCoinData.coinId || selectedCoinData.symbol.toLowerCase()]?.priceUSD || selectedCoinData.priceUSD || 1;
+  
   const shippingFee = 0; // Free shipping for now
   const tax = totalPrice * 0.1; // 10% tax
-  const finalTotal = totalPrice + shippingFee + tax;
+  const subtotal = totalPrice;
+  const finalSubtotal = subtotal - voucherDiscount;
+  const finalShippingFee = shippingFee - voucherShippingDiscount;
+  const finalTotal = finalSubtotal + finalShippingFee + tax;
+  const totalInCoins = (finalTotal / currentCoinPrice).toFixed(6);
 
   const validateAddress = () => {
     if (!shippingAddress.fullName || !shippingAddress.phone || !shippingAddress.email || 
@@ -134,6 +163,47 @@ const CheckoutPage = () => {
       return false;
     }
     return true;
+  };
+
+  const handleApplyVoucher = async () => {
+    if (!voucherCode.trim()) {
+      toast.error('Please enter a voucher code');
+      return;
+    }
+
+    setValidatingVoucher(true);
+    try {
+      const productIds = items.map(item => item.productId || item.id);
+      
+      const response = await axios.post('/api/v1/vouchers/apply', {
+        code: voucherCode.toUpperCase(),
+        subtotal: totalPrice,
+        shippingFee: shippingFee,
+        productIds,
+      });
+
+      if (response.data.success) {
+        setAppliedVoucher(response.data.data.voucher);
+        setVoucherDiscount(response.data.data.discountAmount || 0);
+        setVoucherShippingDiscount(response.data.data.shippingDiscount || 0);
+        toast.success('Voucher applied successfully!');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Invalid voucher code');
+      setAppliedVoucher(null);
+      setVoucherDiscount(0);
+      setVoucherShippingDiscount(0);
+    } finally {
+      setValidatingVoucher(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setVoucherCode('');
+    setAppliedVoucher(null);
+    setVoucherDiscount(0);
+    setVoucherShippingDiscount(0);
+    toast.success('Voucher removed');
   };
 
   const handlePlaceOrder = async () => {
@@ -165,6 +235,7 @@ const CheckoutPage = () => {
         paymentMethod: paymentMethod,
         coinId: paymentMethod === 'COIN' ? coinId : null,
         coinSymbol: paymentMethod === 'COIN' ? coinSymbol : null,
+        voucherCode: appliedVoucher?.code || null,
         totalAmountUSD: finalTotal,
         totalAmountCoin: paymentMethod === 'COIN' ? parseFloat(totalInCoins) : undefined,
         subtotal: totalPrice,
@@ -680,16 +751,38 @@ const CheckoutPage = () => {
                     <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
-                        <span className="font-semibold">${totalPrice.toFixed(2)}</span>
+                        <span className="font-semibold">${subtotal.toFixed(2)}</span>
                       </div>
+                      {voucherDiscount > 0 && (
+                        <div className="flex justify-between items-center mb-2 text-green-600 dark:text-green-400">
+                          <span>Voucher Discount:</span>
+                          <span className="font-semibold">-${voucherDiscount.toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-600 dark:text-gray-400">Shipping:</span>
-                        <span className="font-semibold">${shippingFee.toFixed(2)}</span>
+                        <span className="font-semibold">
+                          {voucherShippingDiscount > 0 ? (
+                            <span>
+                              <span className="line-through text-gray-400">${shippingFee.toFixed(2)}</span>
+                              <span className="ml-2 text-green-600">Free</span>
+                            </span>
+                          ) : (
+                            `$${shippingFee.toFixed(2)}`
+                          )}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-600 dark:text-gray-400">Tax:</span>
                         <span className="font-semibold">${tax.toFixed(2)}</span>
                       </div>
+                      {appliedVoucher && (
+                        <div className="mb-2 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm">
+                          <span className="text-green-700 dark:text-green-400">
+                            Voucher: {appliedVoucher.code} applied
+                          </span>
+                        </div>
+                      )}
                       <hr className="my-3 border-gray-300 dark:border-gray-600" />
                       <div className="flex justify-between items-center">
                         <span className="text-lg font-bold text-gray-900 dark:text-white">Total:</span>

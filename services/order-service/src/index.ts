@@ -5,6 +5,9 @@ import dotenv from 'dotenv';
 import { sequelize } from './database';
 import cartRoutes from './routes/cart.routes';
 import orderRoutes from './routes/order.routes';
+import voucherRoutes from './routes/voucher.routes';
+import paymentRoutes from './routes/payment.routes';
+import p2pRoutes from './routes/p2p.routes';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
@@ -12,6 +15,10 @@ import { connectRabbitMQ } from './utils/rabbitmq';
 // ✅ Import models trước
 import './models/Order.model';
 import './models/OrderItem.model';
+import './models/Voucher.model';
+import './models/VoucherUsage.model';
+import './models/Payment.model';
+import './models/P2PTrade.model';
 
 // ✅ Import associations SAU KHI models đã được init
 import './models/associations';
@@ -34,6 +41,9 @@ app.get('/health', (req, res) => {
 
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/vouchers', voucherRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/p2p', p2pRoutes);
 
 // Start server
 const startServer = async () => {

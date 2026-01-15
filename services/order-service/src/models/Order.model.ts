@@ -47,6 +47,11 @@ interface OrderAttributes {
   paymentTransactionId?: string;
   paidAt?: Date;
   
+  // Voucher
+  voucherCode?: string;
+  voucherDiscount?: number; // Discount amount in USD
+  voucherDiscountInCoins?: number; // Discount amount in coins
+  
   // Status
   orderStatus: OrderStatus;
   notes?: string;
@@ -95,6 +100,10 @@ class Order extends Model<OrderAttributes, OrderCreationAttributes> implements O
   declare paymentStatus: PaymentStatus;
   declare paymentTransactionId?: string;
   declare paidAt?: Date;
+  
+  declare voucherCode?: string;
+  declare voucherDiscount?: number;
+  declare voucherDiscountInCoins?: number;
   
   declare orderStatus: OrderStatus;
   declare notes?: string;
@@ -217,6 +226,19 @@ Order.init(
     paidAt: {
       type: DataTypes.DATE,
       field: 'paid_at',
+    },
+    
+    voucherCode: {
+      type: DataTypes.STRING,
+      field: 'voucher_code',
+    },
+    voucherDiscount: {
+      type: DataTypes.DECIMAL(18, 2),
+      field: 'voucher_discount',
+    },
+    voucherDiscountInCoins: {
+      type: DataTypes.DECIMAL(18, 8),
+      field: 'voucher_discount_in_coins',
     },
     
     orderStatus: {

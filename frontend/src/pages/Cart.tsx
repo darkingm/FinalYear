@@ -1,10 +1,11 @@
 // frontend/src/pages/Cart.tsx - CODE HOÀN CHỈNH
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
 import { fetchCart, removeFromCartAsync, updateCartItemAsync, clearCartAsync } from '../store/thunks/cartThunks';
+import { useRealtimePrices } from '../hooks/useRealtimePrices';
 import { FiTrash2, FiPlus, FiMinus, FiShoppingBag } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 
@@ -13,6 +14,7 @@ const CartPage = () => {
   const dispatch = useDispatch();
   const { items, totalItems, totalPrice, loading, error } = useSelector((state: RootState) => state.cart);
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const [selectedCoin, setSelectedCoin] = useState('USDT');
 
   // Fetch cart when component mounts or user changes
   useEffect(() => {
@@ -20,6 +22,13 @@ const CartPage = () => {
       dispatch(fetchCart() as any);
     }
   }, [isAuthenticated, user?.id, dispatch]);
+
+  // Realtime prices for popular coins
+  const popularCoinIds = ['bitcoin', 'ethereum', 'tether', 'binancecoin', 'cardano'];
+  const { prices: realtimePrices, connected: pricesConnected, getPrice } = useRealtimePrices({
+    coinIds: popularCoinIds,
+    enabled: isAuthenticated && items.length > 0,
+  });
 
   const handleRemove = async (id: string) => {
     try {
@@ -165,6 +174,33 @@ const CartPage = () => {
                     <span className="text-gray-900 dark:text-white">Total</span>
                     <span className="text-primary-600">${totalPrice.toFixed(2)}</span>
                   </div>
+                  
+                  {/* Realtime Coin Prices */}
+                  {pricesConnected && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Pay with:</span>
+                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                          <span className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></span>
+                          Live
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {['bitcoin', 'ethereum', 'tether'].map((coinId) => {
+                          const price = getPrice(coinId);
+                          if (!price) return null;
+                          const coinSymbol = coinId === 'bitcoin' ? 'BTC' : coinId === 'ethereum' ? 'ETH' : 'USDT';
+                          const amount = (totalPrice / price).toFixed(6);
+                          return (
+                            <div key={coinId} className="flex justify-between text-sm">
+                              <span className="text-gray-600 dark:text-gray-400">{coinSymbol}:</span>
+                              <span className="font-semibold text-primary-600">{amount}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleCheckout}

@@ -96,11 +96,11 @@ app.use('/api/v1/auth', (req, res, next) => {
   },
 }));
 
-// User Service - Authentication required
+// User Service - Now merged into Auth Service - Authentication required
 app.use('/api/v1/users', authMiddleware, createProxyMiddleware({
-  target: serviceRegistry.user,
+  target: serviceRegistry.auth, // Route to auth-service (merged)
   changeOrigin: true,
-  pathRewrite: { '^/api/v1/users': '/api/users' },
+  pathRewrite: { '^/api/v1/users': '/api/v1/users' }, // Keep same path
   onProxyReq: (proxyReq, req: any) => {
     if (req.user) {
       proxyReq.setHeader('X-User-Id', req.user.id);
@@ -111,7 +111,7 @@ app.use('/api/v1/users', authMiddleware, createProxyMiddleware({
     }
   },
   onError: (err, req, res) => {
-    logger.error('User Service Proxy Error:', err);
+    logger.error('User Service Proxy Error (via Auth Service):', err);
     res.status(503).json({ error: 'User service unavailable' });
   },
 }));
@@ -133,13 +133,13 @@ app.use('/api/v1/products', createProxyMiddleware({
   },
 }));
 
-// Coin Market Service - Public
+// Coin Market Service - Now merged into Product Service - Public
 app.use('/api/v1/coins', createProxyMiddleware({
-  target: serviceRegistry.coinMarket,
+  target: serviceRegistry.product, // Route to product-service (merged)
   changeOrigin: true,
   pathRewrite: { '^/api/v1/coins': '/api/coins' },
   onError: (err, req, res) => {
-    logger.error('Coin Market Service Proxy Error:', err);
+    logger.error('Coin Market Service Proxy Error (via Product Service):', err);
     res.status(503).json({ error: 'Coin market service unavailable' });
   },
 }));
@@ -195,9 +195,9 @@ app.use('/api/v1/orders', authMiddleware, createProxyMiddleware({
   },
 }));
 
-// Payment Service - Authentication required
+// Payment Service - Now merged into Order Service - Authentication required
 app.use('/api/v1/payments', authMiddleware, createProxyMiddleware({
-  target: serviceRegistry.payment,
+  target: serviceRegistry.order, // Route to order-service (merged)
   changeOrigin: true,
   pathRewrite: { '^/api/v1/payments': '/api/payments' },
   onProxyReq: (proxyReq, req: any) => {
@@ -207,8 +207,25 @@ app.use('/api/v1/payments', authMiddleware, createProxyMiddleware({
     }
   },
   onError: (err, req, res) => {
-    logger.error('Payment Service Proxy Error:', err);
+    logger.error('Payment Service Proxy Error (via Order Service):', err);
     res.status(503).json({ error: 'Payment service unavailable' });
+  },
+}));
+
+// P2P Trading - Now merged into Order Service - Authentication required
+app.use('/api/v1/p2p', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.order, // Route to order-service (merged)
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/p2p': '/api/p2p' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('P2P Service Proxy Error (via Order Service):', err);
+    res.status(503).json({ error: 'P2P service unavailable' });
   },
 }));
 
@@ -246,19 +263,37 @@ app.use('/api/v1/chat', authMiddleware, createProxyMiddleware({
   },
 }));
 
-// Social Service - Authentication required
-app.use('/api/v1/social', authMiddleware, createProxyMiddleware({
-  target: serviceRegistry.social,
+// Social Service - Now merged into Chat Service - Authentication required
+app.use('/api/v1/social/posts', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.chat, // Route to chat-service (merged)
   changeOrigin: true,
-  pathRewrite: { '^/api/v1/social': '/api/social' },
+  pathRewrite: { '^/api/v1/social/posts': '/api/posts' },
   onProxyReq: (proxyReq, req: any) => {
     if (req.user) {
       proxyReq.setHeader('X-User-Id', req.user.id);
       proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Username', req.user.username || '');
     }
   },
   onError: (err, req, res) => {
-    logger.error('Social Service Proxy Error:', err);
+    logger.error('Social Service Proxy Error (via Chat Service):', err);
+    res.status(503).json({ error: 'Social service unavailable' });
+  },
+}));
+
+app.use('/api/v1/social/comments', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.chat, // Route to chat-service (merged)
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/social/comments': '/api/comments' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Username', req.user.username || '');
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Social Service Proxy Error (via Chat Service):', err);
     res.status(503).json({ error: 'Social service unavailable' });
   },
 }));

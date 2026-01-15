@@ -20,7 +20,7 @@ import {
   CameraIcon,
   CheckCircleIcon,
   TruckIcon,
-  PackageIcon,
+  CubeIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
 
@@ -103,18 +103,21 @@ export default function Profile() {
       setLoadingOrders(true);
       const response = await axios.get('/api/v1/orders');
       if (response.data.success) {
-        const ordersData = response.data.data.orders || [];
-        // Filter to show only active orders (not completed or cancelled)
-        const activeOrders = ordersData.filter((order: any) => 
-          !['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(order.orderStatus)
-        );
-        setOrders(activeOrders);
+        const ordersData = response.data.data.orders || response.data.data || [];
+        // Show all orders, sort by date (newest first)
+        const sortedOrders = ordersData.sort((a: any, b: any) => {
+          const dateA = new Date(a.createdAt || a.date || 0).getTime();
+          const dateB = new Date(b.createdAt || b.date || 0).getTime();
+          return dateB - dateA;
+        });
+        setOrders(sortedOrders);
       }
     } catch (error: any) {
       console.error('Error fetching orders:', error);
       if (error.response?.status !== 404) {
         toast.error('Failed to load orders');
       }
+      setOrders([]); // Set empty array on error
     } finally {
       setLoadingOrders(false);
     }
@@ -571,7 +574,7 @@ export default function Profile() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <PackageIcon className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-2" />
+                  <CubeIcon className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-2" />
                   <p className="text-gray-600 dark:text-gray-400">
                     Không có đơn hàng đang xử lý
                   </p>
@@ -738,13 +741,13 @@ function OrderTrackingCard({ order }: { order: any }) {
         return <ClockIcon className="w-5 h-5" />;
       case 'CONFIRMED':
       case 'PROCESSING':
-        return <PackageIcon className="w-5 h-5" />;
+        return <CubeIcon className="w-5 h-5" />;
       case 'SHIPPING':
         return <TruckIcon className="w-5 h-5" />;
       case 'DELIVERED':
         return <CheckCircleIcon className="w-5 h-5" />;
       default:
-        return <PackageIcon className="w-5 h-5" />;
+        return <CubeIcon className="w-5 h-5" />;
     }
   };
 

@@ -2,6 +2,7 @@ import axios from 'axios';
 import Coin from '../models/Coin.model';
 import PriceHistory from '../models/PriceHistory.model';
 import { redisClient } from '../utils/redis';
+import realtimePriceService from './realtimePrice.service';
 import logger from '../utils/logger';
 
 const COINGECKO_API = 'https://api.coingecko.com/api/v3';
@@ -105,6 +106,17 @@ export const fetchCoinData = async (): Promise<void> => {
           });
         } catch (historyError: any) {
           logger.warn(`Failed to save price history for ${coinData.id}:`, historyError.message);
+        }
+
+        // Update realtime price service
+        try {
+          await realtimePriceService.updateCoinPrice(
+            coinData.id,
+            coinData.current_price || 0,
+            coinData.price_change_percentage_24h || 0
+          );
+        } catch (realtimeError: any) {
+          logger.warn(`Failed to update realtime price for ${coinData.id}:`, realtimeError.message);
         }
 
         return coin;
