@@ -148,13 +148,23 @@ export class ChatController {
     try {
       const userId = req.headers['x-user-id'] as string;
       const username = req.headers['x-user-name'] as string || 'User';
-      const { participantId, participantName } = req.body;
+      const userRole = (req.headers['x-user-role'] as string) || 'USER';
+      const { participantId, participantName, participantRole, productId, productTitle } = req.body;
 
       // Check if conversation already exists
-      const existing = await Conversation.findOne({
+      const query: any = {
         participants: { $all: [userId, participantId] },
-        type: 'DIRECT',
-      });
+      };
+      
+      // If product inquiry, also check productId
+      if (productId) {
+        query.type = 'PRODUCT_INQUIRY';
+        query.productId = productId;
+      } else {
+        query.type = 'DIRECT';
+      }
+
+      const existing = await Conversation.findOne(query);
 
       if (existing) {
         return res.json({
@@ -163,15 +173,20 @@ export class ChatController {
         });
       }
 
+      // Determine participant roles
+      const otherRole = participantRole || 'USER';
+
       // Create new conversation
       const conversation = await Conversation.create({
         participants: [userId, participantId],
         participantDetails: [
-          { userId, username, role: 'USER' },
-          { userId: participantId, username: participantName, role: 'USER' },
+          { userId, username, role: userRole as 'USER' | 'SELLER' | 'SUPPORT' | 'ADMIN' },
+          { userId: participantId, username: participantName, role: otherRole as 'USER' | 'SELLER' | 'SUPPORT' | 'ADMIN' },
         ],
-        type: 'DIRECT',
+        type: productId ? 'PRODUCT_INQUIRY' : 'DIRECT',
         status: 'ACTIVE',
+        productId: productId || undefined,
+        productTitle: productTitle || undefined,
       });
 
       res.status(201).json({
@@ -184,6 +199,119 @@ export class ChatController {
         success: false,
         error: 'Failed to create conversation',
         details: error.message,
+      });
+    }
+  }
+
+  // Create conversation with seller about product
+  static async createProductInquiry(req: Request, res: Response) {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      const username = req.headers['x-user-name'] as string || 'User';
+      const { productId, sellerId, sellerName, productTitle } = req.body;
+
+      if (!productId || !sellerId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Product ID and Seller ID are required',
+        });
+      }
+
+      // Check if conversation already exists for this product
+      const existing = await Conversation.findOne({
+        participants: { $all: [userId, sellerId] },
+        type: 'PRODUCT_INQUIRY',
+        productId,
+        status: 'ACTIVE',
+      });
+
+      if (existing) {
+        return res.json({
+          success: true,
+          data: existing,
+        });
+      }
+
+      // Create new product inquiry conversation
+      const conversation = await Conversation.create({
+        participants: [userId, sellerId],
+        participantDetails: [
+          { userId, username, role: 'USER' },
+          { userId: sellerId, username: sellerName || 'Seller', role: 'SELLER' },
+        ],
+        type: 'PRODUCT_INQUIRY',
+        status: 'ACTIVE',
+        productId,
+        productTitle: productTitle || 'Product Inquiry',
+      });
+
+      res.status(201).json({
+        success: true,
+        data: conversation,
+      });
+    } catch (error: any) {
+      logger.error('Create product inquiry error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create product inquiry',
+        details: error.message,
+      });
+    }
+  }
+
+  // Get conversations by seller (for seller dashboard)
+  static async getSellerConversations(req: Request, res: Response) {
+    try {
+      const sellerId = req.headers['x-user-id'] as string;
+      const userRole = (req.headers['x-user-role'] as string) || 'USER';
+      
+      // Only sellers can access this
+      if (userRole !== 'SELLER' && userRole !== 'ADMIN') {
+        return res.status(403).json({
+          success: false,
+          error: 'Only sellers can access this endpoint',
+        });
+      }
+
+      const { page = 1, limit = 20, status, type } = req.query;
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const skip = (pageNum - 1) * limitNum;
+
+      const filter: any = {
+        participants: sellerId,
+        'participantDetails.role': 'SELLER',
+      };
+
+      if (status) filter.status = status;
+      if (type) filter.type = type;
+
+      const [conversations, total] = await Promise.all([
+        Conversation.find(filter)
+          .sort({ lastMessageAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .lean(),
+        Conversation.countDocuments(filter),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          conversations,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum),
+          },
+        },
+      });
+    } catch (error: any) {
+      logger.error('Get seller conversations error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch seller conversations',
       });
     }
   }

@@ -33,5 +33,19 @@ router.post('/:id/close', ChatController.closeConversation);
 // Get unread count
 router.get('/unread/count', ChatController.getUnreadCount);
 
+// Create product inquiry (user to seller)
+router.post(
+  '/product-inquiry',
+  [
+    body('productId').notEmpty().withMessage('Product ID is required'),
+    body('sellerId').notEmpty().withMessage('Seller ID is required'),
+    validate,
+  ],
+  ChatController.createProductInquiry
+);
+
+// Get seller conversations (only for sellers)
+router.get('/seller/conversations', ChatController.getSellerConversations);
+
 export default router;
 

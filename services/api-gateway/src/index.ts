@@ -5,7 +5,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { authMiddleware } from './middleware/auth.middleware';
+import { authMiddleware, requireRole, requireSellerOrAdmin } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { 
   rateLimitMiddleware, 
@@ -116,7 +116,61 @@ app.use('/api/v1/users', authMiddleware, createProxyMiddleware({
   },
 }));
 
+// Wallet Service - Authentication required
+app.use('/api/v1/wallets', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.auth, // Route to auth-service
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/wallets': '/api/v1/wallets' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Email', req.user.email || '');
+      proxyReq.setHeader('X-User-Username', req.user.username || '');
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Wallet Service Proxy Error:', err);
+    res.status(503).json({ error: 'Wallet service unavailable' });
+  },
+}));
+
+// Admin Wallet Service - Admin only
+app.use('/api/v1/admin/wallets', authMiddleware, requireRole('ADMIN'), createProxyMiddleware({
+  target: serviceRegistry.auth, // Route to auth-service
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/admin/wallets': '/api/v1/admin/wallets' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Admin Wallet Service Proxy Error:', err);
+    res.status(503).json({ error: 'Admin wallet service unavailable' });
+  },
+}));
+
 // Product Service - Public for listing, auth for management
+// Seller routes require seller role
+app.use('/api/v1/products/seller', authMiddleware, requireSellerOrAdmin, createProxyMiddleware({
+  target: serviceRegistry.product,
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/products': '/api/products' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Name', req.user.username || '');
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Product Service Proxy Error:', err);
+    res.status(503).json({ error: 'Product service unavailable' });
+  },
+}));
+
 app.use('/api/v1/products', createProxyMiddleware({
   target: serviceRegistry.product,
   changeOrigin: true,
@@ -125,6 +179,7 @@ app.use('/api/v1/products', createProxyMiddleware({
     if (req.user) {
       proxyReq.setHeader('X-User-Id', req.user.id);
       proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Name', req.user.username || '');
     }
   },
   onError: (err, req, res) => {
@@ -141,6 +196,23 @@ app.use('/api/v1/coins', createProxyMiddleware({
   onError: (err, req, res) => {
     logger.error('Coin Market Service Proxy Error (via Product Service):', err);
     res.status(503).json({ error: 'Coin market service unavailable' });
+  },
+}));
+
+// Shop Service - Now merged into Product Service - Public for viewing, auth for management
+app.use('/api/v1/shops', createProxyMiddleware({
+  target: serviceRegistry.product, // Route to product-service (merged)
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/shops': '/api/shops' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Shop Service Proxy Error (via Product Service):', err);
+    res.status(503).json({ error: 'Shop service unavailable' });
   },
 }));
 
@@ -247,14 +319,52 @@ app.use('/api/v1/blockchain', authMiddleware, createProxyMiddleware({
 }));
 
 // Chat Service - Authentication required
-app.use('/api/v1/chat', authMiddleware, createProxyMiddleware({
+// Seller-specific routes require seller role
+app.use('/api/v1/chats/seller', authMiddleware, requireSellerOrAdmin, createProxyMiddleware({
   target: serviceRegistry.chat,
   changeOrigin: true,
-  pathRewrite: { '^/api/v1/chat': '/api/chat' },
+  pathRewrite: { '^/api/v1/chats': '/api/chats' },
   onProxyReq: (proxyReq, req: any) => {
     if (req.user) {
       proxyReq.setHeader('X-User-Id', req.user.id);
       proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Name', req.user.username || '');
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Chat Service Proxy Error:', err);
+    res.status(503).json({ error: 'Chat service unavailable' });
+  },
+}));
+
+// General chat routes
+app.use('/api/v1/chats', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.chat,
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/chats': '/api/chats' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Name', req.user.username || '');
+    }
+  },
+  onError: (err, req, res) => {
+    logger.error('Chat Service Proxy Error:', err);
+    res.status(503).json({ error: 'Chat service unavailable' });
+  },
+}));
+
+// Legacy chat route (for backward compatibility)
+app.use('/api/v1/chat', authMiddleware, createProxyMiddleware({
+  target: serviceRegistry.chat,
+  changeOrigin: true,
+  pathRewrite: { '^/api/v1/chat': '/api/chats' },
+  onProxyReq: (proxyReq, req: any) => {
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.id);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+      proxyReq.setHeader('X-User-Name', req.user.username || '');
     }
   },
   onError: (err, req, res) => {

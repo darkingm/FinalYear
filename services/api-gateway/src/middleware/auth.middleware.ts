@@ -129,10 +129,16 @@ export const requireRole = (...roles: string[]) => {
       });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRole = req.user.role?.toUpperCase();
+    const allowedRoles = roles.map(r => r.toUpperCase());
+
+    if (!allowedRoles.includes(userRole)) {
+      logger.warn(`Access denied: User ${req.user.id} with role ${userRole} tried to access endpoint requiring ${roles.join(', ')}`);
       return res.status(403).json({
         success: false,
         error: 'Insufficient permissions',
+        required: roles,
+        current: userRole,
       });
     }
 
@@ -140,3 +146,8 @@ export const requireRole = (...roles: string[]) => {
   };
 };
 
+// Convenience middleware functions
+export const requireAdmin = requireRole('ADMIN');
+export const requireSeller = requireRole('SELLER');
+export const requireSellerOrAdmin = requireRole('SELLER', 'ADMIN');
+export const requireSupport = requireRole('SUPPORT', 'ADMIN');

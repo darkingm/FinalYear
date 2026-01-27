@@ -11,6 +11,8 @@ import p2pRoutes from './routes/p2p.routes';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
+// Error handling
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.middleware';
 
 // ✅ Import models trước
 import './models/Order.model';
@@ -44,6 +46,10 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/p2p', p2pRoutes);
+
+// Error handlers (MUST be last)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Start server
 const startServer = async () => {

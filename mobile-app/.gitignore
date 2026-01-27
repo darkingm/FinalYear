@@ -54,5 +54,6 @@ fastlane/test_output
 # Environment
 .env
 .env.local
+.cursor
 
 

@@ -2,13 +2,36 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../database';
 import bcrypt from 'bcryptjs';
 
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  SUPPORT = 'SUPPORT',
+  USER = 'USER',
+  SELLER = 'SELLER',
+}
+
+export enum UserStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  BANNED = 'banned',
+}
+
+export enum AuthType {
+  LOCAL = 'local',
+  SOCIAL = 'social',
+  HYBRID = 'hybrid',
+}
+
 interface UserAttributes {
   id: string;
   email: string;
   username: string;
   password?: string;
   fullName: string;
-  role: 'ADMIN' | 'SUPPORT' | 'USER';
+  phone?: string;
+  avatarUrl?: string;
+  authType: AuthType;
+  status: UserStatus;
+  role: UserRole;
   isEmailVerified: boolean;
   lastLoginAt?: Date;
   createdAt?: Date;
@@ -33,7 +56,11 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   declare username: string;
   declare password?: string;
   declare fullName: string;
-  declare role: 'ADMIN' | 'SUPPORT' | 'USER';
+  declare phone?: string;
+  declare avatarUrl?: string;
+  declare authType: AuthType;
+  declare status: UserStatus;
+  declare role: UserRole;
   declare isEmailVerified: boolean;
   declare lastLoginAt?: Date;
   declare readonly createdAt: Date;
@@ -70,23 +97,45 @@ User.init(
     fullName: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'full_name',
+    },
+    phone: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    avatarUrl: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'avatar_url',
+    },
+    authType: {
+      type: DataTypes.ENUM(...Object.values(AuthType)),
+      defaultValue: AuthType.LOCAL,
+      field: 'auth_type',
+    },
+    status: {
+      type: DataTypes.ENUM(...Object.values(UserStatus)),
+      defaultValue: UserStatus.ACTIVE,
     },
     role: {
-      type: DataTypes.ENUM('ADMIN', 'SUPPORT', 'USER'),
-      defaultValue: 'USER',
+      type: DataTypes.ENUM(...Object.values(UserRole)),
+      defaultValue: UserRole.USER,
     },
     isEmailVerified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
+      field: 'email_verified',
     },
     lastLoginAt: {
       type: DataTypes.DATE,
       allowNull: true,
+      field: 'last_login_at',
     },
   },
   {
     sequelize,
-    tableName: 'Users',
+    tableName: 'users',
+    underscored: true,
     timestamps: true,
     hooks: {
       beforeCreate: async (user: User) => {

@@ -14,21 +14,13 @@ start "API Gateway" cmd /k "cd services\api-gateway && npm run dev"
 timeout /t 2
 start "Auth Service" cmd /k "cd services\auth-service && npm run dev"
 timeout /t 2
-start "User Service" cmd /k "cd services\user-service && npm run dev"
-timeout /t 2
 start "Product Service" cmd /k "cd services\product-service && npm run dev"
 timeout /t 2
-start "Coin Market Service" cmd /k "cd services\coin-market-service && npm run dev"
-timeout /t 2
 start "Order Service" cmd /k "cd services\order-service && npm run dev"
-timeout /t 2
-start "Payment Service" cmd /k "cd services\payment-service && npm run dev"
 timeout /t 2
 start "Blockchain Service" cmd /k "cd services\blockchain-service && npm run dev"
 timeout /t 2
 start "Chat Service" cmd /k "cd services\chat-service && npm run dev"
-timeout /t 2
-start "Social Service" cmd /k "cd services\social-service && npm run dev"
 timeout /t 2
 start "AI Analysis Service" cmd /k "cd services\ai-analysis-service && npm run dev"
 
@@ -45,6 +37,15 @@ echo.
 echo Access URLs:
 echo - Frontend:    http://localhost:5173
 echo - API Gateway: http://localhost:3000
+echo.
+echo Service Ports:
+echo - API Gateway:        3000
+echo - Auth Service:        3001 (includes User Service)
+echo - Product Service:     3003 (includes Coin Market Service)
+echo - Order Service:       3005 (includes Payment Service)
+echo - Blockchain Service:  3007
+echo - Chat Service:        3008 (includes Social Service)
+echo - AI Analysis Service: 3010
 echo.
 echo Press any key to open browser...
 pause > nul

@@ -52,9 +52,17 @@ const CoinBalance = () => {
         return;
       }
       
-      const response = await axios.get(`/api/v1/users/${userId}/balances`);
+      // Use new wallet API
+      const response = await axios.get('/api/v1/wallets');
       if (response.data.success) {
-        const balancesData = response.data.data.balances || [];
+        const walletsData = response.data.data.wallets || [];
+        
+        // Transform wallet data to balance format
+        const balancesData = walletsData.map((wallet: any) => ({
+          coinSymbol: wallet.coinSymbol,
+          balance: parseFloat(wallet.availableBalance || '0'),
+          lockedBalance: parseFloat(wallet.lockedBalance || '0'),
+        }));
         
         // Fetch current prices for each coin
         const balancesWithPrices = await Promise.all(

@@ -1,28 +1,21 @@
 import { Request, Response } from 'express';
-import { Op } from 'sequelize';
-import UserProfile from '../models/UserProfile.model';
-import { redisClient } from '../utils/redis';
-import { publishEvent } from '../utils/rabbitmq';
 import logger from '../utils/logger';
-import axios from 'axios';
-import jwt from 'jsonwebtoken';
-// Cache service
-import { 
-  getUserProfileById, 
-  invalidateUserProfileCache, 
-  updateCachedUserProfile,
-  getCachedDashboardStats,
-  getCachedUserBalances 
-} from '../services/userCache.service';
+import { UserService } from '../services/user.service';
+import { UserValidator } from '../validators/user.validator';
 
-const CACHE_TTL = 300; // 5 minutes
 
 export class UserController {
-  // Create profile (auto-create if not exists)
+  /**
+   * Create user profile
+   * Validate input → Business logic (UserService) → Response
+   */
   static async createProfile(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
-      const { fullName, email, username } = req.body;
+      const userEmail = req.headers['x-user-email'] as string;
+      const userUsername = req.headers['x-user-username'] as string;
+      const userRole = req.headers['x-user-role'] as string;
+      const { fullName } = req.body;
 
       if (!userId) {
         return res.status(401).json({
@@ -31,49 +24,13 @@ export class UserController {
         });
       }
 
-      // Check if profile already exists using cache
-      const existing = await getUserProfileById(userId);
-      if (existing) {
-        return res.json({
-          success: true,
-          data: existing,
-          message: 'Profile already exists',
-        });
-      }
-
-      // Create new profile
-      const profile = await UserProfile.create({
+      // Call service
+      const profile = await UserService.autoCreateProfileIfNeeded(
         userId,
-        email: email || '',
-        username: username || '',
-        fullName: fullName || '',
-        role: 'USER',
-        isSeller: false,
-        sellerVerified: false,
-        bankVerified: false,
-        bankVerificationStatus: 'PENDING',
-        showCoinBalance: true,
-        showJoinDate: true,
-        showEmail: false,
-        showPhone: false,
-        totalSales: 0,
-        totalPurchases: 0,
-        rating: 0,
-        reviewCount: 0,
-        isActive: true,
-        isSuspended: false,
-      });
-
-      // Update cache
-      await updateCachedUserProfile(userId, profile);
-
-      // Publish event (non-blocking)
-      publishEvent('user.profile.created', {
-        userId,
-        username: profile.username,
-      }).catch((eventError: any) => {
-        logger.error('Failed to publish user.profile.created event:', eventError.message);
-      });
+        userEmail,
+        userUsername,
+        userRole
+      );
 
       res.status(201).json({
         success: true,
@@ -81,106 +38,43 @@ export class UserController {
         message: 'Profile created successfully',
       });
     } catch (error: any) {
-      logger.error('Create profile error:', error);
-      res.status(500).json({
+      logger.error('Create profile error:', error.message);
+
+      res.status(400).json({
         success: false,
-        error: 'Failed to create profile',
-        details: error.message,
+        error: error.message || 'Failed to create profile',
       });
     }
   }
 
-  // Get user profile
+  /**
+   * Get user profile
+   */
   static async getProfile(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
-      // ✅ Lấy email và username từ headers
       const userEmail = req.headers['x-user-email'] as string;
       const userUsername = req.headers['x-user-username'] as string;
-
-      // ✅ Debug logging
-      logger.info('Get profile request:', {
-        userId,
-        userEmail,
-        userUsername,
-        headers: {
-          'x-user-id': req.headers['x-user-id'],
-          'x-user-email': req.headers['x-user-email'],
-          'x-user-username': req.headers['x-user-username'],
-        },
-      });
+      const userRole = req.headers['x-user-role'] as string;
 
       if (!userId) {
         return res.status(401).json({
           success: false,
-          error: 'User ID required',
+          error: 'Unauthorized',
         });
       }
 
-      // Use cache-first strategy
-      let profile = await getUserProfileById(userId);
+      // Call service (cache-first)
+      let profile = await UserService.getUserProfile(userId);
 
-      // ✅ Auto-create profile if not found
+      // Auto-create if not found
       if (!profile) {
-        // ✅ Fallback: Nếu không có email từ headers, query từ auth service
-        let finalEmail = userEmail;
-        let finalUsername = userUsername;
-
-        if (!finalEmail || !finalEmail.includes('@')) {
-          // Try to get from User model (same service now)
-          try {
-            const User = (await import('../models/User.model')).default;
-            const user = await User.findByPk(userId);
-            if (user) {
-              finalEmail = user.email;
-              finalUsername = user.username || finalUsername;
-              logger.info(`Fetched email from User model: ${finalEmail}`);
-            }
-          } catch (authError: any) {
-            logger.warn('Failed to fetch user from User model:', authError.message);
-          }
-        }
-
-        // ✅ Validate email exists
-        if (!finalEmail || !finalEmail.includes('@')) {
-          logger.error('Cannot create profile: email is missing or invalid', {
-            userId,
-            userEmail,
-            finalEmail,
-          });
-          return res.status(400).json({
-            success: false,
-            error: 'User email is required to create profile. Please ensure you are authenticated and API Gateway is properly configured.',
-          });
-        }
-
-        // ✅ Create profile with email from JWT token or User model
-        profile = await UserProfile.create({
+        profile = await UserService.autoCreateProfileIfNeeded(
           userId,
-          email: finalEmail, // ✅ Dùng email từ JWT token hoặc User model
-          username: finalUsername || `user_${userId.substring(0, 8)}`, // ✅ Dùng username từ JWT token
-          fullName: '', // User sẽ update sau
-          role: (req.headers['x-user-role'] as string) || 'USER',
-          isSeller: false,
-          sellerVerified: false,
-          bankVerified: false,
-          bankVerificationStatus: 'PENDING',
-          showCoinBalance: true,
-          showJoinDate: true,
-          showEmail: false,
-          showPhone: false,
-          totalSales: 0,
-          totalPurchases: 0,
-          rating: 0,
-          reviewCount: 0,
-          isActive: true,
-          isSuspended: false,
-        });
-
-        logger.info(`Auto-created profile for user ${userId} with email ${finalEmail}`);
-        
-        // Update cache for newly created profile
-        await updateCachedUserProfile(userId, profile);
+          userEmail,
+          userUsername,
+          userRole
+        );
       }
 
       res.json({
@@ -188,7 +82,8 @@ export class UserController {
         data: profile,
       });
     } catch (error: any) {
-      logger.error('Get profile error:', error);
+      logger.error('Get profile error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to fetch profile',
@@ -196,17 +91,14 @@ export class UserController {
     }
   }
 
-  // Get user by ID (public view)
+  /**
+   * Get user by ID (public view)
+   */
   static async getUserById(req: Request, res: Response) {
     try {
       const { id } = req.params;
 
-      const user = await UserProfile.findOne({
-        where: { 
-          userId: id,
-          // Only show active users, but don't require isActive if field doesn't exist
-        },
-      });
+      const user = await UserService.getPublicUserProfile(id);
 
       if (!user) {
         return res.status(404).json({
@@ -215,39 +107,13 @@ export class UserController {
         });
       }
 
-      // Filter based on privacy settings
-      const publicData: any = {
-        id: user.userId,
-        username: user.username,
-        fullName: user.fullName,
-        avatar: user.avatar,
-        bio: user.bio,
-        isSeller: user.isSeller,
-        sellerVerified: user.sellerVerified,
-        shopName: user.shopName,
-        shopDescription: user.shopDescription,
-        rating: user.rating,
-        reviewCount: user.reviewCount,
-      };
-
-      if (user.showJoinDate) {
-        publicData.createdAt = user.createdAt;
-      }
-
-      if (user.showEmail) {
-        publicData.email = user.email;
-      }
-
-      if (user.showPhone) {
-        publicData.phone = user.phone;
-      }
-
       res.json({
         success: true,
-        data: publicData,
+        data: user,
       });
     } catch (error: any) {
-      logger.error('Get user error:', error);
+      logger.error('Get user error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to fetch user',
@@ -255,7 +121,9 @@ export class UserController {
     }
   }
 
-  // Update profile
+  /**
+   * Update profile
+   */
   static async updateProfile(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
@@ -263,61 +131,40 @@ export class UserController {
       if (!userId) {
         return res.status(401).json({
           success: false,
-          error: 'User ID required',
+          error: 'Unauthorized',
         });
       }
 
-      // Use cache-first strategy
-      let profile = await getUserProfileById(userId);
-
-      if (!profile) {
-        return res.status(404).json({
+      // Validate input
+      const validation = UserValidator.validateProfileUpdate(req.body);
+      if (!validation.valid) {
+        return res.status(400).json({
           success: false,
-          error: 'Profile not found',
+          error: 'Validation failed',
+          errors: validation.errors,
         });
       }
 
-      // Update allowed fields
-      const allowedFields = [
-        'fullName', 'bio', 'phone', 'dateOfBirth',
-        'country', 'city', 'address', 'avatar',
-        'showCoinBalance', 'showJoinDate', 'showEmail', 'showPhone',
-      ];
-
-      for (const field of allowedFields) {
-        if (req.body[field] !== undefined) {
-          (profile as any)[field] = req.body[field];
-        }
-      }
-
-      await profile.save();
-
-      // Update cache
-      await updateCachedUserProfile(userId, profile);
-
-      // Publish event (non-blocking)
-      publishEvent('user.profile.updated', {
-        userId,
-        username: profile.username,
-      }).catch((eventError: any) => {
-        logger.warn('Failed to publish event:', eventError.message);
-      });
+      // Call service
+      const profile = await UserService.updateUserProfile(userId, req.body);
 
       res.json({
         success: true,
         data: profile,
       });
     } catch (error: any) {
-      logger.error('Update profile error:', error);
+      logger.error('Update profile error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to update profile',
-        details: error.message,
       });
     }
   }
 
-  // Update privacy settings
+  /**
+   * Update privacy settings
+   */
   static async updatePrivacy(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
@@ -325,38 +172,30 @@ export class UserController {
       if (!userId) {
         return res.status(401).json({
           success: false,
-          error: 'User ID required',
+          error: 'Unauthorized',
         });
       }
 
-      const { showCoinBalance, showJoinDate, showEmail, showPhone } = req.body;
-
-      // Use cache-first strategy
-      let profile = await getUserProfileById(userId);
-
-      if (!profile) {
-        return res.status(404).json({
+      // Validate input
+      const validation = UserValidator.validatePrivacySettings(req.body);
+      if (!validation.valid) {
+        return res.status(400).json({
           success: false,
-          error: 'Profile not found',
+          error: 'Validation failed',
+          errors: validation.errors,
         });
       }
 
-      if (showCoinBalance !== undefined) profile.showCoinBalance = showCoinBalance;
-      if (showJoinDate !== undefined) profile.showJoinDate = showJoinDate;
-      if (showEmail !== undefined) profile.showEmail = showEmail;
-      if (showPhone !== undefined) profile.showPhone = showPhone;
-
-      await profile.save();
-
-      // Update cache
-      await updateCachedUserProfile(userId, profile);
+      // Call service
+      await UserService.updatePrivacySettings(userId, req.body);
 
       res.json({
         success: true,
         message: 'Privacy settings updated',
       });
     } catch (error: any) {
-      logger.error('Update privacy error:', error);
+      logger.error('Update privacy error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to update privacy settings',
@@ -364,7 +203,9 @@ export class UserController {
     }
   }
 
-  // Upload avatar
+  /**
+   * Upload avatar
+   */
   static async uploadAvatar(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
@@ -373,7 +214,7 @@ export class UserController {
       if (!userId) {
         return res.status(401).json({
           success: false,
-          error: 'User ID required',
+          error: 'Unauthorized',
         });
       }
 
@@ -384,47 +225,32 @@ export class UserController {
         });
       }
 
-      // In production, upload to S3/Cloudinary/etc
-      // For now, save file path or URL
+      // In production, upload to S3/Cloudinary
       const avatarUrl = `/uploads/avatars/${file.filename}`;
 
-      const profile = await UserProfile.findOne({ where: { userId } });
-      if (!profile) {
-        return res.status(404).json({
-          success: false,
-          error: 'Profile not found',
-        });
-      }
-
-      profile.avatar = avatarUrl;
-      await profile.save();
-
-      // Clear cache
-      try {
-        await redisClient.del(`user:profile:${userId}`);
-      } catch (redisError) {
-        // Continue without cache
-      }
+      await UserService.updateUserProfile(userId, { avatar: avatarUrl } as any);
 
       res.json({
         success: true,
         data: { avatar: avatarUrl },
       });
     } catch (error: any) {
-      logger.error('Upload avatar error:', error);
+      logger.error('Upload avatar error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to upload avatar',
-        details: error.message,
       });
     }
   }
 
-  // Get dashboard stats
+  /**
+   * Get dashboard stats
+   */
   static async getDashboardStats(req: Request, res: Response) {
     try {
       const userId = req.headers['x-user-id'] as string;
-      
+
       if (!userId) {
         return res.status(401).json({
           success: false,
@@ -432,33 +258,16 @@ export class UserController {
         });
       }
 
-      // Get user profile
-      const profile = await UserProfile.findOne({ where: { userId } });
-      
-      if (!profile) {
-        return res.status(404).json({
-          success: false,
-          error: 'Profile not found',
-        });
-      }
+      // Call service
+      const stats = await UserService.getDashboardStats(userId);
 
-      // TODO: Get orders from order-service via HTTP call or RabbitMQ
-      // For now, return basic stats from profile
       res.json({
         success: true,
-        data: {
-          totalOrders: 0, // Will be populated from order-service
-          activeOrders: 0,
-          completedOrders: 0,
-          totalSpent: 0,
-          totalEarned: profile.totalSales || 0,
-          totalPurchases: profile.totalPurchases || 0,
-          rating: profile.rating || 0,
-          reviewCount: profile.reviewCount || 0,
-        },
+        data: stats,
       });
     } catch (error: any) {
-      logger.error('Get dashboard stats error:', error);
+      logger.error('Get dashboard stats error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to fetch dashboard statistics',
@@ -466,68 +275,44 @@ export class UserController {
     }
   }
 
-  // Search users
+  /**
+   * Search users
+   */
   static async searchUsers(req: Request, res: Response) {
     try {
-      const { q, page = 1, limit = 20 } = req.query;
+      const { q, page = '1', limit = '20' } = req.query;
 
       const pageNum = parseInt(page as string);
       const limitNum = parseInt(limit as string);
-      const offset = (pageNum - 1) * limitNum;
 
-      if (!q || !q.toString().trim()) {
-        return res.json({
-          success: true,
-          data: { 
-            users: [], 
-            pagination: { 
-              total: 0, 
-              page: pageNum, 
-              limit: limitNum,
-              totalPages: 0,
-            } 
-          },
-        });
-      }
-
-      const searchQuery = q.toString().trim();
-
-      const { count, rows } = await UserProfile.findAndCountAll({
-        where: {
-          [Op.or]: [
-            { username: { [Op.iLike]: `%${searchQuery}%` } },
-            { fullName: { [Op.iLike]: `%${searchQuery}%` } },
-          ],
-          // Only show active users if field exists
-        },
-        limit: limitNum,
-        offset,
-        attributes: ['userId', 'username', 'fullName', 'avatar', 'isSeller', 'rating'],
-      });
+      // Call service
+      const result = await UserService.searchUsers(q as string, pageNum, limitNum);
 
       res.json({
         success: true,
         data: {
-          users: rows,
+          users: result.users,
           pagination: {
-            total: count,
+            total: result.total,
             page: pageNum,
             limit: limitNum,
-            totalPages: Math.ceil(count / limitNum),
+            totalPages: result.totalPages,
           },
         },
       });
     } catch (error: any) {
-      logger.error('Search users error:', error);
+      logger.error('Search users error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to search users',
-        details: error.message,
       });
     }
   }
 
-  // Get user balances
+  /**
+   * Get user balances
+   */
   static async getBalances(req: Request, res: Response) {
     try {
       const { userId } = req.params;
@@ -541,37 +326,26 @@ export class UserController {
         });
       }
 
-      // Get user profile
-      const profile = await UserProfile.findOne({ where: { userId } });
-      if (!profile) {
-        return res.status(404).json({
-          success: false,
-          error: 'User not found',
-        });
-      }
-
-      // Get coin balances from metadata or return empty array
-      // In a real implementation, you would have a separate Wallet or Balance model
-      const balances = (profile as any).coinBalances || [];
+      // Call service
+      const balances = await UserService.getUserBalances(userId);
 
       res.json({
         success: true,
-        data: {
-          balances,
-          userId,
-        },
+        data: { balances, userId },
       });
     } catch (error: any) {
-      logger.error('Get balances error:', error);
+      logger.error('Get balances error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to fetch balances',
-        details: error.message,
       });
     }
   }
 
-  // Add balance
+  /**
+   * Add balance
+   */
   static async addBalance(req: Request, res: Response) {
     try {
       const { userId } = req.params;
@@ -586,67 +360,44 @@ export class UserController {
         });
       }
 
-      if (!coinId || !amount || amount <= 0) {
+      // Validate input
+      const coinIdValidation = UserValidator.validateCoinId(coinId);
+      if (!coinIdValidation.valid) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid coinId or amount',
+          error: coinIdValidation.error,
         });
       }
 
-      // Get user profile
-      const profile = await UserProfile.findOne({ where: { userId } });
-      if (!profile) {
-        return res.status(404).json({
+      const amountValidation = UserValidator.validateBalance(amount);
+      if (!amountValidation.valid) {
+        return res.status(400).json({
           success: false,
-          error: 'User not found',
+          error: amountValidation.error,
         });
       }
 
-      // In a real implementation, you would update a Wallet or Balance model
-      // For now, we'll store in profile metadata
-      const coinBalances = (profile as any).coinBalances || [];
-      const existingBalance = coinBalances.find((b: any) => b.coinId === coinId);
-
-      if (existingBalance) {
-        existingBalance.balance = parseFloat(existingBalance.balance) + parseFloat(amount);
-      } else {
-        coinBalances.push({
-          coinId,
-          balance: parseFloat(amount),
-        });
-      }
-
-      // Update profile metadata
-      (profile as any).coinBalances = coinBalances;
-      await profile.save();
-
-      // Publish event
-      await publishEvent('wallet.balance.added', {
-        userId,
-        coinId,
-        amount,
-        source: source || 'MANUAL',
-      });
+      // Call service
+      const result = await UserService.addBalance(userId, coinId, amount, source);
 
       res.json({
         success: true,
-        data: {
-          coinId,
-          balance: existingBalance ? existingBalance.balance : parseFloat(amount),
-        },
+        data: result,
         message: 'Balance added successfully',
       });
     } catch (error: any) {
-      logger.error('Add balance error:', error);
+      logger.error('Add balance error:', error.message);
+
       res.status(500).json({
         success: false,
         error: 'Failed to add balance',
-        details: error.message,
       });
     }
   }
 
-  // Deduct balance
+  /**
+   * Deduct balance
+   */
   static async deductBalance(req: Request, res: Response) {
     try {
       const { userId } = req.params;
@@ -661,65 +412,51 @@ export class UserController {
         });
       }
 
-      if (!coinId || !amount || amount <= 0) {
+      // Validate input
+      const coinIdValidation = UserValidator.validateCoinId(coinId);
+      if (!coinIdValidation.valid) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid coinId or amount',
+          error: coinIdValidation.error,
         });
       }
 
-      // Get user profile
-      const profile = await UserProfile.findOne({ where: { userId } });
-      if (!profile) {
-        return res.status(404).json({
-          success: false,
-          error: 'User not found',
-        });
-      }
-
-      // Check balance
-      const coinBalances = (profile as any).coinBalances || [];
-      const existingBalance = coinBalances.find((b: any) => b.coinId === coinId);
-
-      if (!existingBalance || parseFloat(existingBalance.balance) < parseFloat(amount)) {
+      const amountValidation = UserValidator.validateBalance(amount);
+      if (!amountValidation.valid) {
         return res.status(400).json({
           success: false,
-          error: 'Insufficient balance',
+          error: amountValidation.error,
         });
       }
 
-      // Deduct balance
-      existingBalance.balance = parseFloat(existingBalance.balance) - parseFloat(amount);
-      (profile as any).coinBalances = coinBalances;
-      await profile.save();
-
-      // Publish event
-      await publishEvent('wallet.balance.deducted', {
-        userId,
-        coinId,
-        amount,
-        orderId,
-      });
+      // Call service
+      const result = await UserService.deductBalance(userId, coinId, amount, orderId);
 
       res.json({
         success: true,
-        data: {
-          coinId,
-          balance: existingBalance.balance,
-        },
+        data: result,
         message: 'Balance deducted successfully',
       });
     } catch (error: any) {
-      logger.error('Deduct balance error:', error);
+      logger.error('Deduct balance error:', error.message);
+
+      if (error.message.includes('Insufficient balance')) {
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
+      }
+
       res.status(500).json({
         success: false,
         error: 'Failed to deduct balance',
-        details: error.message,
       });
     }
   }
 
-  // Withdraw funds to external wallet
+  /**
+   * Withdraw funds to external wallet
+   */
   static async withdraw(req: Request, res: Response) {
     try {
       const { userId } = req.params;
@@ -734,83 +471,52 @@ export class UserController {
         });
       }
 
-      // Validate inputs
-      if (!coinId || !coinSymbol || !amount || amount <= 0 || !walletAddress || !network) {
+      // Validate input
+      const validation = UserValidator.validateWithdrawal({
+        coinId,
+        coinSymbol,
+        amount,
+        walletAddress,
+        network,
+      });
+
+      if (!validation.valid) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid withdrawal parameters',
+          error: 'Validation failed',
+          errors: validation.errors,
         });
       }
 
-      // Validate wallet address format (basic validation)
-      if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress) && !/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(walletAddress)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid wallet address format',
-        });
-      }
-
-      // Get user profile
-      const profile = await UserProfile.findOne({ where: { userId } });
-      if (!profile) {
-        return res.status(404).json({
-          success: false,
-          error: 'User not found',
-        });
-      }
-
-      // Check balance (including fee)
-      const coinBalances = (profile as any).coinBalances || [];
-      const existingBalance = coinBalances.find((b: any) => b.coinId === coinId);
-      const withdrawalFee = 0.001; // Can be made configurable
-
-      if (!existingBalance || parseFloat(existingBalance.balance) < parseFloat(amount) + withdrawalFee) {
-        return res.status(400).json({
-          success: false,
-          error: 'Insufficient balance (including withdrawal fee)',
-        });
-      }
-
-      // Deduct balance (amount + fee)
-      const totalDeduct = parseFloat(amount) + withdrawalFee;
-      existingBalance.balance = parseFloat(existingBalance.balance) - totalDeduct;
-      (profile as any).coinBalances = coinBalances;
-      await profile.save();
-
-      // Publish event for blockchain service to process withdrawal
-      await publishEvent('wallet.withdrawal.requested', {
+      // Call service
+      const result = await UserService.processWithdrawal(
         userId,
         coinId,
         coinSymbol,
-        amount: parseFloat(amount),
-        fee: withdrawalFee,
+        amount,
         walletAddress,
         network,
-        walletType: walletType || 'manual',
-      });
+        walletType
+      );
 
       res.json({
         success: true,
-        data: {
-          transactionId: `WTH-${Date.now()}-${userId}`,
-          coinId,
-          coinSymbol,
-          amount: parseFloat(amount),
-          fee: withdrawalFee,
-          totalDeducted: totalDeduct,
-          walletAddress,
-          network,
-          status: 'pending',
-          balance: existingBalance.balance,
-        },
+        data: result,
         message: 'Withdrawal request submitted successfully',
       });
     } catch (error: any) {
-      logger.error('Withdrawal error:', error);
+      logger.error('Withdrawal error:', error.message);
+
+      if (error.message.includes('Insufficient balance')) {
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
+      }
+
       res.status(500).json({
         success: false,
         error: 'Withdrawal failed',
-        details: error.message,
       });
     }
   }

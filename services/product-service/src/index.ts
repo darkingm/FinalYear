@@ -9,7 +9,9 @@ import cron from 'node-cron';
 import productRoutes from './routes/product.routes';
 import categoryRoutes from './routes/category.routes';
 import coinRoutes from './routes/coin.routes';
+import shopRoutes from './routes/shop.routes';
 import { fetchCoinData } from './services/coinmarket.service';
+import { updateCoinPricesFromExchanges } from './services/binance.service';
 import realtimePriceService from './services/realtimePrice.service';
 import logger from './utils/logger';
 import { redisClient } from './utils/redis';
@@ -45,6 +47,7 @@ app.get('/health', (req, res) => {
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/coins', coinRoutes);
+app.use('/api/shops', shopRoutes);
 
 // Initialize RealtimePriceService
 realtimePriceService.initialize(io);
@@ -80,10 +83,21 @@ const startServer = async () => {
       logger.error('Initial coin data fetch failed:', error.message);
     });
 
-    // Cron job to update coin prices every 1 minute
-    cron.schedule('*/1 * * * *', async () => {
-      logger.info('Fetching latest coin data...');
+    // Initial price update from Binance/Coinbase
+    updateCoinPricesFromExchanges().catch((error: any) => {
+      logger.error('Initial price update from exchanges failed:', error.message);
+    });
+
+    // Cron job to update coin prices from CoinGecko every 5 minutes (fallback)
+    cron.schedule('*/5 * * * *', async () => {
+      logger.info('Fetching latest coin data from CoinGecko...');
       await fetchCoinData();
+    });
+
+    // Cron job to update coin prices from Binance/Coinbase every 30 seconds (real-time)
+    cron.schedule('*/30 * * * * *', async () => {
+      logger.debug('Updating coin prices from Binance/Coinbase...');
+      await updateCoinPricesFromExchanges();
     });
 
     httpServer.listen(PORT, () => {

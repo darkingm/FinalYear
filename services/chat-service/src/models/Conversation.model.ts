@@ -6,9 +6,11 @@ export interface IConversation extends Document {
     userId: string;
     username: string;
     avatar?: string;
-    role: 'USER' | 'SUPPORT' | 'ADMIN';
+    role: 'USER' | 'SELLER' | 'SUPPORT' | 'ADMIN';
   }>;
-  type: 'SUPPORT' | 'DIRECT'; // Support ticket or direct message
+  type: 'SUPPORT' | 'DIRECT' | 'PRODUCT_INQUIRY'; // Support ticket, direct message, or product inquiry
+  productId?: string; // For product-related chats
+  productTitle?: string; // Product title for reference
   status: 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
   lastMessageAt?: Date;
   lastMessage?: string;
@@ -27,17 +29,19 @@ const ConversationSchema = new Schema<IConversation>(
         avatar: { type: String },
         role: {
           type: String,
-          enum: ['USER', 'SUPPORT', 'ADMIN'],
+          enum: ['USER', 'SELLER', 'SUPPORT', 'ADMIN'],
           required: true,
         },
       },
     ],
     type: {
       type: String,
-      enum: ['SUPPORT', 'DIRECT'],
+      enum: ['SUPPORT', 'DIRECT', 'PRODUCT_INQUIRY'],
       default: 'DIRECT',
       index: true,
     },
+    productId: { type: String, index: true },
+    productTitle: { type: String },
     status: {
       type: String,
       enum: ['ACTIVE', 'CLOSED', 'ARCHIVED'],
@@ -60,6 +64,7 @@ const ConversationSchema = new Schema<IConversation>(
 // Indexes
 ConversationSchema.index({ participants: 1, status: 1 });
 ConversationSchema.index({ type: 1, status: 1 });
+ConversationSchema.index({ productId: 1, status: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });
 
 export default mongoose.model<IConversation>('Conversation', ConversationSchema);

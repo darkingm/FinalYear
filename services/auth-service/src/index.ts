@@ -8,6 +8,8 @@ import { userSequelize, testUserConnection } from './database/userDatabase';
 import { setupPassport } from './config/passport';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
+import walletRoutes from './routes/wallet.routes';
+import adminWalletRoutes from './routes/adminWallet.routes';
 import logger from './utils/logger';
 import { redisClient, connectRedis } from './utils/redis';
 import { connectRabbitMQ } from './utils/rabbitmq';
@@ -15,6 +17,8 @@ import { validateEnvironmentVariables } from './utils/envValidator';
 // Email worker and monitoring
 import { startEmailWorker } from './workers/email.worker';
 import { startMonitoring, getHealthCheck } from './utils/monitoring';
+// Error handling
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.middleware';
 
 const app: Application = express();
 const PORT = process.env.AUTH_SERVICE_PORT || 3001;
@@ -37,6 +41,12 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/wallets', walletRoutes);
+app.use('/api/v1/admin/wallets', adminWalletRoutes);
+
+// Error handlers (MUST be last)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Start server
 const startServer = async () => {

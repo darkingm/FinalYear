@@ -4,6 +4,8 @@ export interface IProduct extends Document {
   sellerId: string;
   sellerName: string;
   sellerAvatar?: string;
+  shopId?: string; // Reference to Shop
+  shopName?: string;
   title: string;
   description: string;
   category: string;
@@ -36,6 +38,8 @@ const ProductSchema = new Schema<IProduct>(
     sellerId: { type: String, required: true, index: true },
     sellerName: { type: String, required: true },
     sellerAvatar: { type: String },
+    shopId: { type: String, index: true },
+    shopName: { type: String },
     title: { type: String, required: true, index: 'text' },
     description: { type: String, required: true, index: 'text' },
     category: { type: String, required: true, index: true },

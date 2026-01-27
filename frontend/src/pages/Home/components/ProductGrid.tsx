@@ -19,6 +19,10 @@ interface Product {
   coinSymbol: string;
   coinLogo: string;
   seller: string;
+  sellerId?: string;
+  shopId?: string;
+  shopName?: string;
+  shopLogo?: string;
   rating: number;
   reviews: number;
   condition: string;
@@ -31,7 +35,7 @@ const ProductGrid = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCoinCategory, setSelectedCoinCategory] = useState<string>('all');
-  const [coinCategories, setCoinCategories] = useState<string[]>([]);
+  const [coinCategories, setCoinCategories] = useState<Array<{symbol: string; logo: string}>>([]);
 
   useEffect(() => {
     fetchProducts();
@@ -81,18 +85,35 @@ const ProductGrid = () => {
             coinSymbol: p.coinSymbol || 'BTC',
             coinLogo: p.coinLogo || 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
             seller: p.sellerName || 'Verified Seller',
+            sellerId: p.sellerId || '',
+            shopId: p.shopId,
+            shopName: p.shopName,
+            shopLogo: p.shopLogo,
             rating: p.rating || 4.5,
             reviews: p.reviews || 0,
             condition: p.condition || 'NEW',
             stock: p.quantity || 0,
+            // Ensure these are available for cart
+            _id: String(p._id || p.id),
+            name: p.title,
+            price: currentPriceUSD,
           };
         })
       );
       
       setProducts(transformedProducts);
       
-      // Extract unique coin categories
-      const uniqueCoins = Array.from(new Set(transformedProducts.map(p => p.coinSymbol)));
+      // Extract unique coin categories with logos
+      const coinMap = new Map<string, string>();
+      transformedProducts.forEach(p => {
+        if (!coinMap.has(p.coinSymbol)) {
+          coinMap.set(p.coinSymbol, p.coinLogo);
+        }
+      });
+      const uniqueCoins = Array.from(coinMap.entries()).map(([symbol, logo]) => ({
+        symbol,
+        logo,
+      }));
       setCoinCategories(uniqueCoins);
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -197,17 +218,22 @@ const ProductGrid = () => {
             </button>
             {coinCategories.map((coin) => (
               <button
-                key={coin}
-                onClick={() => setSelectedCoinCategory(coin)}
+                key={coin.symbol}
+                onClick={() => setSelectedCoinCategory(coin.symbol)}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 ${
-                  selectedCoinCategory === coin
+                  selectedCoinCategory === coin.symbol
                     ? 'bg-primary-600 text-white'
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                 }`}
               >
-                <span>{coin}</span>
+                <img 
+                  src={coin.logo} 
+                  alt={coin.symbol}
+                  className="w-5 h-5 rounded-full"
+                />
+                <span>{coin.symbol}</span>
                 <span className="text-xs opacity-75">
-                  ({products.filter(p => p.coinSymbol === coin).length})
+                  ({products.filter(p => p.coinSymbol === coin.symbol).length})
                 </span>
               </button>
             ))}
@@ -279,10 +305,22 @@ const ProductGrid = () => {
                 </h3>
               </Link>
 
-              {/* Seller */}
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                by {product.seller}
-              </p>
+              {/* Seller/Shop */}
+              <div className="flex items-center space-x-2 mb-2">
+                {product.shopLogo && (
+                  <img 
+                    src={product.shopLogo} 
+                    alt={product.shopName || product.seller}
+                    className="w-6 h-6 rounded-full"
+                  />
+                )}
+                <Link 
+                  to={product.shopId ? `/shops/${product.shopId}` : `/sellers/${product.sellerId}`}
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                >
+                  {product.shopName || product.seller}
+                </Link>
+              </div>
 
               {/* Rating */}
               <div className="flex items-center space-x-1 mb-3">

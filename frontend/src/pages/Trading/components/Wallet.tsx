@@ -33,9 +33,17 @@ const Wallet = () => {
         return;
       }
       
-      const response = await axios.get(`/api/v1/users/${userId}/balances`);
+      // Use new wallet API
+      const response = await axios.get('/api/v1/wallets');
       if (response.data.success) {
-        setBalances(response.data.data.balances || []);
+        const wallets = response.data.data.wallets || [];
+        setBalances(wallets.map((w: any) => ({
+          coinId: w.coinSymbol?.toLowerCase(),
+          symbol: w.coinSymbol,
+          name: w.coinSymbol,
+          balance: parseFloat(w.availableBalance || '0'),
+          lockedBalance: parseFloat(w.lockedBalance || '0'),
+        })));
       }
     } catch (error: any) {
       console.error('Error fetching balances:', error);

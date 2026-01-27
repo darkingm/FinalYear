@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import HeroSection from './components/HeroSection';
 import TopCoins from './components/TopCoins';
 import ProductGrid from './components/ProductGrid';
+import TradingSection from './components/TradingSection';
 import Features from './components/Features';
 import AuthModal from '../../components/AuthModal';
 
@@ -30,6 +31,9 @@ const HomePage = () => {
           <TopCoins />
         </div>
       </section>
+
+      {/* Trading Section - Nạp tiền & Giao dịch */}
+      <TradingSection />
 
       {/* Product Grid Section - Sản phẩm đề xuất */}
       <section className="py-16 bg-gray-50 dark:bg-gray-900">

@@ -126,33 +126,7 @@ services:
       - /app/node_modules
     restart: unless-stopped
 
-  user-service:
-    build:
-      context: ./services/user-service
-      dockerfile: Dockerfile
-    container_name: tokenasset-user-service
-    ports:
-      - "3002:3002"
-    environment:
-      - NODE_ENV=development
-      - PORT=3002
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/user_db
-    env_file:
-      - .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - tokenasset-network
-    volumes:
-      - ./services/user-service:/app
-      - /app/node_modules
-    restart: unless-stopped
-
+  # user-service merged into auth-service
   product-service:
     build:
       context: ./services/product-service
@@ -163,7 +137,9 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3003
+      # coin-market-service merged into product-service - using coin_market_db
       - MONGODB_URI=mongodb://mongodb:27017/product_db
+      - MONGODB_DB_COIN=coin_market_db
     env_file:
       - .env
     depends_on:
@@ -180,31 +156,7 @@ services:
       - /app/node_modules
     restart: unless-stopped
 
-  coin-market-service:
-    build:
-      context: ./services/coin-market-service
-      dockerfile: Dockerfile
-    container_name: tokenasset-coin-market-service
-    ports:
-      - "3004:3004"
-    environment:
-      - NODE_ENV=development
-      - PORT=3004
-      - MONGODB_URI=mongodb://mongodb:27017/coin_market_db
-    env_file:
-      - .env
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - tokenasset-network
-    volumes:
-      - ./services/coin-market-service:/app
-      - /app/node_modules
-    restart: unless-stopped
-
+  # coin-market-service merged into product-service
   order-service:
     build:
       context: ./services/order-service
@@ -216,6 +168,13 @@ services:
       - NODE_ENV=development
       - PORT=3005
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/order_db
+      # Payment service merged into order-service - VNPay config
+      - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-U5CW5POH}
+      - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-84NWU0ONLFEQ7SQZYFUXSGRNA2PWZIJB}
+      - VNPAY_URL=${VNPAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:3000/payment/vnpay/return}
+      - VNPAY_IPN_URL=${VNPAY_IPN_URL:-http://localhost:3005/api/v1/payments/vnpay/ipn}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     env_file:
       - .env
     depends_on:
@@ -232,38 +191,7 @@ services:
       - /app/node_modules
     restart: unless-stopped
 
-  payment-service:
-    build:
-      context: ./services/payment-service
-      dockerfile: Dockerfile
-    container_name: tokenasset-payment-service
-    ports:
-      - "3006:3006"
-    environment:
-      - NODE_ENV=development
-      - PORT=3006
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/payment_db
-      - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-U5CW5POH}
-      - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-84NWU0ONLFEQ7SQZYFUXSGRNA2PWZIJB}
-      - VNPAY_URL=${VNPAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:3000/payment/vnpay/return}
-      - VNPAY_IPN_URL=${VNPAY_IPN_URL:-http://localhost:3006/api/v1/payments/vnpay/ipn}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
-    env_file:
-      - .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - tokenasset-network
-    volumes:
-      - ./services/payment-service:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # payment-service merged into order-service
 
   blockchain-service:
     build:
@@ -304,7 +232,9 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3008
+      # social-service merged into chat-service - using chat_db
       - MONGODB_URI=mongodb://mongodb:27017/chat_db
+      - MONGODB_DB_SOCIAL=social_db
     env_file:
       - .env
     depends_on:
@@ -321,32 +251,7 @@ services:
       - /app/node_modules
     restart: unless-stopped
 
-  social-service:
-    build:
-      context: ./services/social-service
-      dockerfile: Dockerfile
-    container_name: tokenasset-social-service
-    ports:
-      - "3009:3009"
-    environment:
-      - NODE_ENV=development
-      - PORT=3009
-      - MONGODB_URI=mongodb://mongodb:27017/social_db
-    env_file:
-      - .env
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - tokenasset-network
-    volumes:
-      - ./services/social-service:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # social-service merged into chat-service
 
   ai-analysis-service:
     build:
