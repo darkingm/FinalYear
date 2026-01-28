@@ -1,0 +1,26 @@
+📁 ASSETS CẦN THAY THẾ
+===================
+
+📂 public/assets/logo/
+  ├── logo.png (512x512px) - Logo chính website (Bitcoin hoặc custom)
+  ├── logo-dark.png (512x512px) - Logo cho dark mode
+  ├── favicon.ico - Icon trên tab browser
+  └── logo-text.png (width: 200px) - Logo có chữ
+
+📂 public/assets/banners/
+  ├── hero-banner.jpg (1920x600px) - Banner trang chủ
+  ├── product-placeholder.png (400x400px) - Hình mặc định cho sản phẩm
+  └── category-*.jpg - Banner cho từng category
+
+📂 public/assets/users/
+  └── default-avatar.png (200x200px) - Avatar mặc định cho user
+
+📂 public/coins/ (SỬ DỤNG CRYPTOCURRENCY-ICONS)
+  Đã có sẵn từ thư viện cryptocurrency-icons:
+  ✅ BTC, ETH, USDT, USDC, DAI, MATIC, BNB, LINK, và 500+ coins khác
+
+HƯỚNG DẪN:
+1. Thay logo.png bằng logo bạn muốn (Bitcoin hoặc custom design)
+2. Thay hero-banner.jpg cho banner trang chủ đẹp
+3. default-avatar.png cho user chưa có avatar
+4. Coin icons tự động load từ cryptocurrency-icons library
