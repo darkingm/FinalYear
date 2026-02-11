@@ -9,39 +9,60 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ShoppingBag, Wallet, TrendingUp, Sparkles, Shield, Zap } from 'lucide-react';
+import { ShoppingBag, Wallet, TrendingUp, Search } from 'lucide-react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-// Lazy load heavy components
-const BalanceOverview = dynamic(() => import('@/components/wallet/BalanceOverview').then(m => ({ default: m.BalanceOverview })), {
-  loading: () => <div className="h-48 bg-gray-200 dark:bg-gray-800 rounded-2xl animate-pulse" />,
-  ssr: false,
-});
+import { HeroSection } from '@/components/home/HeroSection';
+import { StatsSection } from '@/components/home/StatsSection';
+import { CategoriesSection } from '@/components/home/CategoriesSection';
+import { HowItWorks } from '@/components/home/HowItWorks';
 
-const PriceTicker = dynamic(() => import('@/components/realtime/PriceTicker').then(m => ({ default: m.PriceTicker })), {
-  loading: () => <div className="h-16 bg-gray-200 dark:bg-gray-800 animate-pulse" />,
-  ssr: false,
-});
+const BalanceOverview = dynamic(
+  () => import('@/components/wallet/BalanceOverview').then((mod) => mod.BalanceOverview),
+  { loading: () => <div className="h-44 skeleton rounded-xl" />, ssr: false }
+);
 
-const CoinGrid = dynamic(() => import('@/components/home/CoinGrid').then(m => ({ default: m.CoinGrid })), {
-  loading: () => <div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="h-32 bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse" /></div>,
-  ssr: false,
-});
+const PriceTicker = dynamic(
+  () => import('@/components/realtime/PriceTicker').then((mod) => mod.PriceTicker),
+  { loading: () => <div className="h-12 skeleton" />, ssr: false }
+);
+
+const CoinGrid = dynamic(
+  () => import('@/components/home/CoinGrid').then((mod) => mod.CoinGrid),
+  { loading: () => <div className="h-48 skeleton rounded-xl" />, ssr: false }
+);
+
+const FeaturedProducts = dynamic(
+  () => import('@/components/home/FeaturedProducts').then((mod) => mod.FeaturedProducts),
+  { loading: () => <div className="h-64 skeleton rounded-xl" />, ssr: false }
+);
 
 export default function HomePage() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const { t } = useTranslation();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const timeOfDay = getTimeOfDay();
   const greeting = t(`greeting.${timeOfDay}`);
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) router.push(`/products?q=${searchQuery}`);
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"
-        />
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-12 h-12 rounded-full border-3 border-primary border-t-transparent animate-spin mx-auto mb-3" />
+          <p className="text-muted-foreground text-sm">Loading...</p>
+        </motion.div>
       </div>
     );
   }
@@ -50,242 +71,101 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Price Ticker - Only at top */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="border-b bg-card sticky top-16 z-40"
-      >
+      {/* Price Ticker */}
+      <div className="border-b border-border/50 bg-card/80 backdrop-blur-sm sticky top-16 z-40">
         <PriceTicker />
-      </motion.div>
+      </div>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-12">
-        {/* Hero Section - Same for everyone */}
-          /* Hero Section for non-authenticated users */
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center py-24 mb-16"
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1, rotate: 360 }}
-              transition={{ duration: 0.8, delay: 0.2, type: 'spring' }}
-              className="inline-block mb-8"
-            >
-              <div className="p-6 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-3xl shadow-2xl">
-                <Sparkles className="w-16 h-16 text-white" />
-              </div>
-            </motion.div>
+      <main>
+        {/* Hero */}
+        <HeroSection
+          isAuthenticated={isAuthenticated}
+          userName={user?.name ?? undefined}
+          greeting={greeting}
+        />
 
-            <motion.h1
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+        {/* Search */}
+        <section className="py-6 -mt-8 relative z-10">
+          <div className="container mx-auto px-4 max-w-2xl">
+            <motion.form
+              onSubmit={handleSearch}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-7xl md:text-8xl font-bold mb-6"
             >
-              <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Crypto Marketplace
-              </span>
-            </motion.h1>
-            
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-2xl md:text-3xl text-muted-foreground mb-4 max-w-3xl mx-auto font-light"
-            >
-              The Future of E-commerce
-            </motion.p>
-            
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="text-lg text-muted-foreground mb-12 max-w-2xl mx-auto"
-            >
-              Buy and sell products with cryptocurrency. Fast, secure, and decentralized.
-            </motion.p>
+              <div className="relative flex items-center bg-card rounded-xl shadow-lg border border-border overflow-hidden">
+                <Search className="absolute left-4 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search products, categories..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-11 py-3.5 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
+                />
+                <Button type="submit" size="sm" className="m-1.5 px-5 rounded-lg bg-primary hover:bg-primary/90">
+                  Search
+                </Button>
+              </div>
+            </motion.form>
+          </div>
+        </section>
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center"
-            >
-              <Link href="/register">
-                <Button size="lg" className="text-xl px-12 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all">
-                  Get Started Free
-                </Button>
-              </Link>
-              <Link href="/login">
-                <Button size="lg" variant="outline" className="text-xl px-12 py-6 rounded-xl">
-                  Sign In
-                </Button>
-              </Link>
+        {/* Authenticated: Balance + Market + Quick Actions */}
+        {isAuthenticated && (
+          <div className="container mx-auto px-4 max-w-6xl space-y-8 py-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
+              <BalanceOverview />
             </motion.div>
 
-            {/* Features */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
+              <CoinGrid />
+            </motion.div>
+
+            {/* Quick Actions */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8, duration: 0.6 }}
-              className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-24 max-w-5xl mx-auto"
+              transition={{ delay: 0.2 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-3"
             >
               {[
-                { icon: Shield, color: 'blue', title: 'Secure', desc: 'Smart contract escrow protects your transactions' },
-                { icon: Zap, color: 'purple', title: 'Fast', desc: 'Instant payments with cryptocurrency' },
-                { icon: Wallet, color: 'pink', title: 'Multi-Currency', desc: 'Accept BTC, ETH, USDT, and more' },
-              ].map((feature, i) => (
-                <motion.div
-                  key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.8 + i * 0.1 }}
-                  whileHover={{ scale: 1.05, y: -10 }}
-                  className="p-8 bg-card rounded-2xl border-2 border-transparent hover:border-primary/50 shadow-md hover:shadow-2xl transition-all"
-                >
-                  <feature.icon className={`w-12 h-12 text-${feature.color}-500 mb-4 mx-auto`} />
-                  <h3 className="font-bold text-2xl mb-3">{feature.title}</h3>
-                  <p className="text-base text-muted-foreground leading-relaxed">
-                    {feature.desc}
-                  </p>
-                </motion.div>
-              ))}
-            </motion.div>
-          </motion.div>
-        )}
-
-        {/* Market Overview - Only for authenticated */}
-        {isAuthenticated && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.25 }}
-          >
-            <CoinGrid />
-          </motion.div>
-        )}
-
-        {/* Quick Actions - Only for authenticated users */}
-        {isAuthenticated && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
-          >
-            {[
-              {
-                href: '/products',
-                icon: ShoppingBag,
-                color: 'blue',
-                title: t('nav.products'),
-                desc: 'Browse marketplace',
-              },
-              {
-                href: '/wallet',
-                icon: Wallet,
-                color: 'purple',
-                title: t('nav.wallet'),
-                desc: 'Manage assets',
-              },
-              {
-                href: '/products/create',
-                icon: TrendingUp,
-                color: 'green',
-                title: t('nav.sell'),
-                desc: 'List your product',
-              },
-            ].map((item, index) => (
-              <motion.div
-                key={item.href}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.2 + index * 0.1 }}
-                whileHover={{ scale: 1.05, y: -5 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Link href={item.href}>
-                  <div className="p-6 bg-card rounded-xl border hover:shadow-xl transition-all cursor-pointer group relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-transparent to-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="flex items-center gap-4 relative z-10">
-                      <div className={`p-3 bg-${item.color}-100 dark:bg-${item.color}-900/20 rounded-lg group-hover:scale-110 transition-transform`}>
-                        <item.icon className={`w-6 h-6 text-${item.color}-600 dark:text-${item.color}-400`} />
+                { href: '/products', icon: ShoppingBag, title: t('nav.products'), desc: 'Browse marketplace', gradient: 'from-ocean-500 to-ocean-600' },
+                { href: '/wallet', icon: Wallet, title: t('nav.wallet'), desc: 'Manage assets', gradient: 'from-cyan-500 to-teal-500' },
+                { href: '/products/create', icon: TrendingUp, title: t('nav.sell'), desc: 'List your product', gradient: 'from-emerald-500 to-green-500' },
+              ].map((item) => (
+                <Link key={item.href} href={item.href}>
+                  <div className="p-4 bg-card rounded-xl border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer group">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-lg bg-gradient-to-br ${item.gradient} shadow-sm`}>
+                        <item.icon className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg">{item.title}</h3>
-                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                        <h3 className="font-semibold text-sm">{item.title}</h3>
+                        <p className="text-xs text-muted-foreground">{item.desc}</p>
                       </div>
                     </div>
                   </div>
                 </Link>
-              </motion.div>
-            ))}
-          </motion.div>
+              ))}
+            </motion.div>
+          </div>
         )}
 
-        {/* Featured Products Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35 }}
-          className="relative"
-        >
-          <div className="bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-3xl shadow-2xl overflow-hidden">
-            {/* Animated Background */}
-            <div className="absolute inset-0 opacity-30">
-              <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl animate-pulse" />
-              <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-300 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-            </div>
+        {/* Non-authenticated: Stats */}
+        {!isAuthenticated && <StatsSection />}
 
-            <div className="relative z-10 p-12 text-white">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.45 }}
-                className="flex items-center gap-3 mb-6"
-              >
-                <ShoppingBag className="w-10 h-10" />
-                <h2 className="text-4xl font-bold">Featured Products</h2>
-              </motion.div>
+        {/* Categories */}
+        <CategoriesSection />
 
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.55 }}
-                className="text-xl mb-8 text-white/90 max-w-2xl"
-              >
-                Discover trending items from our marketplace. Buy with cryptocurrency or PayPal.
-              </motion.p>
-
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.65 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Link href="/products">
-                  <Button size="lg" variant="secondary" className="text-xl px-10 py-6 rounded-xl shadow-xl hover:shadow-2xl group">
-                    <ShoppingBag className="w-5 h-5 mr-2" />
-                    Browse All Products
-                    <motion.span
-                      animate={{ x: [0, 5, 0] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="ml-3 text-2xl"
-                    >
-                      →
-                    </motion.span>
-                  </Button>
-                </Link>
-              </motion.div>
-            </div>
+        {/* Featured Products */}
+        <section className="py-10">
+          <div className="container mx-auto px-4 max-w-6xl">
+            <FeaturedProducts />
           </div>
-        </motion.div>
+        </section>
+
+        {/* How It Works */}
+        {!isAuthenticated && <HowItWorks />}
       </main>
 
       <Footer />

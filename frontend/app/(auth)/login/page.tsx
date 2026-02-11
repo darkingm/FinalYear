@@ -121,8 +121,8 @@ export default function LoginPage() {
             <Input
               label={t('auth.email')}
               type="email"
-              {...register('email')}
-              error={errors.email?.message}
+              {...register('emailOrUsername')}
+              error={errors.emailOrUsername?.message}
               placeholder="user@example.com"
             />
 

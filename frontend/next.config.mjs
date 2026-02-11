@@ -6,26 +6,33 @@ const nextConfig = {
   // Optimize production builds
   productionBrowserSourceMaps: false,
   
+  // Reduce bundle size
+  modularizeImports: {
+    'lucide-react': {
+      transform: 'lucide-react/dist/esm/icons/{{kebabCase member}}',
+    },
+  },
+  
   // Image optimization
   images: {
-    domains: [
-      'localhost',
-      's3.amazonaws.com',
-      'lh3.googleusercontent.com',
-      'graph.facebook.com',
-      'avatars.githubusercontent.com',
-      'res.cloudinary.com',
-      'via.placeholder.com',
+    remotePatterns: [
+      { protocol: 'https', hostname: 'cryptologos.cc' },
+      { protocol: 'https', hostname: 'via.placeholder.com' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: 'graph.facebook.com' },
+      { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+      { protocol: 'https', hostname: 's3.amazonaws.com' },
     ],
     formats: ['image/webp', 'image/avif'],
   },
   
-  // Compiler optimizations
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn'],
-    } : false,
-  },
+  // Compiler optimizations (disabled for Turbopack compatibility)
+  // compiler: {
+  //   removeConsole: process.env.NODE_ENV === 'production' ? {
+  //     exclude: ['error', 'warn'],
+  //   } : false,
+  // },
   
   // Experimental optimizations
   experimental: {
@@ -41,12 +48,24 @@ const nextConfig = {
     // Externalize heavy packages
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
     
-    // Fix MetaMask SDK warnings
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      '@react-native-async-storage/async-storage': false,
-      'react-native': false,
-    };
+    // Fix MetaMask SDK issues
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        '@react-native-async-storage/async-storage': false,
+        'react-native': false,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      };
+    }
+    
+    // Ignore MetaMask SDK warnings
+    config.ignoreWarnings = [
+      { module: /node_modules\/@metamask\/sdk/ },
+      { file: /node_modules\/@metamask\/sdk/ },
+    ];
     
     // Optimize chunks
     if (!isServer) {

@@ -110,6 +110,31 @@ export class AuthService {
     };
   }
 
+  /** Link a wallet to the current user (email/password account). Verifies ownership via SIWE. */
+  async linkWallet(userId: number, walletAddress: string, message: string, signature: string) {
+    const recoveredAddress = ethers.verifyMessage(message, signature);
+    if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+      throw new AppError('Invalid signature', 401);
+    }
+    const normalized = walletAddress.toLowerCase();
+    const existing = await query(
+      'SELECT user_id FROM users WHERE LOWER(wallet_address) = $1',
+      [normalized]
+    );
+    if (existing.rows.length > 0 && existing.rows[0].user_id !== userId) {
+      throw new AppError('This wallet is already linked to another account', 409);
+    }
+    await query(
+      'UPDATE users SET wallet_address = $1, updated_at = NOW() WHERE user_id = $2',
+      [walletAddress, userId]
+    );
+    const result = await query(
+      'SELECT user_id, email, username, wallet_address, avatar_url, role, status, created_at FROM users WHERE user_id = $1',
+      [userId]
+    );
+    return result.rows[0];
+  }
+
   async oauthLogin(data: {
     provider: string;
     providerId: string;

@@ -148,6 +148,39 @@ export async function getOrder(req: AuthRequest, res: Response, next: NextFuncti
   }
 }
 
+export async function getOrderByInternalId(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.user_id;
+    const internalOrderId = req.params.internalOrderId;
+
+    const result = await query(
+      `SELECT o.*, 
+              p.name as product_name, 
+              p.metadata as product_metadata,
+              buyer.username as buyer_name,
+              seller.username as seller_name
+       FROM orders o
+       JOIN products p ON o.product_id = p.product_id
+       LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
+       LEFT JOIN users seller ON o.seller_id = seller.user_id
+       WHERE o.internal_order_id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)`,
+      [internalOrderId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new AppError('Order not found', 404);
+    }
+
+    res.json({
+      success: true,
+      order: result.rows[0],
+    });
+  } catch (error: any) {
+    logger.error('Get order by internal id error:', error);
+    next(error);
+  }
+}
+
 export async function cancelOrder(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;

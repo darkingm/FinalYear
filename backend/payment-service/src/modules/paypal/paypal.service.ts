@@ -3,14 +3,17 @@ import { query } from '../../config/database';
 import { publishEvent } from '../../config/rabbitmq';
 import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
+import 'dotenv/config';
 
 export class PayPalService {
   private client: paypal.core.PayPalHttpClient;
 
   constructor() {
-    const clientId = process.env.PAYPAL_CLIENT_ID!;
-    const clientSecret = process.env.PAYPAL_SECRET!;
-    
+    const clientId = (process.env.PAYPAL_CLIENT_ID ?? '').trim();
+    const clientSecret = (process.env.PAYPAL_SECRET ?? '').trim();
+    if (!clientId || !clientSecret) {
+      throw new Error('PAYPAL_CLIENT_ID and PAYPAL_SECRET must be set in environment');
+    }
     const environment = process.env.PAYPAL_MODE === 'production'
       ? new paypal.core.LiveEnvironment(clientId, clientSecret)
       : new paypal.core.SandboxEnvironment(clientId, clientSecret);
@@ -45,7 +48,7 @@ export class PayPalService {
           reference_id: order.internal_order_id,
           amount: {
             currency_code: 'USD',
-            value: order.price_usd.toFixed(2),
+            value: Number(order.price_usd).toFixed(2),
           },
           description: `Order #${order.internal_order_id}`,
         },

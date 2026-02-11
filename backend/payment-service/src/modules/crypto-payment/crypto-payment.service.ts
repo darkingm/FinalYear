@@ -9,6 +9,9 @@ const ESCROW_ABI = [
   'function deposit(string orderId, address token, uint256 amount, address seller) external',
 ];
 
+// Chains with RPC and escrow support (31337 = Hardhat/Anvil local)
+const SUPPORTED_CHAIN_IDS = [31337, 137, 80001, 42161];
+
 export class CryptoPaymentService {
   private binanceService: BinanceService;
   private providers: Map<number, ethers.JsonRpcProvider>;
@@ -16,8 +19,9 @@ export class CryptoPaymentService {
   constructor() {
     this.binanceService = new BinanceService();
     this.providers = new Map();
-    
-    // Initialize providers for different chains
+
+    const localRpc = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
+    this.providers.set(31337, new ethers.JsonRpcProvider(localRpc));
     this.providers.set(137, new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
     this.providers.set(80001, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
     this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
@@ -40,23 +44,42 @@ export class CryptoPaymentService {
       throw new AppError('Order is not in UNPAID status', 400);
     }
 
-    // Get token details from whitelist
+    // Get seller's wallet address (escrow deposit expects address, not user_id)
+    const sellerResult = await query(
+      'SELECT wallet_address FROM users WHERE user_id = $1',
+      [order.seller_id]
+    );
+    const sellerWallet = sellerResult.rows[0]?.wallet_address;
+    if (!sellerWallet || !ethers.isAddress(sellerWallet)) {
+      throw new AppError(
+        `Seller (user_id: ${order.seller_id}) has no valid wallet_address in users table. Sellers must connect a wallet to receive crypto payments.`,
+        400
+      );
+    }
+
+    // Get token only on supported chains (Polygon, Mumbai, Arbitrum) to avoid wrong-chain / Internal JSON-RPC errors
     const tokenResult = await query(
-      'SELECT * FROM token_whitelist WHERE symbol = $1 AND is_active = true',
-      [tokenSymbol]
+      `SELECT * FROM token_whitelist 
+       WHERE symbol = $1 AND is_active = true AND chain_id = ANY($2::int[]) 
+       ORDER BY CASE WHEN chain_id = 31337 THEN 0 WHEN chain_id = 137 THEN 1 WHEN chain_id = 42161 THEN 2 ELSE 3 END`,
+      [tokenSymbol, SUPPORTED_CHAIN_IDS]
     );
 
     if (tokenResult.rows.length === 0) {
-      throw new AppError('Token not supported', 400);
+      throw new AppError(
+        `Token "${tokenSymbol}" is not available on supported networks (Polygon, Arbitrum). Use USDT or USDC on Polygon.`,
+        400
+      );
     }
 
     const token = tokenResult.rows[0];
 
     // Get current token price
     const tokenPrice = await this.binanceService.getPrice(`${tokenSymbol}USDT`);
-    
+
     // Calculate token amount needed
-    const amountToken = order.price_usd / tokenPrice;
+    const priceUsd = Number(order.price_usd);
+    const amountToken = priceUsd / tokenPrice;
     const amountWei = ethers.parseUnits(amountToken.toFixed(token.decimals), token.decimals);
 
     // Generate calldata for escrow contract
@@ -69,7 +92,7 @@ export class CryptoPaymentService {
       order.internal_order_id,
       token.token_address,
       amountWei,
-      order.seller_id.toString(), // This should be seller's wallet address
+      sellerWallet,
     ]);
 
     // Update order with token info
@@ -134,6 +157,52 @@ export class CryptoPaymentService {
     logger.info('Transaction submitted', { orderId, txHash });
   }
 
+  /**
+   * Retry an async operation with exponential backoff
+   * Useful for handling rate-limited RPC calls
+   */
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 5,
+    initialDelayMs: number = 1000
+  ): Promise<T> {
+    let lastError: any;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        lastError = error;
+
+        // Check if this is a rate limit error
+        const isRateLimit =
+          error?.error?.code === -32090 ||
+          error?.message?.includes('rate limit') ||
+          error?.message?.includes('Too many requests');
+
+        if (!isRateLimit || attempt === maxRetries - 1) {
+          // Not a rate limit error, or we've exhausted retries
+          throw error;
+        }
+
+        // Calculate delay with exponential backoff
+        const delayMs = initialDelayMs * Math.pow(2, attempt);
+
+        logger.warn('RPC rate limit hit, retrying...', {
+          attempt: attempt + 1,
+          maxRetries,
+          delayMs,
+          error: error.message,
+        });
+
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError;
+  }
+
   async verifyTransaction(txHash: string) {
     // Get payment record
     const paymentResult = await query(
@@ -152,8 +221,28 @@ export class CryptoPaymentService {
       throw new AppError('Unsupported chain', 400);
     }
 
-    // Get transaction receipt
-    const receipt = await provider.getTransactionReceipt(txHash);
+    // Get transaction receipt with retry logic
+    let receipt;
+    try {
+      receipt = await this.retryWithBackoff(
+        () => provider.getTransactionReceipt(txHash),
+        5,
+        1000
+      );
+    } catch (error: any) {
+      logger.error('Error verifying transaction', {
+        tx_hash: txHash,
+        error: error.message,
+        service: 'payment-service',
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      });
+
+      // Re-throw as AppError for consistent error handling
+      throw new AppError(
+        `Error verifying transaction: ${error.message}`,
+        500
+      );
+    }
 
     if (!receipt) {
       // Transaction still pending

@@ -82,7 +82,8 @@ async function seedProducts() {
       const metadata = {
         category,
         images: [
-          `https://via.placeholder.com/400/4F46E5/FFFFFF?text=${encodeURIComponent(baseName)}`,
+          // Use local placeholder to avoid Next.js image optimizer fetching external URLs (via.placeholder.com DNS issues)
+          `/placeholder-product.svg`,
         ],
         accepted_tokens: {
           crypto: acceptedCrypto,

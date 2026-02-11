@@ -6,8 +6,8 @@ import { Providers } from '@/components/providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Crypto Marketplace - Web3 E-commerce Platform',
-  description: 'A hybrid e-commerce marketplace supporting cryptocurrency and PayPal payments',
+  title: 'Crypto Marketplace',
+  description: 'Buy and sell with cryptocurrency',
 };
 
 export default function RootLayout({

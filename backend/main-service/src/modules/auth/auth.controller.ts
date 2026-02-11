@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
+import { AuthRequest } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
 
 const authService = new AuthService();
@@ -73,8 +74,14 @@ export async function walletLogin(req: Request, res: Response, next: NextFunctio
 
 export async function oauthLogin(req: Request, res: Response, next: NextFunction) {
   try {
-    const { provider, providerId, email, name, image } = req.body;
-    
+    const body = req.body;
+    if (!body || typeof body !== 'object') {
+      return res.status(400).json({ success: false, message: 'Invalid request body. Expected JSON object.' });
+    }
+    const { provider, providerId, email, name, image } = body;
+    if (!provider || !providerId || typeof email === 'undefined') {
+      return res.status(400).json({ success: false, message: 'Missing required fields: provider, providerId, email.' });
+    }
     const result = await authService.oauthLogin({
       provider,
       providerId,
@@ -124,6 +131,21 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
     });
   } catch (error: any) {
     logger.error('Logout error:', error);
+    next(error);
+  }
+}
+
+export async function linkWallet(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.user_id;
+    const { wallet_address, message, signature } = req.body;
+    if (!wallet_address || !message || !signature) {
+      return res.status(400).json({ success: false, message: 'wallet_address, message, and signature are required' });
+    }
+    const user = await authService.linkWallet(userId, wallet_address, message, signature);
+    res.json({ success: true, user });
+  } catch (error: any) {
+    logger.error('Link wallet error:', error);
     next(error);
   }
 }

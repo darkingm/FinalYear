@@ -5,73 +5,74 @@ import { useCryptoPriceOptimized } from '@/lib/hooks/useCryptoPriceOptimized';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
 
 const FEATURED_COINS = [
-  { symbol: 'BTCUSDT', name: 'Bitcoin', emoji: '₿', color: 'from-orange-500 to-yellow-500' },
-  { symbol: 'ETHUSDT', name: 'Ethereum', emoji: 'Ξ', color: 'from-blue-500 to-purple-500' },
-  { symbol: 'BNBUSDT', name: 'BNB', emoji: '◆', color: 'from-yellow-500 to-orange-500' },
-  { symbol: 'MATICUSDT', name: 'Polygon', emoji: '⬡', color: 'from-purple-500 to-pink-500' },
-  { symbol: 'SOLUSDT', name: 'Solana', emoji: '◎', color: 'from-purple-400 to-blue-500' },
-  { symbol: 'ADAUSDT', name: 'Cardano', emoji: '₳', color: 'from-blue-400 to-cyan-500' },
-  { symbol: 'DOTUSDT', name: 'Polkadot', emoji: '●', color: 'from-pink-500 to-red-500' },
-  { symbol: 'AVAXUSDT', name: 'Avalanche', emoji: '▲', color: 'from-red-500 to-orange-500' },
+  { symbol: 'BTCUSDT', name: 'Bitcoin', short: 'BTC' },
+  { symbol: 'ETHUSDT', name: 'Ethereum', short: 'ETH' },
+  { symbol: 'BNBUSDT', name: 'BNB', short: 'BNB' },
+  { symbol: 'MATICUSDT', name: 'Polygon', short: 'MATIC' },
+  { symbol: 'SOLUSDT', name: 'Solana', short: 'SOL' },
+  { symbol: 'ADAUSDT', name: 'Cardano', short: 'ADA' },
+  { symbol: 'DOTUSDT', name: 'Polkadot', short: 'DOT' },
+  { symbol: 'AVAXUSDT', name: 'Avalanche', short: 'AVAX' },
 ];
 
 export const CoinGrid = memo(function CoinGrid() {
   const { prices } = useCryptoPriceOptimized(FEATURED_COINS.map((c) => c.symbol));
 
   return (
-    <div className="mb-12">
-      <h2 className="text-2xl font-bold mb-6">🔥 Trending Cryptocurrencies</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div>
+      <h2 className="text-xl font-bold mb-4 text-foreground">Market Overview</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {FEATURED_COINS.map((coin, index) => {
           const price = prices[coin.symbol];
-          if (!price) return null;
+          if (!price) {
+            return (
+              <div key={coin.symbol} className="h-[110px] skeleton rounded-xl" />
+            );
+          }
 
           const isPositive = price.change24h >= 0;
 
           return (
             <motion.div
               key={coin.symbol}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-              whileHover={{ scale: 1.05, y: -5 }}
-              whileTap={{ scale: 0.95 }}
+              transition={{ duration: 0.25, delay: index * 0.04 }}
             >
               <Link href={`/trading/${coin.symbol}`}>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md hover:shadow-xl transition-all cursor-pointer border border-transparent hover:border-primary/50">
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${coin.color} flex items-center justify-center text-white text-xl font-bold shadow-lg`}>
-                        {coin.emoji}
-                      </div>
-                      <div>
-                        <p className="font-semibold">{coin.name}</p>
-                        <p className="text-xs text-gray-500">{coin.symbol.replace('USDT', '')}</p>
-                      </div>
+                <div className="bg-card rounded-xl p-4 border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer group">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center p-1.5 group-hover:bg-primary/10 transition-colors">
+                      <Image
+                        src={getCoinLogo(coin.short)}
+                        alt={coin.name}
+                        width={32}
+                        height={32}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm leading-tight">{coin.name}</p>
+                      <p className="text-xs text-muted-foreground">{coin.short}</p>
                     </div>
                   </div>
 
-                  {/* Price */}
-                  <div className="mb-3">
-                    <p className="text-2xl font-bold">${price.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
-                  </div>
+                  <p className="text-lg font-bold mb-1">
+                    ${price.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                  </p>
 
-                  {/* Change */}
                   <div
-                    className={`flex items-center gap-1 text-sm font-medium ${
-                      isPositive ? 'text-green-500' : 'text-red-500'
+                    className={`flex items-center gap-1 text-xs font-medium ${
+                      isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                     }`}
                   >
-                    {isPositive ? (
-                      <TrendingUp className="w-4 h-4" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4" />
-                    )}
+                    {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     <span>{isPositive ? '+' : ''}{price.change24h.toFixed(2)}%</span>
-                    <span className="text-xs text-gray-500 ml-1">24h</span>
+                    <span className="text-muted-foreground ml-0.5">24h</span>
                   </div>
                 </div>
               </Link>

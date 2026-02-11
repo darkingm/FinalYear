@@ -9,14 +9,18 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { signOut } from 'next-auth/react';
 import { useDisconnect } from 'wagmi';
-import { Menu, X, ShoppingBag, Wallet, Package, LogOut, User, Settings } from 'lucide-react';
+import {
+  Menu, X, ShoppingBag, Wallet, Package,
+  LogOut, User, Settings, LayoutDashboard, TrendingUp,
+} from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 
 export function Header() {
   const { t } = useTranslation();
   const { isAuthenticated, user } = useAuth();
   const { disconnect } = useDisconnect();
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -32,105 +36,103 @@ export function Header() {
   }, []);
 
   const handleLogout = () => {
-    // Disconnect wallet first
     disconnect();
-    // Then sign out
     signOut({ callbackUrl: '/' });
     setProfileOpen(false);
   };
 
+  const navLinks = [
+    { href: '/', label: t('nav.home'), icon: TrendingUp },
+    { href: '/products', label: t('nav.products'), icon: ShoppingBag },
+    { href: '/orders', label: t('nav.orders'), icon: Package },
+    { href: '/wallet', label: t('nav.wallet'), icon: Wallet },
+  ];
+
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 glass-strong">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <span className="text-4xl">₿</span>
-            <span className="font-bold text-2xl hidden sm:inline bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Crypto Market
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ocean-500 to-ocean-700 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+              <span className="text-white font-bold text-lg">W</span>
+            </div>
+            <span className="font-bold text-xl hidden sm:inline text-gradient-primary">
+              Web3 Market
             </span>
           </Link>
 
-          {/* Search Bar - Desktop */}
-          <div className="hidden md:flex flex-1 max-w-xl mx-8">
-            <div className="relative w-full">
-              <input
-                type="text"
-                placeholder="Search products, coins..."
-                className="w-full px-4 py-2 pl-10 bg-gray-100 dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value) {
-                    window.location.href = `/products?q=${e.currentTarget.value}`;
-                  }
-                }}
-              />
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                🔍
-              </div>
-            </div>
-          </div>
-
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/" className="text-base font-semibold hover:text-primary transition-colors whitespace-nowrap">
-              {t('nav.home')}
-            </Link>
-            <Link href="/products" className="text-base font-semibold hover:text-primary transition-colors whitespace-nowrap">
-              {t('nav.products')}
-            </Link>
+          <nav className="hidden md:flex items-center gap-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isActive(link.href)
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
 
           {/* Right Side */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2">
             <ThemeToggle />
             <LanguageSwitcher />
-            
-            {/* Wallet Connect - Only when authenticated */}
-            {isAuthenticated && <ConnectButton showBalance={false} />}
-            
+
+            {isAuthenticated && (
+              <div className="ml-1">
+                <ConnectButton showBalance={false} />
+              </div>
+            )}
+
             {isAuthenticated ? (
-              <div className="relative" ref={profileRef}>
+              <div className="relative ml-1" ref={profileRef}>
                 <button
                   onClick={() => setProfileOpen(!profileOpen)}
-                  className="flex items-center gap-2 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-muted transition-colors"
                 >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center text-white font-semibold text-sm shadow-sm">
                     {user?.name?.charAt(0).toUpperCase() || 'U'}
                   </div>
                 </button>
 
                 {profileOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
-                    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                      <p className="font-semibold">{user?.name || 'User'}</p>
-                      <p className="text-sm text-gray-500">{user?.email}</p>
+                  <div className="absolute right-0 mt-2 w-60 bg-card rounded-xl shadow-xl border border-border py-1.5 z-50 animate-scale-in">
+                    <div className="px-4 py-3 border-b border-border">
+                      <p className="font-semibold text-sm">{user?.name || 'User'}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                     </div>
-                    
-                    <Link href="/profile" onClick={() => setProfileOpen(false)}>
-                      <div className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer">
-                        <User className="w-4 h-4" />
-                        <span>{t('nav.profile') || 'Profile'}</span>
-                      </div>
-                    </Link>
-                    
-                    <Link href="/orders" onClick={() => setProfileOpen(false)}>
-                      <div className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer">
-                        <Package className="w-4 h-4" />
-                        <span>{t('nav.orders') || 'Orders'}</span>
-                      </div>
-                    </Link>
 
-                    <Link href="/settings" onClick={() => setProfileOpen(false)}>
-                      <div className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer">
-                        <Settings className="w-4 h-4" />
-                        <span>{t('nav.settings') || 'Settings'}</span>
-                      </div>
-                    </Link>
-                    
-                    <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
+                    {[
+                      { href: '/profile', icon: User, label: t('nav.profile') || 'Profile' },
+                      { href: '/orders', icon: Package, label: t('nav.orders') || 'Orders' },
+                      { href: '/products/create', icon: LayoutDashboard, label: 'Dashboard' },
+                      { href: '/settings', icon: Settings, label: t('nav.settings') || 'Settings' },
+                    ].map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setProfileOpen(false)}
+                      >
+                        <div className="px-4 py-2 hover:bg-muted flex items-center gap-2.5 cursor-pointer text-sm transition-colors">
+                          <item.icon className="w-4 h-4 text-muted-foreground" />
+                          <span>{item.label}</span>
+                        </div>
+                      </Link>
+                    ))}
+
+                    <div className="border-t border-border mt-1 pt-1">
                       <button
                         onClick={handleLogout}
-                        className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-red-600 dark:text-red-400"
+                        className="w-full px-4 py-2 hover:bg-destructive/10 flex items-center gap-2.5 text-destructive text-sm transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
                         <span>{t('nav.logout')}</span>
@@ -140,12 +142,14 @@ export function Header() {
                 )}
               </div>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex gap-2 ml-1">
                 <Link href="/login">
                   <Button variant="ghost" size="sm">Login</Button>
                 </Link>
                 <Link href="/register">
-                  <Button size="sm">Sign Up</Button>
+                  <Button size="sm" className="bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-600 hover:to-ocean-700 text-white shadow-md">
+                    Sign Up
+                  </Button>
                 </Link>
               </div>
             )}
@@ -153,47 +157,42 @@ export function Header() {
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden"
+            className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            {mobileMenuOpen ? <X /> : <Menu />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t">
-            <nav className="flex flex-col gap-4">
-              <Link
-                href="/"
-                className="flex items-center gap-2 text-sm font-medium hover:text-primary"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <ShoppingBag className="w-4 h-4" />
-                {t('nav.home')}
-              </Link>
-              <Link
-                href="/products"
-                className="flex items-center gap-2 text-sm font-medium hover:text-primary"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <Package className="w-4 h-4" />
-                {t('nav.products')}
-              </Link>
-              <Link
-                href="/wallet"
-                className="flex items-center gap-2 text-sm font-medium hover:text-primary"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <Wallet className="w-4 h-4" />
-                {t('nav.wallet')}
-              </Link>
-              <div className="flex items-center gap-2 pt-4 border-t">
+          <div className="md:hidden py-4 border-t border-border animate-slide-down">
+            <nav className="flex flex-col gap-1">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive(link.href)
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <link.icon className="w-4 h-4" />
+                  {link.label}
+                </Link>
+              ))}
+              <div className="flex items-center gap-2 pt-3 mt-2 border-t border-border">
                 <ThemeToggle />
                 <LanguageSwitcher />
               </div>
               {isAuthenticated && (
-                <Button variant="ghost" onClick={handleLogout} className="justify-start">
+                <Button
+                  variant="ghost"
+                  onClick={handleLogout}
+                  className="justify-start text-destructive hover:text-destructive mt-2"
+                >
                   <LogOut className="w-4 h-4 mr-2" />
                   {t('nav.logout')}
                 </Button>

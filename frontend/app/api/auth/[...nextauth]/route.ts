@@ -22,7 +22,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         try {
-          const response = await apiClient.post('/auth/login', {
+          const response = await apiClient.post('/api/auth/login', {
             email: credentials?.email,
             password: credentials?.password,
           });
@@ -53,7 +53,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         try {
-          const response = await apiClient.post('/auth/wallet-login', {
+          const response = await apiClient.post('/api/auth/wallet-login', {
             wallet_address: credentials?.address,
             message: credentials?.message,
             signature: credentials?.signature,
@@ -80,14 +80,15 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account, profile }) {
       if (account?.provider === 'google' || account?.provider === 'facebook') {
         try {
-          // Register or login user with OAuth
-          const response = await apiClient.post('/api/auth/oauth', {
-            provider: account.provider,
-            providerId: account.providerAccountId,
-            email: user.email,
-            name: user.name,
-            image: user.image,
-          });
+          // Build plain JSON payload (avoid undefined/circular refs that break JSON)
+          const body = {
+            provider: account.provider ?? '',
+            providerId: account.providerAccountId ?? '',
+            email: user.email ?? '',
+            name: user.name ?? null,
+            image: user.image ?? null,
+          };
+          const response = await apiClient.post('/api/auth/oauth', body);
 
           if (response.data && response.data.accessToken) {
             user.accessToken = response.data.accessToken;

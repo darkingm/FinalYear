@@ -10,10 +10,13 @@ import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 
 // Lazy load chart
-const CoinChart = dynamic(() => import('@/components/charts/CoinChart').then(m => ({ default: m.CoinChart })), {
-  loading: () => <div className="w-full h-full bg-gray-200 dark:bg-gray-800 animate-pulse rounded-lg" />,
-  ssr: false,
-});
+const CoinChart = dynamic(
+  () => import('@/components/charts/CoinChart').then((mod) => mod.CoinChart),
+  { 
+    loading: () => <div className="w-full h-full bg-gray-200 dark:bg-gray-800 animate-pulse rounded-lg" />,
+    ssr: false 
+  }
+);
 
 export default function TradingPage() {
   const params = useParams();
@@ -208,62 +211,56 @@ export default function TradingPage() {
           </div>
         </div>
 
-        {/* Order Book & Recent Trades - Side by Side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Order Book */}
-          <div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-bold mb-4">Order Book</h3>
-              
-              {/* Asks (Sell Orders) */}
-              <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">ASKS (Sell)</p>
-                <div className="space-y-1">
-                  {coinData.orderBook.asks.slice(0, 10).reverse().map(([price, qty], i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-red-500 font-mono">${parseFloat(price).toFixed(2)}</span>
-                      <span className="text-gray-500 font-mono">{parseFloat(qty).toFixed(4)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Current Price */}
-              <div className="py-3 border-y border-gray-200 dark:border-gray-700 mb-4">
-                <p className="text-center text-xl font-bold">${currentPrice.toFixed(2)}</p>
-                <p className="text-center text-xs text-gray-500">Current Price</p>
-              </div>
-
-              {/* Bids (Buy Orders) */}
-              <div>
-                <p className="text-xs text-gray-500 mb-2">BIDS (Buy)</p>
-                <div className="space-y-1">
-                  {coinData.orderBook.bids.slice(0, 10).map(([price, qty], i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-green-500 font-mono">${parseFloat(price).toFixed(2)}</span>
-                      <span className="text-gray-500 font-mono">{parseFloat(qty).toFixed(4)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-          {/* Recent Trades */}
+        {/* Order Book (left) & Recent Trades (right, vertical) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr,320px] gap-6 items-start">
+          {/* Order Book - Left */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-bold mb-4">Recent Trades</h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {coinData.recentTrades.map((trade) => (
-                  <div key={trade.id} className="flex justify-between items-center text-sm">
-                    <span className={`font-mono ${trade.isBuyerMaker ? 'text-red-500' : 'text-green-500'}`}>
-                      ${parseFloat(trade.price).toFixed(2)}
-                    </span>
-                    <span className="text-gray-500 font-mono">{parseFloat(trade.qty).toFixed(4)}</span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(trade.time).toLocaleTimeString()}
-                    </span>
+            <h3 className="text-lg font-bold mb-4">Order Book</h3>
+            {/* Asks (Sell Orders) */}
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 mb-2">ASKS (Sell)</p>
+              <div className="space-y-1">
+                {coinData.orderBook.asks.slice(0, 10).reverse().map(([price, qty], i) => (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span className="text-red-500 font-mono">${parseFloat(price).toFixed(2)}</span>
+                    <span className="text-gray-500 font-mono">{parseFloat(qty).toFixed(4)}</span>
                   </div>
                 ))}
               </div>
+            </div>
+            {/* Current Price */}
+            <div className="py-3 border-y border-gray-200 dark:border-gray-700 mb-4">
+              <p className="text-center text-xl font-bold">${currentPrice.toFixed(2)}</p>
+              <p className="text-center text-xs text-gray-500">Current Price</p>
+            </div>
+            {/* Bids (Buy Orders) */}
+            <div>
+              <p className="text-xs text-gray-500 mb-2">BIDS (Buy)</p>
+              <div className="space-y-1">
+                {coinData.orderBook.bids.slice(0, 10).map(([price, qty], i) => (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span className="text-green-500 font-mono">${parseFloat(price).toFixed(2)}</span>
+                    <span className="text-gray-500 font-mono">{parseFloat(qty).toFixed(4)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Recent Trades - Right column, vertical */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 lg:sticky lg:top-24">
+            <h3 className="text-lg font-bold mb-4">Recent Trades</h3>
+            <div className="space-y-2 max-h-[28rem] overflow-y-auto">
+              {coinData.recentTrades.map((trade) => (
+                <div key={trade.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                  <span className={`font-mono ${trade.isBuyerMaker ? 'text-red-500' : 'text-green-500'}`}>
+                    ${parseFloat(trade.price).toFixed(2)}
+                  </span>
+                  <span className="text-gray-500 font-mono">{parseFloat(trade.qty).toFixed(4)}</span>
+                  <span className="text-xs text-gray-400">
+                    {new Date(trade.time).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

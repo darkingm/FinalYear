@@ -245,9 +245,14 @@ export default function CreateProductPage() {
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">
-                        {token === 'BTC' ? '₿' : token === 'ETH' ? 'Ξ' : token === 'MATIC' ? '⬡' : token === 'USDT' ? '₮' : token === 'USDC' ? '$' : token === 'DAI' ? '◆' : '💎'}
-                      </span>
+                      <img
+                        src={`https://cryptologos.cc/logos/${token.toLowerCase()}-logo.svg`}
+                        alt={token}
+                        className="w-5 h-5"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
                       <span className="font-medium">{token}</span>
                     </div>
                   </button>
