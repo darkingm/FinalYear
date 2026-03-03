@@ -1,13 +1,34 @@
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
-RUN npm install
 
+# Install all dependencies (including devDependencies for build)
+RUN npm ci
+
+# Copy source code and build
 COPY . .
 RUN npm run build
 
+# Production stage
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm ci --omit=dev
+
+# Copy built artifacts from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/scripts ./scripts
+
 EXPOSE 3002
 
-CMD ["npm", "start"]
+CMD ["node", "dist/server.js"]

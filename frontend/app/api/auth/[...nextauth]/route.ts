@@ -33,6 +33,7 @@ export const authOptions: NextAuthOptions = {
               email: response.data.user.email,
               name: response.data.user.username,
               image: response.data.user.avatar_url,
+              role: response.data.user.role,
               accessToken: response.data.accessToken,
             };
           }
@@ -64,6 +65,7 @@ export const authOptions: NextAuthOptions = {
               id: response.data.user.user_id,
               email: response.data.user.email,
               name: response.data.user.username || credentials?.address,
+              role: response.data.user.role,
               walletAddress: credentials?.address,
               accessToken: response.data.accessToken,
             };
@@ -93,6 +95,7 @@ export const authOptions: NextAuthOptions = {
           if (response.data && response.data.accessToken) {
             user.accessToken = response.data.accessToken;
             user.id = response.data.user.user_id;
+            user.role = response.data.user.role;
           }
         } catch (error) {
           console.error('OAuth error:', error);
@@ -105,6 +108,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.accessToken = user.accessToken;
         token.id = user.id;
+        token.role = user.role;
         token.walletAddress = user.walletAddress;
       }
       return token;
@@ -112,6 +116,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        session.user.role = token.role as string;
         session.user.walletAddress = token.walletAddress as string;
         session.accessToken = token.accessToken as string;
       }

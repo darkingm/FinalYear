@@ -28,9 +28,10 @@ export class InventoryCleanerWorker {
 
     try {
       const expired = await query(
-        `SELECT il.product_id, il.order_id, il.quantity
+        `SELECT il.lock_id, il.inventory_id, il.order_id, il.quantity, inv.product_id
          FROM inventory_locks il
-         WHERE il.expires_at < NOW()
+         JOIN inventory inv ON inv.inventory_id = il.inventory_id
+         WHERE il.expires_at < NOW() AND il.status = 'active'
          LIMIT 100`
       );
 
@@ -44,19 +45,24 @@ export class InventoryCleanerWorker {
         try {
           await client.query('BEGIN');
           await client.query(
-            'UPDATE inventory SET available = available + $1 WHERE product_id = $2',
-            [row.quantity, row.product_id]
+            'UPDATE inventory SET available = available + $1, reserved = reserved - $1 WHERE inventory_id = $2',
+            [row.quantity, row.inventory_id]
           );
-          await client.query('DELETE FROM inventory_locks WHERE order_id = $1', [row.order_id]);
+          await client.query(
+            `UPDATE inventory_locks SET status = 'expired' WHERE lock_id = $1`,
+            [row.lock_id]
+          );
           await client.query('COMMIT');
           logger.info('Released expired lock', {
+            lock_id: row.lock_id,
             order_id: row.order_id,
             product_id: row.product_id,
             quantity: row.quantity,
           });
         } catch (err) {
           await client.query('ROLLBACK');
-          logger.error('Inventory cleaner failed for order', {
+          logger.error('Inventory cleaner failed for lock', {
+            lock_id: row.lock_id,
             order_id: row.order_id,
             error: err,
           });

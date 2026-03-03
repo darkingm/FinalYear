@@ -13,6 +13,7 @@ const PROTECTED_ROUTES = [
   '/addresses',
   '/notifications',
   '/disputes',
+  '/admin',
 ];
 
 // Routes that require seller/admin role
@@ -61,6 +62,7 @@ export const config = {
     '/seller/:path*',
     '/products/create',
     '/coupons/:path*',
+    '/admin/:path*',
     '/login',
     '/register',
   ],

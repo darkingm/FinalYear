@@ -31,7 +31,7 @@ VALUES
   (
     'seller@marketplace.com',
     '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266',
-    '$2b$10$seed.dummy.hash',
+    '$2b$10$WliVVMKZzo7T4MFdtpKKWu798pjHIPwl4y6zGtnvisCDVAY7YSLHC',
     'Demo Seller',
     'seller',
     'active',
@@ -40,7 +40,7 @@ VALUES
   (
     'buyer1@marketplace.com',
     '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
-    '$2b$10$seed.dummy.hash',
+    '$2b$10$WliVVMKZzo7T4MFdtpKKWu798pjHIPwl4y6zGtnvisCDVAY7YSLHC',
     'Buyer One',
     'buyer',
     'active',
@@ -49,7 +49,7 @@ VALUES
   (
     'buyer2@marketplace.com',
     '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc',
-    '$2b$10$seed.dummy.hash',
+    '$2b$10$WliVVMKZzo7T4MFdtpKKWu798pjHIPwl4y6zGtnvisCDVAY7YSLHC',
     'Buyer Two',
     'buyer',
     'active',
@@ -58,7 +58,7 @@ VALUES
   (
     'admin@marketplace.com',
     NULL,
-    '$2b$10$seed.dummy.hash',
+    '$2b$10$WliVVMKZzo7T4MFdtpKKWu798pjHIPwl4y6zGtnvisCDVAY7YSLHC',
     'Admin Demo',
     'admin',
     'active',

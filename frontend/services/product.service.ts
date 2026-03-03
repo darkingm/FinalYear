@@ -11,8 +11,8 @@ class ProductService {
   async list(params?: ProductListParams): Promise<{ products: Product[]; total: number }> {
     try {
       const res = await productsApi.list(params);
-      // Ensure products is always an array
-      let products = res.data.products || res.data;
+      // Backend format is { success: true, data: [...], pagination: {...} }
+      let products = res.data.data || res.data.products || res.data;
 
       // If products is not an array (e.g., an object or undefined), return empty array
       if (!Array.isArray(products)) {

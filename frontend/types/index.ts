@@ -212,3 +212,45 @@ export interface Notification {
   message: string;
   timestamp: number;
 }
+
+// --- Address ---
+export interface Address {
+  address_id: number;
+  user_id: number;
+  label: string;
+  full_name: string;
+  phone: string;
+  address_line: string;
+  street?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  city?: string;
+  state?: string;
+  postal_code: string;
+  country: string;
+  is_default: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// --- Coupon ---
+export interface Coupon {
+  coupon_id: number;
+  code: string;
+  description?: string;
+  discount_type: 'percentage' | 'fixed' | 'fixed_amount' | 'free_shipping';
+  discount_value: number;
+  min_order_amount?: number;
+  min_order_usd?: number;
+  max_discount_usd?: number;
+  max_uses?: number;
+  usage_limit?: number;
+  per_user_limit?: number;
+  used_count: number;
+  starts_at?: string;
+  expires_at: string;
+  is_active: boolean;
+  created_at?: string;
+}
+

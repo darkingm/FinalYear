@@ -39,30 +39,46 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
 
     // Calculate price
     const priceUsd = product.base_price_usd * quantity;
+    const subtotal = priceUsd;
+    const shippingFee = 0; // TODO: calculate from shipping method
+    const totalAmount = subtotal + shippingFee;
     const internalOrderId = uuidv4();
+
+    // Generate order number: ORD-YYYY-NNNNN
+    const year = new Date().getFullYear();
+    const seqResult = await query(
+      `SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 10) AS INTEGER)), 0) + 1 AS next_seq
+       FROM orders WHERE order_number LIKE $1`,
+      [`ORD-${year}-%`]
+    );
+    const nextSeq = seqResult.rows[0].next_seq;
+    const orderNumber = `ORD-${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // Create order
     const orderResult = await query(
       `INSERT INTO orders (
         internal_order_id, buyer_id, seller_id, product_id, quantity, 
-        price_usd, payment_method, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'UNPAID')
+        price_usd, subtotal, shipping_fee, total_amount,
+        payment_method, order_number, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'UNPAID')
       RETURNING *`,
-      [internalOrderId, buyerId, product.seller_id, product_id, quantity, priceUsd, payment_method || 'crypto']
+      [internalOrderId, buyerId, product.seller_id, product_id, quantity, priceUsd, subtotal, shippingFee, totalAmount, payment_method || 'crypto', orderNumber]
     );
 
     const order = orderResult.rows[0];
+    const inventory = inventoryResult.rows[0];
 
-    // Lock inventory
+    // Lock inventory (use inventory_id, not product_id)
     await query(
-      `INSERT INTO inventory_locks (product_id, order_id, quantity, expires_at)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')`,
-      [product_id, order.order_id, quantity]
+      `INSERT INTO inventory_locks (inventory_id, order_id, quantity, expires_at, status)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes', 'active')`,
+      [inventory.inventory_id, order.order_id, quantity]
     );
 
     await query(
-      `UPDATE inventory SET available = available - $1 WHERE product_id = $2`,
-      [quantity, product_id]
+      `UPDATE inventory SET available = available - $1, reserved = reserved + $1
+       WHERE inventory_id = $2`,
+      [quantity, inventory.inventory_id]
     );
 
     // Publish event

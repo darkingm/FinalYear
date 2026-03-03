@@ -284,6 +284,10 @@ export class CryptoPaymentService {
     const currentBlock = await provider.getBlockNumber();
     const confirmations = currentBlock - receipt.blockNumber;
 
+    // Get block to retrieve timestamp (TransactionReceipt doesn't have blockTimestamp in ethers v6)
+    const block = await provider.getBlock(receipt.blockNumber);
+    const blockTimestamp = block ? new Date(block.timestamp * 1000) : new Date();
+
     // Update payment record
     await query(
       `UPDATE payments 
@@ -292,7 +296,7 @@ export class CryptoPaymentService {
        WHERE tx_hash = $6`,
       [
         receipt.blockNumber,
-        new Date(receipt.blockTimestamp * 1000),
+        blockTimestamp,
         receipt.gasUsed.toString(),
         confirmations,
         confirmations >= 12 ? 'confirmed' : 'pending',

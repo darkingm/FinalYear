@@ -50,7 +50,7 @@ export default function SellerDashboardPage() {
     if (!authLoading) {
       if (!isAuthenticated) {
         router.push('/login?callbackUrl=/seller/dashboard');
-      } else if (user?.role !== 'seller' && user?.role !== 'admin') {
+      } else if ((user as any)?.role !== 'seller' && (user as any)?.role !== 'admin') {
         toast.error('You must be a seller to access this page');
         router.push('/');
       }
@@ -58,7 +58,8 @@ export default function SellerDashboardPage() {
   }, [isAuthenticated, authLoading, user, router]);
 
   useEffect(() => {
-    if (isAuthenticated && (user?.role === 'seller' || user?.role === 'admin')) {
+    const userRole = (user as any)?.role;
+    if (isAuthenticated && (userRole === 'seller' || userRole === 'admin')) {
       fetchDashboard();
     }
   }, [isAuthenticated, user]);
@@ -151,7 +152,7 @@ export default function SellerDashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {statCards.map((stat, idx) => (
+          {statCards.map((stat: any, idx) => (
             <motion.div
               key={stat.title}
               initial={{ opacity: 0, y: 20 }}
@@ -233,15 +234,14 @@ export default function SellerDashboardPage() {
                       <div className="text-right">
                         <p className="font-bold text-lg">${parseFloat(order.total_usd).toFixed(2)}</p>
                         <span
-                          className={`text-xs px-2 py-1 rounded-full ${
-                            order.status === 'COMPLETED'
-                              ? 'bg-success/10 text-success'
-                              : order.status === 'SHIPPED'
+                          className={`text-xs px-2 py-1 rounded-full ${order.status === 'COMPLETED'
+                            ? 'bg-success/10 text-success'
+                            : order.status === 'SHIPPED'
                               ? 'bg-blue-500/10 text-blue-500'
                               : order.status === 'PROCESSING'
-                              ? 'bg-yellow-500/10 text-yellow-600'
-                              : 'bg-muted text-muted-foreground'
-                          }`}
+                                ? 'bg-yellow-500/10 text-yellow-600'
+                                : 'bg-muted text-muted-foreground'
+                            }`}
                         >
                           {order.status}
                         </span>

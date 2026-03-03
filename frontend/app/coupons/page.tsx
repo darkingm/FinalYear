@@ -15,7 +15,8 @@ import type { Coupon } from '@/types';
 
 export default function CouponsPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user: rawUser, isAuthenticated, isLoading: authLoading } = useAuth();
+  const user = rawUser as any;
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -173,11 +174,11 @@ export default function CouponsPage() {
 
                 {/* Details */}
                 <div className="space-y-2 text-sm">
-                  {coupon.min_order_usd > 0 && (
+                  {coupon.min_order_usd && coupon.min_order_usd > 0 ? (
                     <p className="text-muted-foreground">
                       Min order: ${coupon.min_order_usd}
                     </p>
-                  )}
+                  ) : null}
                   {coupon.max_discount_usd && (
                     <p className="text-muted-foreground">
                       Max discount: ${coupon.max_discount_usd}

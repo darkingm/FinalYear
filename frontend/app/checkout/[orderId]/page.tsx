@@ -10,8 +10,14 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, CreditCard, Wallet, Loader2 } from 'lucide-react';
+import {
+  ArrowLeft, Loader2, Shield, Zap, CreditCard, Wallet,
+  Clock, CheckCircle, RefreshCw, AlertCircle, Package,
+} from 'lucide-react';
 import { useAccount, useWalletClient } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { motion, AnimatePresence } from 'framer-motion';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
 
 interface Order {
   order_id: number;
@@ -40,11 +46,30 @@ interface CryptoQuote {
 }
 
 const DEFAULT_TOKENS = ['USDT', 'USDC', 'DAI', 'MATIC', 'ETH'];
-const CHAIN_IDS: Record<number, string> = {
-  137: 'Polygon',
-  80001: 'Polygon Mumbai',
-  42161: 'Arbitrum',
-};
+const CHAIN_IDS: Record<number, string> = { 137: 'Polygon', 80001: 'Mumbai', 42161: 'Arbitrum' };
+
+// Coin prices updated every 30s
+function useCoinPrices(tokens: string[]) {
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const syms = tokens.map(t => `${t}USDT`).join(',');
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=["${tokens.map(t => `${t}USDT`).join('","')}"]`);
+        const data = await res.json();
+        const map: Record<string, number> = {};
+        if (Array.isArray(data)) {
+          data.forEach((d: any) => { map[d.symbol.replace('USDT', '')] = parseFloat(d.price); });
+        }
+        setPrices(map);
+      } catch { }
+    };
+    fetch_();
+    const iv = setInterval(fetch_, 30000);
+    return () => clearInterval(iv);
+  }, [tokens.join(',')]);
+  return prices;
+}
 
 export default function CheckoutPage() {
   const params = useParams();
@@ -61,69 +86,49 @@ export default function CheckoutPage() {
   const [selectedToken, setSelectedToken] = useState('USDT');
   const [quote, setQuote] = useState<CryptoQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
-  const [paypalLoading, setPaypalLoading] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [step, setStep] = useState(1);
+
+  const acceptedCrypto = order?.product_metadata?.accepted_tokens?.crypto || DEFAULT_TOKENS;
+  const coinPrices = useCoinPrices(acceptedCrypto);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login');
-      return;
-    }
+    if (!authLoading && !isAuthenticated) { router.push('/login'); return; }
     if (isAuthenticated && orderId && !Number.isNaN(orderId)) fetchOrder();
-    else if (!authLoading && (Number.isNaN(orderId) || !orderId)) setLoading(false);
+    else if (!authLoading) setLoading(false);
   }, [isAuthenticated, authLoading, orderId]);
 
   const fetchOrder = async () => {
     try {
       const res = await apiClient.get(`/api/orders/${orderId}`);
       const o = res.data.order;
-      if (o.status !== 'UNPAID') {
-        toast.info('Đơn hàng đã được xử lý');
-        router.push(`/orders/${o.order_id}`);
-        return;
-      }
+      if (o.status !== 'UNPAID') { toast.info('Đơn hàng đã được xử lý'); router.push(`/orders/${o.order_id}`); return; }
       setOrder(o);
       const tokens = o.product_metadata?.accepted_tokens?.crypto;
       if (tokens?.length) setSelectedToken(tokens[0]);
     } catch (e: any) {
-      if (e.response?.status === 404) {
-        toast.error('Không tìm thấy đơn hàng');
-        router.push('/orders');
-      } else {
-        toast.error(e.response?.data?.message || 'Tải đơn hàng thất bại');
-      }
-    } finally {
-      setLoading(false);
-    }
+      if (e.response?.status === 404) { toast.error('Không tìm thấy đơn hàng'); router.push('/orders'); }
+      else toast.error(e.response?.data?.message || 'Tải đơn hàng thất bại');
+    } finally { setLoading(false); }
   };
 
   const handleGetQuote = async () => {
-    setQuote(null);
-    setQuoteError(null);
-    setQuoteLoading(true);
+    setQuote(null); setQuoteError(null); setQuoteLoading(true);
     try {
-      const res = await paymentClient.post('/api/payments/crypto/quote', {
-        order_id: orderId,
-        token_symbol: selectedToken,
-      });
+      const res = await paymentClient.post('/api/payments/crypto/quote', { order_id: orderId, token_symbol: selectedToken });
       setQuote(res.data.quote);
+      setStep(3);
     } catch (e: any) {
       const msg = e.response?.data?.message || 'Lấy báo giá thất bại';
-      setQuoteError(msg);
-      toast.error(msg);
-    } finally {
-      setQuoteLoading(false);
-    }
+      setQuoteError(msg); toast.error(msg);
+    } finally { setQuoteLoading(false); }
   };
 
   const handlePayWithMetaMask = async () => {
-    if (!quote || !walletClient || !address) {
-      toast.error('Vui lòng kết nối ví MetaMask');
-      return;
-    }
+    if (!quote || !walletClient || !address) { toast.error('Kết nối ví MetaMask'); return; }
     setSubmitLoading(true);
     try {
       const tx = await walletClient.sendTransaction({
@@ -133,63 +138,26 @@ export default function CheckoutPage() {
         chainId: quote.chain_id,
       });
       const hash = typeof tx === 'string' ? tx : (tx as { hash: string }).hash;
-      await paymentClient.post('/api/payments/crypto/submit', {
-        order_id: orderId,
-        tx_hash: hash,
-      });
-      toast.success('Giao dịch đã được gửi. Đang chờ xác nhận...');
+      await paymentClient.post('/api/payments/crypto/submit', { order_id: orderId, tx_hash: hash });
+      toast.success('Giao dịch đã gửi thành công!');
       router.push(`/orders/${orderId}`);
     } catch (e: any) {
       const msg = e.message || e.shortMessage || 'Giao dịch thất bại';
-      if (msg.includes('rejected') || e.code === 4001) {
-        toast.info('Bạn đã hủy giao dịch');
-      } else if (msg.includes('Internal JSON-RPC') || msg.includes('JSON-RPC')) {
-        toast.error(
-          'Lỗi kết nối RPC. Hãy: (1) Chuyển ví sang mạng Polygon hoặc Arbitrum, (2) Thử lại với token USDT/USDC trên Polygon, (3) Kiểm tra đã approve token chưa.'
-        );
-      } else {
-        toast.error(msg);
-      }
-    } finally {
-      setSubmitLoading(false);
-    }
+      if (msg.includes('rejected') || e.code === 4001) toast.info('Bạn đã hủy giao dịch');
+      else toast.error(msg);
+    } finally { setSubmitLoading(false); }
   };
 
   const handleSubmitTxHash = async () => {
     const hash = txHash.trim();
-    if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) {
-      toast.error('Định dạng tx hash không đúng (0x + 64 ký tự hex)');
-      return;
-    }
+    if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) { toast.error('Tx hash không hợp lệ'); return; }
     setSubmitLoading(true);
     try {
-      await paymentClient.post('/api/payments/crypto/submit', {
-        order_id: orderId,
-        tx_hash: hash,
-      });
-      toast.success('Đã gửi tx. Đang chờ xác nhận...');
+      await paymentClient.post('/api/payments/crypto/submit', { order_id: orderId, tx_hash: hash });
+      toast.success('Đã gửi tx hash!');
       router.push(`/orders/${orderId}`);
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Gửi tx thất bại');
-    } finally {
-      setSubmitLoading(false);
-    }
-  };
-
-  const handlePayWithPayPal = async () => {
-    setPaypalLoading(true);
-    try {
-      const res = await paymentClient.post('/api/payments/paypal/create-order', {
-        order_id: orderId,
-      });
-      const url = res.data.approval_url;
-      if (url) window.location.href = url;
-      else toast.error('Không nhận được link thanh toán PayPal');
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Tạo đơn PayPal thất bại');
-    } finally {
-      setPaypalLoading(false);
-    }
+    } catch (e: any) { toast.error(e.response?.data?.message || 'Gửi tx hash thất bại'); }
+    finally { setSubmitLoading(false); }
   };
 
   const handleCancelOrder = async () => {
@@ -198,199 +166,295 @@ export default function CheckoutPage() {
       await apiClient.post(`/api/orders/${orderId}/cancel`);
       toast.success('Đã hủy đơn hàng');
       router.push('/orders');
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Hủy đơn thất bại');
-    } finally {
-      setCancelLoading(false);
-    }
+    } catch (e: any) { toast.error(e.response?.data?.message || 'Hủy đơn thất bại'); }
+    finally { setCancelLoading(false); }
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+  if (authLoading || loading) return (
+    <div className="min-h-screen bg-[#0c0e14] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-2 border-[#f0b90b] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-500 text-sm">Đang tải đơn hàng...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!order || Number.isNaN(orderId)) {
-    return (
-      <>
-        <Header />
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {Number.isNaN(orderId) ? 'Mã đơn hàng không hợp lệ.' : 'Không tìm thấy đơn hàng.'}
-            </p>
-            <Link href="/orders">
-              <Button>Về đơn hàng</Button>
-            </Link>
-            <Link href="/" className="ml-2 inline-block">
-              <Button variant="outline">Về trang chủ</Button>
-            </Link>
-          </div>
-        </div>
-        <Footer />
-      </>
-    );
-  }
-
-  const acceptedCrypto = order.product_metadata?.accepted_tokens?.crypto || DEFAULT_TOKENS;
-  const acceptPayPal = order.product_metadata?.accepted_tokens?.fiat?.includes('paypal');
-
-  return (
+  if (!order || Number.isNaN(orderId)) return (
     <>
       <Header />
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-        <div className="container mx-auto px-4 max-w-3xl">
-          <div className="flex items-center gap-4 mb-6">
-            <Link href={`/products/${order.product_id}`}>
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Quay lại
-              </Button>
-            </Link>
-            <h1 className="text-2xl font-bold">Thanh toán đơn hàng #{order.order_id}</h1>
-          </div>
-
-          {/* Order summary */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-4">Thông tin đơn hàng</h2>
-            <div className="flex gap-4">
-              <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-700 flex-shrink-0">
-                {order.product_metadata?.images?.[0] ? (
-                  <Image
-                    src={order.product_metadata.images[0]}
-                    alt={order.product_name}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Ảnh</div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold truncate">{order.product_name}</h3>
-                <p className="text-sm text-gray-500">Số lượng: {order.quantity}</p>
-                <p className="text-lg font-bold text-primary mt-1">${Number(order.price_usd).toFixed(2)} USD</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Payment method - Always show Crypto & PayPal options */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-4">Chọn phương thức thanh toán</h2>
-            <div className="flex flex-wrap gap-2 mb-6">
-              <Button
-                variant={paymentMethod === 'crypto' ? 'default' : 'outline'}
-                onClick={() => setPaymentMethod('crypto')}
-              >
-                <Wallet className="w-4 h-4 mr-2" />
-                Crypto
-              </Button>
-              <Button
-                variant={paymentMethod === 'paypal' ? 'default' : 'outline'}
-                onClick={() => acceptPayPal && setPaymentMethod('paypal')}
-                disabled={!acceptPayPal}
-                title={!acceptPayPal ? 'Sản phẩm này không chấp nhận PayPal' : undefined}
-              >
-                <CreditCard className="w-4 h-4 mr-2" />
-                PayPal
-              </Button>
-            </div>
-
-            {paymentMethod === 'crypto' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Token</label>
-                  <select
-                    value={selectedToken}
-                    onChange={(e) => { setSelectedToken(e.target.value); setQuote(null); }}
-                    className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700"
-                  >
-                    {acceptedCrypto.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-                <Button onClick={handleGetQuote} disabled={quoteLoading}>
-                  {quoteLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Lấy báo giá
-                </Button>
-                {quoteError && (
-                  <div className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-200">
-                    {quoteError.includes('wallet_address') || quoteError.includes('Seller') ? (
-                      <>
-                        <p className="font-medium">Người bán chưa liên kết ví để nhận thanh toán crypto.</p>
-                        <p className="mt-1">Bạn có thể chọn thanh toán bằng PayPal bên trên.</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => { setPaymentMethod('paypal'); setQuoteError(null); }}
-                        >
-                          Chuyển sang PayPal
-                        </Button>
-                      </>
-                    ) : (
-                      quoteError
-                    )}
-                  </div>
-                )}
-                {quote && (
-                  <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 space-y-2">
-                    <p className="font-medium">Số lượng: {quote.amount_token.toFixed(6)} {selectedToken}</p>
-                    <p className="text-sm text-gray-500">Mạng: {CHAIN_IDS[quote.chain_id] || quote.chain_id}</p>
-                    <p className="text-xs text-gray-500 break-all">Escrow: {quote.escrow_contract}</p>
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {isConnected && walletClient ? (
-                        <Button onClick={handlePayWithMetaMask} disabled={submitLoading}>
-                          {submitLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                          Thanh toán bằng MetaMask
-                        </Button>
-                      ) : (
-                        <p className="text-sm text-amber-600">Kết nối ví (RainbowKit) để thanh toán bằng MetaMask.</p>
-                      )}
-                      <div className="flex gap-2 flex-1 items-end">
-                        <input
-                          type="text"
-                          placeholder="0x... (tx hash)"
-                          value={txHash}
-                          onChange={(e) => setTxHash(e.target.value)}
-                          className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm dark:bg-gray-700"
-                        />
-                        <Button variant="outline" size="sm" onClick={handleSubmitTxHash} disabled={submitLoading}>
-                          Gửi tx hash
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {paymentMethod === 'paypal' && acceptPayPal && (
-              <Button onClick={handlePayWithPayPal} disabled={paypalLoading}>
-                {paypalLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Chuyển đến PayPal để thanh toán
-              </Button>
-            )}
-          </div>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={handleCancelOrder} disabled={cancelLoading}>
-              {cancelLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Hủy đơn hàng
-            </Button>
-            <Link href="/orders">
-              <Button variant="ghost">Xem đơn hàng của tôi</Button>
-            </Link>
-          </div>
+      <div className="min-h-screen bg-[#0c0e14] flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+          <p className="text-gray-400 mb-4">Không tìm thấy đơn hàng.</p>
+          <Link href="/orders"><Button>Về danh sách đơn hàng</Button></Link>
         </div>
       </div>
       <Footer />
     </>
   );
+
+  const acceptPayPal = order.product_metadata?.accepted_tokens?.fiat?.includes('paypal');
+  const quoteTimeLeft = quote ? Math.max(0, Math.floor((quote.expires_at * 1000 - Date.now()) / 1000)) : 0;
+
+  return (
+    <div className="min-h-screen bg-[#0c0e14] flex flex-col">
+      <Header />
+      <main className="flex-1 py-8 px-4">
+        <div className="max-w-2xl mx-auto">
+          {/* Back + Title */}
+          <div className="flex items-center gap-3 mb-8">
+            <Link href={`/products/${order.product_id}`}>
+              <button className="p-2 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-white">Thanh toán</h1>
+              <p className="text-gray-600 text-xs">Đơn hàng #{order.order_id}</p>
+            </div>
+            {/* Steps */}
+            <div className="ml-auto hidden sm:flex items-center gap-2">
+              {[1, 2, 3].map(s => (
+                <div key={s} className="flex items-center gap-1">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${step >= s ? 'bg-[#f0b90b] border-[#f0b90b] text-black' : 'border-white/20 text-gray-600'}`}>
+                    {step > s ? <CheckCircle className="w-3.5 h-3.5" /> : s}
+                  </div>
+                  {s < 3 && <div className={`w-6 h-0.5 rounded ${step > s ? 'bg-[#f0b90b]' : 'bg-white/10'}`} />}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Order Summary */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-[#1a1d26] border border-white/10 rounded-2xl p-5 mb-4">
+            <h2 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#f0b90b]" />
+              Tóm tắt đơn hàng
+            </h2>
+            <div className="flex gap-4">
+              <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-white/5 flex-shrink-0 border border-white/10">
+                {order.product_metadata?.images?.[0] ? (
+                  <Image src={order.product_metadata.images[0]} alt={order.product_name} fill className="object-cover" unoptimized />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Package className="w-6 h-6 text-gray-600" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-white truncate">{order.product_name}</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Số lượng: {order.quantity}</p>
+                <p className="text-sm text-gray-500">Người bán: {order.seller_name}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-xl font-bold text-[#f0b90b]">${Number(order.price_usd).toFixed(2)}</p>
+                <p className="text-xs text-gray-600">USD</p>
+              </div>
+            </div>
+            {/* Escrow badge */}
+            <div className="mt-4 flex items-center gap-2 px-3 py-2 bg-emerald-500/8 border border-emerald-500/20 rounded-xl">
+              <Shield className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <p className="text-xs text-gray-400">
+                Thanh toán được bảo vệ bởi <span className="text-emerald-400 font-medium">Smart Contract Escrow</span>
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Payment Method */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+            className="bg-[#1a1d26] border border-white/10 rounded-2xl p-5 mb-4">
+            <h2 className="text-sm font-bold text-white mb-4">Phương thức thanh toán</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => { setPaymentMethod('crypto'); setStep(2); }}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${paymentMethod === 'crypto' ? 'border-[#f0b90b] bg-[#f0b90b]/8' : 'border-white/10 bg-white/3 hover:border-white/20'}`}
+              >
+                <Wallet className={`w-5 h-5 mb-2 ${paymentMethod === 'crypto' ? 'text-[#f0b90b]' : 'text-gray-500'}`} />
+                <p className={`text-sm font-bold ${paymentMethod === 'crypto' ? 'text-[#f0b90b]' : 'text-gray-300'}`}>Crypto</p>
+                <p className="text-xs text-gray-600 mt-0.5">{acceptedCrypto.join(', ')}</p>
+              </button>
+              <button
+                onClick={() => acceptPayPal && setPaymentMethod('paypal')}
+                disabled={!acceptPayPal}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${!acceptPayPal ? 'opacity-40 cursor-not-allowed' : ''} ${paymentMethod === 'paypal' ? 'border-blue-500 bg-blue-500/8' : 'border-white/10 bg-white/3 hover:border-white/20'}`}
+              >
+                <CreditCard className={`w-5 h-5 mb-2 ${paymentMethod === 'paypal' ? 'text-blue-400' : 'text-gray-500'}`} />
+                <p className={`text-sm font-bold ${paymentMethod === 'paypal' ? 'text-blue-400' : 'text-gray-300'}`}>PayPal</p>
+                <p className="text-xs text-gray-600 mt-0.5">{acceptPayPal ? 'USD trực tiếp' : 'Không hỗ trợ'}</p>
+              </button>
+            </div>
+          </motion.div>
+
+          {/* Crypto Details */}
+          <AnimatePresence>
+            {paymentMethod === 'crypto' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="bg-[#1a1d26] border border-white/10 rounded-2xl p-5 mb-4 space-y-4 overflow-hidden">
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-[#f0b90b]" />
+                  Chọn token thanh toán
+                </h2>
+
+                {/* Token selector */}
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                  {acceptedCrypto.map(token => (
+                    <button
+                      key={token}
+                      onClick={() => { setSelectedToken(token); setQuote(null); }}
+                      className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border transition-all ${selectedToken === token ? 'border-[#f0b90b] bg-[#f0b90b]/10' : 'border-white/10 bg-white/3 hover:border-white/20'}`}
+                    >
+                      <div className="w-6 h-6">
+                        <Image src={getCoinLogo(token)} alt={token} width={24} height={24} className="object-contain" />
+                      </div>
+                      <span className={`text-xs font-bold ${selectedToken === token ? 'text-[#f0b90b]' : 'text-gray-400'}`}>{token}</span>
+                      {coinPrices[token] && (
+                        <span className="text-[10px] text-gray-600">${coinPrices[token].toFixed(2)}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Estimated amount preview */}
+                {coinPrices[selectedToken] && (
+                  <div className="flex items-center justify-between px-4 py-3 bg-white/3 border border-white/8 rounded-xl">
+                    <div>
+                      <p className="text-xs text-gray-600">Ước tính cần thanh toán</p>
+                      <p className="text-base font-bold text-white font-mono">
+                        {(Number(order.price_usd) / coinPrices[selectedToken]).toFixed(6)} {selectedToken}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-600">Giá hiện tại</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm text-gray-300">${coinPrices[selectedToken].toFixed(2)}</p>
+                        <RefreshCw className="w-3 h-3 text-gray-600" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Wallet Connect */}
+                {!isConnected ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-500">Kết nối ví để thanh toán tự động:</p>
+                    <div className="flex justify-center">
+                      <ConnectButton />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/8 border border-emerald-500/20 rounded-xl">
+                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                    <p className="text-xs text-emerald-400 font-mono">{address?.slice(0, 8)}...{address?.slice(-6)}</p>
+                  </div>
+                )}
+
+                {/* Get Quote Button */}
+                <button
+                  onClick={handleGetQuote}
+                  disabled={quoteLoading}
+                  className="w-full py-3 bg-white/5 border border-white/15 hover:border-[#f0b90b]/40 hover:bg-[#f0b90b]/5 text-gray-300 hover:text-[#f0b90b] font-medium rounded-xl text-sm transition-all flex items-center justify-center gap-2"
+                >
+                  {quoteLoading ? <><Loader2 className="w-4 h-4 animate-spin" />Đang lấy báo giá...</> : <><RefreshCw className="w-4 h-4" />Lấy báo giá {selectedToken}</>}
+                </button>
+
+                {/* Error */}
+                {quoteError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-400">{quoteError}</p>
+                  </div>
+                )}
+
+                {/* Quote Result */}
+                {quote && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    className="border border-[#f0b90b]/30 bg-[#f0b90b]/5 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-[#f0b90b]">Báo giá xác nhận</h3>
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Clock className="w-3 h-3" />
+                        <span>{quoteTimeLeft}s</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-gray-600">Số lượng</p>
+                        <p className="font-bold text-white font-mono">{quote.amount_token.toFixed(6)} {selectedToken}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Mạng lưới</p>
+                        <p className="font-bold text-white">{CHAIN_IDS[quote.chain_id] || quote.chain_id}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-gray-600">Escrow Contract</p>
+                        <p className="font-mono text-gray-400 text-[10px] break-all">{quote.escrow_contract}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {isConnected && walletClient ? (
+                        <button onClick={handlePayWithMetaMask} disabled={submitLoading}
+                          className="flex-1 py-2.5 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                          {submitLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                          Thanh toán MetaMask
+                        </button>
+                      ) : null}
+                    </div>
+                    {/* Manual TX Hash */}
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-600">Hoặc nhập tx hash thủ công:</p>
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="0x..." value={txHash} onChange={e => setTxHash(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300 placeholder-gray-700 focus:outline-none focus:border-white/20 font-mono" />
+                        <button onClick={handleSubmitTxHash} disabled={submitLoading}
+                          className="px-3 py-2 bg-white/10 hover:bg-white/15 text-gray-300 rounded-lg text-xs font-medium transition-colors">
+                          Gửi
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* PayPal */}
+          {paymentMethod === 'paypal' && acceptPayPal && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="bg-[#1a1d26] border border-white/10 rounded-2xl p-5 mb-4">
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await paymentClient.post('/api/payments/paypal/create-order', { order_id: orderId });
+                    const url = res.data.approval_url;
+                    if (url) window.location.href = url;
+                  } catch (e: any) { toast.error(e.response?.data?.message || 'Tạo đơn PayPal thất bại'); }
+                }}
+                className="w-full py-3 bg-[#003087] hover:bg-[#002070] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <CreditCard className="w-4 h-4" />
+                Thanh toán qua PayPal
+              </button>
+            </motion.div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-between">
+            <button onClick={handleCancelOrder} disabled={cancelLoading}
+              className="flex items-center gap-2 px-4 py-2.5 text-gray-500 hover:text-red-400 rounded-xl hover:bg-red-500/8 transition-all text-sm">
+              {cancelLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              Hủy đơn hàng
+            </button>
+            <Link href="/orders">
+              <button className="px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white rounded-xl text-sm transition-all">
+                Xem đơn hàng
+              </button>
+            </Link>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
 }
+

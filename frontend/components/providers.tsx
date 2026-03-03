@@ -64,7 +64,7 @@ function ClientWalletProviders({ children }: { children: React.ReactNode }) {
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
         <I18nextProvider i18n={i18n}>
           <ClientWalletProviders>{children}</ClientWalletProviders>
         </I18nextProvider>

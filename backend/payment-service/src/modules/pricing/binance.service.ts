@@ -5,7 +5,15 @@ import { logger } from '../../utils/logger';
 export class BinanceService {
   private readonly baseUrl = 'https://api.binance.com/api/v3';
 
+  // Stablecoins pegged ~1:1 with USD – no valid Binance *USDT pair
+  private readonly stablecoins = new Set(['USDTUSDT', 'USDCUSDT', 'DAIUSDT', 'BUSDUSDT']);
+
   async getPrice(symbol: string): Promise<number> {
+    // Stablecoin shortcut: 1 USDT ≈ 1 USD
+    if (this.stablecoins.has(symbol)) {
+      return 1.0;
+    }
+
     // Check cache first (1 second TTL)
     const cached = await this.getCachedPrice(symbol);
     if (cached) {
@@ -19,10 +27,10 @@ export class BinanceService {
       });
 
       const price = parseFloat(response.data.price);
-      
+
       // Cache for 1 second
       await setCache(`price:${symbol}`, price, 1);
-      
+
       return price;
     } catch (error) {
       logger.error('Error fetching price from Binance:', error);
@@ -39,11 +47,11 @@ export class BinanceService {
       });
 
       const prices: Record<string, number> = {};
-      
+
       for (const item of response.data) {
         const price = parseFloat(item.price);
         prices[item.symbol] = price;
-        
+
         // Cache each price
         await setCache(`price:${item.symbol}`, price, 1);
       }

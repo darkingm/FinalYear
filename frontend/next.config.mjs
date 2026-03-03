@@ -2,17 +2,18 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  
+  output: 'standalone',
+
   // Optimize production builds
   productionBrowserSourceMaps: false,
-  
+
   // Reduce bundle size
   modularizeImports: {
     'lucide-react': {
       transform: 'lucide-react/dist/esm/icons/{{kebabCase member}}',
     },
   },
-  
+
   // Image optimization
   images: {
     remotePatterns: [
@@ -26,14 +27,14 @@ const nextConfig = {
     ],
     formats: ['image/webp', 'image/avif'],
   },
-  
+
   // Compiler optimizations (disabled for Turbopack compatibility)
   // compiler: {
   //   removeConsole: process.env.NODE_ENV === 'production' ? {
   //     exclude: ['error', 'warn'],
   //   } : false,
   // },
-  
+
   // Experimental optimizations
   experimental: {
     optimizePackageImports: [
@@ -42,12 +43,12 @@ const nextConfig = {
       'framer-motion',
     ],
   },
-  
+
   // Webpack optimizations
   webpack: (config, { isServer }) => {
     // Externalize heavy packages
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
-    
+
     // Fix MetaMask SDK issues
     if (!isServer) {
       config.resolve.fallback = {
@@ -60,13 +61,13 @@ const nextConfig = {
         crypto: false,
       };
     }
-    
+
     // Ignore MetaMask SDK warnings
     config.ignoreWarnings = [
       { module: /node_modules\/@metamask\/sdk/ },
       { file: /node_modules\/@metamask\/sdk/ },
     ];
-    
+
     // Optimize chunks
     if (!isServer) {
       config.optimization = {
@@ -94,7 +95,7 @@ const nextConfig = {
         },
       };
     }
-    
+
     return config;
   },
 };

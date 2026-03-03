@@ -16,9 +16,12 @@ export async function getProfile(req: AuthRequest, res: Response, next: NextFunc
 export async function updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;
-    const { username, avatar_url, paypal_email } = req.body;
+    const { username, email, phone, address_line, avatar_url, paypal_email } = req.body;
     const user = await usersService.updateProfile(userId, {
       username,
+      email,
+      phone,
+      address_line,
       avatar_url,
       paypal_email,
     });

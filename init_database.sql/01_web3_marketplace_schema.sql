@@ -17,8 +17,13 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE users (
     user_id BIGSERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
-    wallet_address VARCHAR(42) NOT NULL UNIQUE,
+    wallet_address VARCHAR(42) UNIQUE,            -- nullable: OAuth users may not have a wallet yet
     username VARCHAR(64) UNIQUE,
+    password_hash VARCHAR(255),                    -- bcrypt hash for email/password login
+    google_id VARCHAR(255) UNIQUE,                 -- Google OAuth provider ID
+    facebook_id VARCHAR(255) UNIQUE,               -- Facebook OAuth provider ID
+    avatar_url VARCHAR(500),                       -- profile picture from OAuth or upload
+    paypal_email VARCHAR(255),                     -- PayPal email for paypal payments
     role VARCHAR(20) NOT NULL DEFAULT 'buyer' CHECK (role IN ('buyer', 'seller', 'admin')),
     status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'banned', 'deleted')),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -195,13 +200,26 @@ CREATE TABLE orders (
     seller_id BIGINT NOT NULL,
     shipping_address_id BIGINT,
     order_number VARCHAR(50) NOT NULL UNIQUE,
+    product_id BIGINT,                              -- main product (for single-product orders)
+    internal_order_id VARCHAR(255),                  -- UUID used by escrow contract
     quantity INT NOT NULL CHECK (quantity > 0),
     price_usd DECIMAL(18,2) NOT NULL CHECK (price_usd >= 0),
     subtotal DECIMAL(18,2) NOT NULL CHECK (subtotal >= 0),
     shipping_fee DECIMAL(18,2) NOT NULL DEFAULT 0 CHECK (shipping_fee >= 0),
     total_amount DECIMAL(18,2) NOT NULL CHECK (total_amount >= 0),
+    token_id INT,                                    -- selected crypto token
+    amount_token DECIMAL(36,18),                     -- price in token units
+    chain_id INT,                                    -- blockchain chain ID
+    escrow_contract VARCHAR(42),                     -- escrow contract address
+    tx_hash VARCHAR(128),                            -- submitted transaction hash
+    payment_method VARCHAR(20),                      -- 'crypto' | 'paypal'
+    price_expires_at TIMESTAMP,                      -- quote expiry
     status VARCHAR(20) NOT NULL DEFAULT 'pending' 
-        CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'refunded')),
+        CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'delivered',
+                          'completed', 'cancelled', 'refunded',
+                          'UNPAID', 'TX_SUBMITTED', 'TX_FAILED',
+                          'ONCHAIN_CONFIRMED', 'PAID', 'DELIVERING',
+                          'COMPLETED', 'DISPUTED')),
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -274,6 +292,27 @@ CREATE TABLE order_status_history (
     changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     FOREIGN KEY (changed_by) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+-- Payment records used by payment-service (crypto & PayPal)
+CREATE TABLE payments (
+    payment_id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    tx_hash VARCHAR(128),                            -- crypto 0x… hash or paypal-… id
+    chain_id INT,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'confirming', 'confirmed', 'failed')),
+    from_address VARCHAR(128),
+    to_address VARCHAR(128),
+    block_number BIGINT,
+    block_timestamp TIMESTAMP,
+    gas_used VARCHAR(78),
+    gas_price BIGINT,
+    verified_by_rpc BOOLEAN DEFAULT FALSE,
+    verified_by_indexer BOOLEAN DEFAULT FALSE,
+    confirmations INT DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- =====================================================
@@ -810,9 +849,9 @@ WHERE i.available > 0;
 -- SAMPLE DATA INSERTION (OPTIONAL - FOR TESTING)
 -- =====================================================
 
--- Insert admin user
-INSERT INTO users (email, wallet_address, username, role, status) VALUES
-('admin@marketplace.com', '0x0000000000000000000000000000000000000001', 'admin', 'admin', 'active');
+-- Insert admin user (wallet_address is now optional)
+INSERT INTO users (email, username, role, status) VALUES
+('admin@marketplace.com', 'admin', 'admin', 'active');
 
 -- Insert sample tokens
 INSERT INTO token_whitelist (symbol, token_address, chain_id, decimals, is_active) VALUES
@@ -829,7 +868,7 @@ INSERT INTO warehouses (name, code, country, province, address, status) VALUES
 -- COMMENTS FOR DOCUMENTATION
 -- =====================================================
 
-COMMENT ON TABLE users IS 'Core user accounts with wallet-based authentication';
+COMMENT ON TABLE users IS 'Core user accounts – email/password, OAuth (Google/Facebook), and wallet-based auth';
 COMMENT ON TABLE seller_profiles IS 'Enhanced seller information with KYC verification status';
 COMMENT ON TABLE addresses IS 'Shipping addresses for physical goods delivery';
 COMMENT ON TABLE products IS 'Product catalog with pricing and metadata';
@@ -840,9 +879,10 @@ COMMENT ON TABLE inventory IS 'Stock tracking with optimistic locking for concur
 COMMENT ON TABLE inventory_locks IS 'Temporary inventory reservations during checkout';
 COMMENT ON TABLE carts IS 'Shopping carts for users';
 COMMENT ON TABLE cart_items IS 'Items in shopping cart with price snapshots';
-COMMENT ON TABLE orders IS 'Customer orders with status tracking';
+COMMENT ON TABLE orders IS 'Customer orders with crypto/paypal payment support and status tracking';
 COMMENT ON TABLE order_items IS 'Line items within orders';
 COMMENT ON TABLE order_payments IS 'Multi-token payment tracking with blockchain verification';
+COMMENT ON TABLE payments IS 'Simplified payment records used by payment-service workers';
 COMMENT ON TABLE order_status_history IS 'Audit trail for order status changes';
 COMMENT ON TABLE shipments IS 'Shipping and delivery tracking';
 COMMENT ON TABLE refunds IS 'Refund transactions with escrow releases';

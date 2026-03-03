@@ -13,7 +13,7 @@ export const usersService = {
 
   updateProfile: async (
     userId: number,
-    data: { username?: string; avatar_url?: string; paypal_email?: string }
+    data: { username?: string; email?: string; phone?: string; address_line?: string; avatar_url?: string; paypal_email?: string }
   ) => {
     const user = await usersRepository.updateProfile(userId, data);
     if (!user) {

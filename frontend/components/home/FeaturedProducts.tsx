@@ -7,7 +7,9 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, ShoppingCart } from 'lucide-react';
+import { useCartStore } from '@/store/cart-store';
+import { toast } from 'sonner';
 
 const PLACEHOLDER_IMAGE = '/placeholder-product.svg';
 
@@ -15,6 +17,18 @@ export function FeaturedProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
+  const addItem = useCartStore((state) => state.addItem);
+
+  const handleAddToCart = (e: React.MouseEvent, product: Product) => {
+    e.preventDefault();
+    addItem({
+      product_id: product.product_id,
+      name: product.name,
+      base_price_usd: Number(product.base_price_usd),
+      metadata: product.metadata,
+    });
+    toast.success('Đã thêm vào giỏ hàng');
+  };
 
   useEffect(() => {
     (async () => {
@@ -90,13 +104,28 @@ export function FeaturedProducts() {
                       {product.description}
                     </p>
 
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center mb-3">
                       <span className="text-lg font-bold text-primary">
                         ${Number(product.base_price_usd).toFixed(2)}
                       </span>
                       <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
                         {product.stock} left
                       </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={(e) => handleAddToCart(e, product)}
+                        variant="outline"
+                        className="flex-1 bg-background border-border hover:bg-primary/10 text-foreground transition-all h-8 text-xs font-medium px-2 z-10 relative"
+                      >
+                        <ShoppingCart className="w-3.5 h-3.5 mr-1" /> Cart
+                      </Button>
+                      <Button
+                        onClick={(e) => { e.preventDefault(); window.location.href = `/products/${product.product_id}`; }}
+                        className="flex-1 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-semibold h-8 text-xs px-2 shadow shadow-yellow-500/20 z-10 relative"
+                      >
+                        Mua ngay
+                      </Button>
                     </div>
                   </div>
                 </div>

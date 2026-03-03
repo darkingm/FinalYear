@@ -54,7 +54,10 @@ export class AuthService {
 
     const user = result.rows[0];
 
-    // Check password
+    // Check password — users who signed up via OAuth/wallet may not have a password
+    if (!user.password_hash) {
+      throw new AppError('Invalid email/username or password', 401);
+    }
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
       throw new AppError('Invalid email/username or password', 401);
@@ -143,7 +146,7 @@ export class AuthService {
     image?: string;
   }) {
     const idField = data.provider === 'google' ? 'google_id' : 'facebook_id';
-    
+
     // Find user by provider ID
     let result = await query(
       `SELECT * FROM users WHERE ${idField} = $1`,
@@ -154,7 +157,7 @@ export class AuthService {
     if (result.rows.length === 0) {
       // Check if email exists
       result = await query('SELECT * FROM users WHERE email = $1', [data.email]);
-      
+
       if (result.rows.length > 0) {
         // Link OAuth account to existing user
         await query(
@@ -188,7 +191,7 @@ export class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
-      
+
       // Check if token is blacklisted
       const blacklisted = await this.isTokenBlacklisted(refreshToken);
       if (blacklisted) {

@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 export default function WishlistPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { items, loading, fetch, remove } = useWishlistStore();
+  const { items, removeItem } = useWishlistStore();
   const { addItem: addToCart } = useCartStore();
   const [removing, setRemoving] = useState<number | null>(null);
 
@@ -27,16 +27,10 @@ export default function WishlistPage() {
     }
   }, [isAuthenticated, authLoading, router]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetch();
-    }
-  }, [isAuthenticated]);
-
-  const handleRemove = async (productId: number) => {
+  const handleRemove = (productId: number) => {
     setRemoving(productId);
     try {
-      await remove(productId);
+      removeItem(productId);
       toast.success('Removed from wishlist');
     } catch (error: any) {
       toast.error(error.message || 'Failed to remove');
@@ -47,7 +41,7 @@ export default function WishlistPage() {
 
   const handleAddToCart = async (item: any) => {
     try {
-      await addToCart(item.product_id, null, 1);
+      addToCart(item);
       toast.success('Added to cart');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
@@ -84,17 +78,8 @@ export default function WishlistPage() {
           </div>
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-80 bg-card rounded-xl animate-pulse" />
-            ))}
-          </div>
-        )}
-
         {/* Empty */}
-        {!loading && items.length === 0 && (
+        {items.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -112,7 +97,7 @@ export default function WishlistPage() {
         )}
 
         {/* Items */}
-        {!loading && items.length > 0 && (
+        {items.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {items.map((item, idx) => (
               <motion.div
@@ -171,11 +156,11 @@ export default function WishlistPage() {
                         </span>
                       )}
                     </div>
-                    {item.avg_rating > 0 && (
+                    {item.avg_rating && item.avg_rating > 0 && (
                       <div className="flex items-center gap-1 text-sm">
                         <span className="text-yellow-500">★</span>
                         <span className="font-medium">{item.avg_rating.toFixed(1)}</span>
-                        <span className="text-muted-foreground">({item.review_count})</span>
+                        <span className="text-muted-foreground">({item.review_count || 0})</span>
                       </div>
                     )}
                   </div>

@@ -70,7 +70,7 @@ export default function DisputeDetailPage() {
 
   if (!dispute) return null;
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = (user as any)?.role === 'admin';
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20';
@@ -107,7 +107,7 @@ export default function DisputeDetailPage() {
                     {dispute.status.toUpperCase()}
                   </span>
                   <span className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground">
-                    {dispute.reason_type.replace('_', ' ').toUpperCase()}
+                    {(dispute.reason_type || '').replace('_', ' ').toUpperCase()}
                   </span>
                 </div>
               </div>
