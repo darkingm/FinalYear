@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: marketplace-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1
+      POSTGRES_DB: marketplace_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../init_database.sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - marketplace-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketplace-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - marketplace-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: marketplace-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: kaitojpla
+      RABBITMQ_DEFAULT_PASS: 2909
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672" # AMQP port
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - marketplace-network
+
+  main-api:
+    build:
+      context: ../backend/main-service
+      dockerfile: Dockerfile
+    container_name: marketplace-main-api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:1@postgres:5432/marketplace_db
+      REDIS_URL: redis://:redis123@redis:6379
+      RABBITMQ_URL: amqp://kaitojpla:2909@rabbitmq:5672
+      JWT_SECRET: your_jwt_secret_here
+      JWT_REFRESH_SECRET: your_jwt_refresh_secret
+      AWS_S3_BUCKET: your-s3-bucket-name
+      AWS_ACCESS_KEY_ID: your_aws_access_key
+      AWS_SECRET_ACCESS_KEY: your_aws_secret_key
+      AWS_REGION: us-east-1
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+  payment-api:
+    build:
+      context: ../backend/payment-service
+      dockerfile: Dockerfile
+    container_name: marketplace-payment-api
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:1@postgres:5432/marketplace_db
+      REDIS_URL: redis://:redis123@redis:6379
+      RABBITMQ_URL: amqp://kaitojpla:2909@rabbitmq:5672
+      PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
+      PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
+      PAYPAL_MODE: sandbox
+      ESCROW_CONTRACT_ADDRESS: 0xcde08be019048000000000000000000000000000
+      POLYGON_RPC_URL: https://polygon.drpc.org
+      POLYGON_MUMBAI_RPC_URL: https://rpc-amoy.polygon.technology
+      ARBITRUM_RPC_URL: https://arb1.arbitrum.io/rpc
+      MORALIS_API_KEY: your_moralis_api_key
+      PRIVATE_KEY: your_private_key_here
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: marketplace-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_PAYMENT_API_URL: http://localhost:3002
+      NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
+      NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
+      NEXT_PUBLIC_PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
+      NEXT_PUBLIC_POLYGON_RPC: https://polygon.drpc.org
+      NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON: 0xcde08be019048000000000000000000000000000
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: 2025428d471768844b11469874320127
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: qo/QS42PzUNj0lFF9JbxXhD2S247Yf5ZMCoar3leqaw=
+      GOOGLE_CLIENT_ID: 946575631331-1p51ll7tpqd0bo1impek2nggoqjrcoo8.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: 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
+      FACEBOOK_CLIENT_ID: 1497732641781702
+      FACEBOOK_CLIENT_SECRET: 7bbce842d85baa3c21fca3101b42c832
+    ports:
+      - "3000:3000"
+    depends_on:
+      - main-api
+      - payment-api
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+
+networks:
+  marketplace-network:
+    driver: bridge

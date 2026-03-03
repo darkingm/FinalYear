@@ -1,0 +1,27 @@
+{
+  "name": "marketplace-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for crypto marketplace",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:mumbai": "hardhat run scripts/deploy.ts --network polygonMumbai",
+    "deploy:polygon": "hardhat run scripts/deploy.ts --network polygon",
+    "verify": "hardhat verify --network polygonMumbai"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.3",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.2",
+    "@types/node": "^20.11.5",
+    "hardhat": "^2.19.4",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.1"
+  }
+}

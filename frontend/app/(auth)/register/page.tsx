@@ -1,0 +1,274 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { apiClient } from '@/lib/api/client';
+import Link from 'next/link';
+import { Eye, EyeOff, Mail, Lock, User, Zap, CheckCircle, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+function PasswordStrengthBar({ password, t }: { password: string, t: any }) {
+  const checks = [
+    { label: '8+', ok: password.length >= 8 },
+    { label: 'a-z', ok: /[a-z]/.test(password) },
+    { label: 'A-Z', ok: /[A-Z]/.test(password) },
+    { label: '0-9', ok: /\d/.test(password) },
+  ];
+  const score = checks.filter(c => c.ok).length;
+  const colors = ['bg-red-500', 'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-emerald-500'];
+
+  if (!password) return null;
+
+  return (
+    <div className="mt-2.5">
+      <div className="flex gap-1 mb-2">
+        {[1, 2, 3, 4].map(i => (
+          <div
+            key={i}
+            className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${i <= score ? colors[score] : 'bg-secondary'}`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {checks.map(c => (
+          <div key={c.label} className="flex items-center gap-1">
+            {c.ok
+              ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              : <XCircle className="w-3.5 h-3.5 text-muted-foreground/50" />}
+            <span className={`text-[10px] uppercase tracking-wider font-semibold ${c.ok ? 'text-foreground' : 'text-muted-foreground'}`}>
+              {c.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  const { t } = useTranslation('common');
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Dynamic schema inside to use translations
+  const registerSchema = z.object({
+    email: z.string().email('Email ' + t('common.error')),
+    username: z.string().min(3).max(20),
+    password: z
+      .string()
+      .min(8)
+      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
+    confirmPassword: z.string(),
+    terms: z.boolean().refine(val => val === true, t('auth.agreeToTerms')),
+  }).refine(d => d.password === d.confirmPassword, {
+    message: t('auth.confirmPassword') + ' ' + t('common.error'),
+    path: ['confirmPassword'],
+  });
+
+  type RegisterFormData = z.infer<typeof registerSchema>;
+
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+  });
+
+  const password = watch('password', '');
+
+  const onSubmit = async (data: RegisterFormData) => {
+    setIsLoading(true);
+    try {
+      await apiClient.post('/api/auth/register', {
+        email: data.email,
+        username: data.username,
+        password: data.password,
+      });
+      toast.success(t('auth.registerSuccess'));
+      router.push('/login');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || t('common.error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fieldClass = (hasError: boolean) =>
+    `w-full pl-10 pr-4 py-3 bg-secondary/30 border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all text-sm ${hasError
+      ? 'border-destructive/50 focus:ring-destructive/20'
+      : 'border-border focus:border-primary/60 focus:ring-primary/10'
+    }`;
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden p-4 sm:p-6">
+      {/* Background glowing effects */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[10%] right-[20%] w-72 h-72 bg-[#f0b90b]/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[20%] left-[20%] w-96 h-96 bg-blue-600/10 rounded-full blur-[120px]" />
+        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.03]" />
+      </div>
+
+      <div className="w-full max-w-[460px] bg-card/60 backdrop-blur-xl border border-border shadow-2xl rounded-3xl p-8 sm:p-10 relative z-10 transition-all duration-300 hover:border-primary/20 mt-16 sm:mt-8 mb-8">
+
+        {/* Logo and Header */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-flex items-center gap-2 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f0b90b] to-[#e6a800] flex items-center justify-center shadow-lg shadow-yellow-500/20">
+              <Zap className="w-6 h-6 text-black fill-black" />
+            </div>
+          </Link>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 tracking-tight">
+            {t('auth.createAccount')}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {t('auth.noCreditCard')}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.email')}</label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="email"
+                {...register('email')}
+                placeholder="user@example.com"
+                autoComplete="email"
+                className={fieldClass(!!errors.email)}
+              />
+            </div>
+            {errors.email && (
+              <p className="mt-1.5 text-xs text-destructive flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-destructive" />
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+
+          {/* Username */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.username')}</label>
+            <div className="relative">
+              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                {...register('username')}
+                placeholder="johndoe"
+                autoComplete="username"
+                className={fieldClass(!!errors.username)}
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.password')}</label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type={showPw ? 'text' : 'password'}
+                {...register('password')}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                className={`${fieldClass(!!errors.password)} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <PasswordStrengthBar password={password} t={t} />
+          </div>
+
+          {/* Confirm Password */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.confirmPassword')}</label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                {...register('confirmPassword')}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                className={`${fieldClass(!!errors.confirmPassword)} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm(!showConfirm)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {errors.confirmPassword && (
+              <p className="mt-1.5 text-xs text-destructive flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-destructive" />
+                {errors.confirmPassword.message}
+              </p>
+            )}
+          </div>
+
+          {/* Terms */}
+          <div className="pt-2">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div className="relative flex items-center justify-center mt-0.5">
+                <input
+                  type="checkbox"
+                  {...register('terms')}
+                  className="peer w-4 h-4 opacity-0 absolute inset-0 cursor-pointer"
+                />
+                <div className="w-5 h-5 border-2 border-muted-foreground/30 rounded-md peer-checked:bg-primary peer-checked:border-primary transition-colors flex items-center justify-center">
+                  <CheckCircle className="w-3.5 h-3.5 text-primary-foreground opacity-0 peer-checked:opacity-100 transition-opacity" />
+                </div>
+              </div>
+              <span className="text-sm text-muted-foreground leading-relaxed">
+                {t('auth.termsText')} <Link href="#" className="text-primary hover:underline font-medium">{t('auth.termsLink')}</Link> {t('auth.and')} <Link href="#" className="text-primary hover:underline font-medium">{t('auth.privacyPolicy')}</Link>
+              </span>
+            </label>
+            {errors.terms && <p className="mt-1.5 text-xs text-destructive pl-8">{errors.terms.message}</p>}
+          </div>
+
+          {/* Submit */}
+          <div className="pt-4">
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3.5 rounded-xl shadow-lg shadow-primary/20 transition-all h-auto text-sm"
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  {t('auth.creatingAccount')}
+                </div>
+              ) : t('auth.createAccountFree')}
+            </Button>
+          </div>
+        </form>
+
+        <p className="mt-8 text-center text-sm text-muted-foreground">
+          {t('auth.alreadyHaveAccount')}{' '}
+          <Link href="/login" className="text-primary hover:text-primary/80 font-bold transition-colors">
+            {t('auth.login')}
+          </Link>
+        </p>
+      </div>
+
+      {/* Footer Info */}
+      <div className="absolute bottom-6 left-0 right-0 text-center">
+        <p className="text-[11px] text-muted-foreground font-medium flex items-center justify-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-primary" />
+          {t('auth.connectWalletAfter')}
+        </p>
+      </div>
+    </div>
+  );
+}
