@@ -51,7 +51,17 @@
     "loginSuccess": "Login successful!",
     "registerSuccess": "Registration successful!",
     "logoutSuccess": "Logged out successfully",
-    "completeCaptcha": "Please complete the CAPTCHA"
+    "completeCaptcha": "Please complete the CAPTCHA",
+    "forgotPasswordTitle": "Forgot Password",
+    "forgotPasswordDesc": "Enter your email and we'll send you a reset link",
+    "sendResetLink": "Send Reset Link",
+    "sendingResetLink": "Sending...",
+    "resetLinkSent": "Reset link sent! Check your email.",
+    "resetLinkFailed": "Failed to send reset link",
+    "backToLogin": "Back to Login",
+    "resetPassword": "Reset Password",
+    "newPassword": "New Password",
+    "passwordUpdated": "Password updated successfully!"
   },
   "wallet": {
     "totalBalance": "Total Balance",

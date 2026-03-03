@@ -51,7 +51,17 @@
     "loginSuccess": "Đăng nhập thành công!",
     "registerSuccess": "Đăng ký thành công!",
     "logoutSuccess": "Đăng xuất thành công",
-    "completeCaptcha": "Vui lòng hoàn thành CAPTCHA"
+    "completeCaptcha": "Vui lòng hoàn thành CAPTCHA",
+    "forgotPasswordTitle": "Quên mật khẩu",
+    "forgotPasswordDesc": "Nhập email của bạn và chúng tôi sẽ gửi link đặt lại mật khẩu",
+    "sendResetLink": "Gửi link đặt lại",
+    "sendingResetLink": "Đang gửi...",
+    "resetLinkSent": "Đã gửi link! Kiểm tra email của bạn.",
+    "resetLinkFailed": "Gửi link đặt lại thất bại",
+    "backToLogin": "Quay lại đăng nhập",
+    "resetPassword": "Đặt lại mật khẩu",
+    "newPassword": "Mật khẩu mới",
+    "passwordUpdated": "Cập nhật mật khẩu thành công!"
   },
   "wallet": {
     "totalBalance": "Tổng số dư",
