@@ -108,7 +108,7 @@ services:
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: 587
       SMTP_USER: kaitojpla@gmail.com
-      SMTP_PASSWORD: kien2909
+      SMTP_PASSWORD: cltk gtwx cgek mofm
       HCAPTCHA_SECRET: ES_9a13fd597b2c4cd5a3b0ded489fd5e17
       FRONTEND_URL: https://kienai.id.vn
     ports:
