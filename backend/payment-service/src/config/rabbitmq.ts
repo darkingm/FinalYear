@@ -1,4 +1,4 @@
-import amqp, { Channel, Connection } from 'amqplib';
+import amqp from 'amqplib';
 import { logger } from '../utils/logger';
 import 'dotenv/config';
 
