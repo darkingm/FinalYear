@@ -6,7 +6,7 @@ services:
     container_name: marketplace-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1
+      POSTGRES_PASSWORD: "@Kien2909"
       POSTGRES_DB: marketplace_db
     ports:
       - "5433:5432"
@@ -24,13 +24,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: marketplace-redis
-    command: redis-server --appendonly yes --requirepass redis123
+    command: redis-server --appendonly yes --requirepass '@Kien2909'
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      test: [ "CMD", "redis-cli", "-a", "@Kien2909", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -42,7 +42,7 @@ services:
     container_name: marketplace-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: kaitojpla
-      RABBITMQ_DEFAULT_PASS: 2909
+      RABBITMQ_DEFAULT_PASS: "@Kien2909"
       RABBITMQ_DEFAULT_VHOST: /
     ports:
       - "5672:5672" # AMQP port
@@ -65,9 +65,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:1@postgres:5432/marketplace_db
-      REDIS_URL: redis://:redis123@redis:6379
-      RABBITMQ_URL: amqp://kaitojpla:2909@rabbitmq:5672
+      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
+      REDIS_URL: redis://:%40Kien2909@redis:6379
+      RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
       JWT_SECRET: your_jwt_secret_here
       JWT_REFRESH_SECRET: your_jwt_refresh_secret
       JWT_EXPIRES_IN: 24h
@@ -106,9 +106,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3002
-      DATABASE_URL: postgresql://postgres:1@postgres:5432/marketplace_db
-      REDIS_URL: redis://:redis123@redis:6379
-      RABBITMQ_URL: amqp://kaitojpla:2909@rabbitmq:5672
+      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
+      REDIS_URL: redis://:%40Kien2909@redis:6379
+      RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
       PAYPAL_MODE: sandbox
