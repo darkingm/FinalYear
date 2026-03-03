@@ -13,7 +13,7 @@ import { Eye, EyeOff, Mail, Lock, Zap, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export default function LoginPage() {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);

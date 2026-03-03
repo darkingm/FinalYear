@@ -51,7 +51,7 @@ function PasswordStrengthBar({ password, t }: { password: string, t: any }) {
 }
 
 export default function RegisterPage() {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
