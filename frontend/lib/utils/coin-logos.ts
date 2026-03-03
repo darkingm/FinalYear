@@ -16,5 +16,7 @@ export const COIN_LOGOS: Record<string, string> = {
 };
 
 export function getCoinLogo(symbol: string): string {
-  return COIN_LOGOS[symbol.toUpperCase()] || `https://cryptologos.cc/logos/${symbol.toLowerCase()}-logo.svg`;
+  if (!symbol) return '';
+  const cleanSymbol = symbol.replace('USDT', '').toLowerCase();
+  return `https://assets.coincap.io/assets/icons/${cleanSymbol}@2x.png`;
 }

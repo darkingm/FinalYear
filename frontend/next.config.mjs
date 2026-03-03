@@ -18,6 +18,7 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cryptologos.cc' },
+      { protocol: 'https', hostname: 'assets.coincap.io' },
       { protocol: 'https', hostname: 'via.placeholder.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: 'graph.facebook.com' },
