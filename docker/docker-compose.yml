@@ -24,7 +24,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: marketplace-redis
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass redis123
     ports:
       - "6379:6379"
     volumes:
@@ -70,10 +70,21 @@ services:
       RABBITMQ_URL: amqp://kaitojpla:2909@rabbitmq:5672
       JWT_SECRET: your_jwt_secret_here
       JWT_REFRESH_SECRET: your_jwt_refresh_secret
-      AWS_S3_BUCKET: your-s3-bucket-name
+      JWT_EXPIRES_IN: 24h
+      JWT_REFRESH_EXPIRES_IN: 7d
+      AWS_S3_BUCKET: your-product-images-bucket
       AWS_ACCESS_KEY_ID: your_aws_access_key
       AWS_SECRET_ACCESS_KEY: your_aws_secret_key
       AWS_REGION: us-east-1
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: kaitojpla@gmail.com
+      SMTP_PASSWORD: kien2909
+      HCAPTCHA_SECRET: ES_9a13fd597b2c4cd5a3b0ded489fd5e17
+      CLOUDINARY_CLOUD_NAME: your_cloudinary_cloud
+      CLOUDINARY_API_KEY: your_cloudinary_key
+      CLOUDINARY_API_SECRET: your_cloudinary_secret
+      FRONTEND_URL: http://localhost:3000
     ports:
       - "3001:3001"
     depends_on:
@@ -136,6 +147,7 @@ services:
       NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: 2025428d471768844b11469874320127
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: qo/QS42PzUNj0lFF9JbxXhD2S247Yf5ZMCoar3leqaw=
+      PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
       GOOGLE_CLIENT_ID: 946575631331-1p51ll7tpqd0bo1impek2nggoqjrcoo8.apps.googleusercontent.com
       GOOGLE_CLIENT_SECRET: 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
       FACEBOOK_CLIENT_ID: 1497732641781702
