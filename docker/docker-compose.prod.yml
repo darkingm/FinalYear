@@ -139,7 +139,7 @@ services:
     container_name: marketplace-frontend
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: https://kienai.id.vn/api
+      NEXT_PUBLIC_API_URL: https://kienai.id.vn
       NEXT_PUBLIC_PAYMENT_API_URL: https://kienai.id.vn/payment
       NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea

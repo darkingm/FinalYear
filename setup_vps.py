@@ -15,7 +15,7 @@ JWT_SECRET=fyp_jwt_Kien29092004_marketplace_2024_prod
 JWT_REFRESH_SECRET=fyp_refresh_Kien29092004_marketplace_2024_prod
 NEXTAUTH_URL=https://kienai.id.vn
 NEXTAUTH_SECRET=qo/QS42PzUNj0lFF9JbxXhD2S247Yf5ZMCoar3leqaw=
-DOCKERHUB_USERNAME=kaitojpla
+DOCKERHUB_USERNAME=kiendzpro
 GOOGLE_CLIENT_SECRET=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
 FACEBOOK_CLIENT_SECRET=7bbce842d85baa3c21fca3101b42c832
 PAYPAL_SECRET=EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
@@ -158,7 +158,7 @@ services:
     container_name: marketplace-frontend
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: https://kienai.id.vn/api
+      NEXT_PUBLIC_API_URL: https://kienai.id.vn
       NEXT_PUBLIC_PAYMENT_API_URL: https://kienai.id.vn/payment
       NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
