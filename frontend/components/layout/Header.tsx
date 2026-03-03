@@ -16,6 +16,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import { useTranslation } from 'react-i18next';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
 
 export function Header() {
   const { isAuthenticated, user } = useAuth();
@@ -27,6 +28,7 @@ export function Header() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
+  const [tickers, setTickers] = useState<any[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
   // force re-render on language change
   const [, setLang] = useState(i18n.language);
@@ -57,6 +59,32 @@ export function Header() {
       window.removeEventListener('languagechange', handler);
     };
   }, [i18n]);
+
+  useEffect(() => {
+    const fetchTickers = async () => {
+      try {
+        const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+        const data = await res.json();
+        const topSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
+        const filtered = topSymbols.map(s => {
+          const t = data.find((d: any) => d.symbol === s + 'USDT');
+          if (!t) return null;
+          return {
+            s,
+            p: Number(t.lastPrice).toLocaleString(undefined, { maximumFractionDigits: 4 }),
+            c: (Number(t.priceChangePercent) > 0 ? '+' : '') + Number(t.priceChangePercent).toFixed(2) + '%',
+            pos: Number(t.priceChangePercent) >= 0
+          };
+        }).filter(Boolean);
+        setTickers(filtered);
+      } catch (error) {
+        console.error('Failed to fetch tickers', error);
+      }
+    };
+    fetchTickers();
+    const interval = setInterval(fetchTickers, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     disconnect();
@@ -94,37 +122,25 @@ export function Header() {
       {/* Ticker bar */}
       <div className="bg-background border-b border-border text-muted-foreground text-xs py-1.5 overflow-hidden hidden md:block">
         <div className="flex items-center gap-8 animate-marquee whitespace-nowrap w-max pr-8 hover:[animation-play-state:paused]">
-          {[
-            { s: 'BTC', p: '65,700', c: '+0.19%', pos: true },
-            { s: 'ETH', p: '3,412', c: '-0.45%', pos: false },
-            { s: 'BNB', p: '520.30', c: '+1.20%', pos: true },
-            { s: 'SOL', p: '145.80', c: '+2.10%', pos: true },
-            { s: 'XRP', p: '0.5430', c: '-0.80%', pos: false },
-            { s: 'ADA', p: '0.4520', c: '+0.60%', pos: true },
-            { s: 'DOGE', p: '0.1230', c: '-1.20%', pos: false },
-            { s: 'AVAX', p: '38.20', c: '+3.10%', pos: true },
-            { s: 'DOT', p: '5.80', c: '-0.50%', pos: false },
-            { s: 'MATIC', p: '0.62', c: '+1.50%', pos: true },
-          ].concat([
-            { s: 'BTC', p: '65,700', c: '+0.19%', pos: true },
-            { s: 'ETH', p: '3,412', c: '-0.45%', pos: false },
-            { s: 'BNB', p: '520.30', c: '+1.20%', pos: true },
-            { s: 'SOL', p: '145.80', c: '+2.10%', pos: true },
-            { s: 'XRP', p: '0.5430', c: '-0.80%', pos: false },
-            { s: 'ADA', p: '0.4520', c: '+0.60%', pos: true },
-            { s: 'DOGE', p: '0.1230', c: '-1.20%', pos: false },
-            { s: 'AVAX', p: '38.20', c: '+3.10%', pos: true },
-            { s: 'DOT', p: '5.80', c: '-0.50%', pos: false },
-            { s: 'MATIC', p: '0.62', c: '+1.50%', pos: true },
-          ]).map((coin, idx) => (
+          {tickers.length > 0 ? tickers.concat(tickers).map((coin, idx) => (
             <Link key={`${coin.s}-${idx}`} href={`/trading/${coin.s}USDT`}
               className="flex items-center gap-1.5 hover:text-foreground transition-colors">
-              <img src={`https://assets.coincap.io/assets/icons/${coin.s.toLowerCase()}@2x.png`} alt={coin.s} className="w-4 h-4 object-contain" />
+              <img src={getCoinLogo(coin.s)} alt={coin.s} className="w-4 h-4 object-contain" />
               <span className="font-semibold text-foreground">{coin.s}/USDT</span>
               <span>${coin.p}</span>
               <span className={coin.pos ? 'text-emerald-500 bg-emerald-500/10 px-1 py-0.5 rounded' : 'text-red-500 bg-red-500/10 px-1 py-0.5 rounded'}>{coin.c}</span>
             </Link>
-          ))}
+          )) : (
+            <div className="flex items-center gap-8">
+              {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-border animate-pulse" />
+                  <div className="w-12 h-3 rounded bg-border animate-pulse" />
+                  <div className="w-16 h-3 rounded bg-border animate-pulse" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
