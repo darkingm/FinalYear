@@ -86,10 +86,10 @@ export default function LoginPage() {
             </div>
           </Link>
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 tracking-tight">
-            {t('auth.welcomeBack')}
+            Welcome Back
           </h1>
           <p className="text-muted-foreground text-sm">
-            {t('auth.loginToContinue')}
+            Login to continue
           </p>
         </div>
 

@@ -1,15 +1,11 @@
 version: '3.8'
 
 # ============================================================
-# PRODUCTION compose — Security-hardened
-# - Database / Redis / RabbitMQ KHÔNG mở cổng ra internet
-# - Nginx duy nhất expose port 80 ra ngoài
-# - Các service backend chỉ giao tiếp qua Docker internal network
+# PRODUCTION — VPS dùng System Nginx (đã có SSL) + Docker containers
+# Containers bind port ra localhost, system nginx proxy vào
 # ============================================================
 
 services:
-
-  # ── Infrastructure ─────────────────────────────────────────
 
   postgres:
     image: postgres:15-alpine
@@ -18,7 +14,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-marketplace_db}
-    # KHÔNG mở ports ra ngoài — chỉ accessible trong Docker network
     expose:
       - "5432"
     volumes:
@@ -37,7 +32,6 @@ services:
     image: redis:7-alpine
     container_name: marketplace-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    # KHÔNG mở ports ra ngoài
     expose:
       - "6379"
     volumes:
@@ -55,14 +49,13 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: marketplace-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kaitojpla}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kiendzpro}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: /
-    # Management UI chỉ bind localhost (127.0.0.1) — không ra internet
     ports:
-      - "127.0.0.1:15672:15672" # Management UI — chỉ xem qua SSH tunnel
+      - "127.0.0.1:15672:15672"
     expose:
-      - "5672" # AMQP — chỉ trong Docker network
+      - "5672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -74,44 +67,30 @@ services:
       - marketplace-network
     restart: unless-stopped
 
-  # ── Application Services ────────────────────────────────────
-
   main-api:
     image: ${DOCKERHUB_USERNAME}/marketplace-main-api:latest
     container_name: marketplace-main-api
     environment:
       NODE_ENV: production
       PORT: 3001
-      # Connection strings (@ URL-encoded thành %40)
-      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
-      REDIS_URL: redis://:%40Kien2909@redis:6379
-      RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
-      # JWT — dùng giá trị thật từ docker/.env hoặc secret manager
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/marketplace_db
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kiendzpro}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_EXPIRES_IN: 24h
       JWT_REFRESH_EXPIRES_IN: 7d
-      # Email
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: 587
       SMTP_USER: kaitojpla@gmail.com
       SMTP_PASSWORD: kien2909
-      # hCaptcha
       HCAPTCHA_SECRET: ES_9a13fd597b2c4cd5a3b0ded489fd5e17
-      # AWS S3 (nếu dùng)
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-your-product-images-bucket}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-your_aws_access_key}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-your_aws_secret_key}
-      AWS_REGION: us-east-1
-      # Cloudinary (nếu dùng)
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-your_cloudinary_cloud}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-your_cloudinary_key}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-your_cloudinary_secret}
-      # Domain
+      CLOUDINARY_CLOUD_NAME: your_cloudinary_cloud
+      CLOUDINARY_API_KEY: your_cloudinary_key
+      CLOUDINARY_API_SECRET: your_cloudinary_secret
       FRONTEND_URL: https://kienai.id.vn
-    # KHÔNG expose port ra ngoài — chỉ Nginx được quyền gọi
-    expose:
-      - "3001"
+    ports:
+      - "127.0.0.1:3001:3001" # Chỉ localhost — nginx proxy vào
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,14 +108,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3002
-      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
-      REDIS_URL: redis://:%40Kien2909@redis:6379
-      RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
-      # PayPal
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/marketplace_db
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kiendzpro}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
-      PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
+      PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_MODE: sandbox
-      # Blockchain
       ESCROW_CONTRACT_ADDRESS: 0xcde08be019048000000000000000000000000000
       POLYGON_RPC_URL: https://polygon.drpc.org
       POLYGON_MUMBAI_RPC_URL: https://rpc-amoy.polygon.technology
@@ -144,8 +121,8 @@ services:
       MORALIS_API_KEY: ${MORALIS_API_KEY:-your_moralis_api_key}
       PRIVATE_KEY: ${BLOCKCHAIN_PRIVATE_KEY:-your_private_key_here}
       FRONTEND_URL: https://kienai.id.vn
-    expose:
-      - "3002"
+    ports:
+      - "127.0.0.1:3002:3002" # Chỉ localhost — nginx proxy vào
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,48 +139,24 @@ services:
     container_name: marketplace-frontend
     environment:
       NODE_ENV: production
-      # Server-side calls (Next.js SSR trong Docker network)
       NEXT_PUBLIC_API_URL: https://kienai.id.vn/api
       NEXT_PUBLIC_PAYMENT_API_URL: https://kienai.id.vn/payment
-      # Public config
       NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
       NEXT_PUBLIC_PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       NEXT_PUBLIC_POLYGON_RPC: https://polygon.drpc.org
       NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON: 0xcde08be019048000000000000000000000000000
       NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: 2025428d471768844b11469874320127
-      # NextAuth — PHẢI là domain thật
-      NEXTAUTH_URL: https://kienai.id.vn
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://kienai.id.vn}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      # OAuth (server-side secrets)
       GOOGLE_CLIENT_ID: 946575631331-1p51ll7tpqd0bo1impek2nggoqjrcoo8.apps.googleusercontent.com
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       FACEBOOK_CLIENT_ID: 1497732641781702
       FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET}
       PAYPAL_SECRET: ${PAYPAL_SECRET}
-    expose:
-      - "3000"
-    depends_on:
-      - main-api
-      - payment-api
-    networks:
-      - marketplace-network
-    restart: unless-stopped
-
-  # ── Nginx Reverse Proxy ─────────────────────────────────────
-  # Đây là cổng DUY NHẤT ra Internet
-
-  nginx:
-    image: nginx:alpine
-    container_name: marketplace-nginx
     ports:
-      - "80:80" # HTTP
-      # - "443:443"   # HTTPS (bật khi có SSL cert — xem hướng dẫn bên dưới)
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # - ./nginx/certs:/etc/nginx/certs:ro   # SSL certs (Let's Encrypt)
+      - "127.0.0.1:3000:3000" # Chỉ localhost — nginx proxy vào
     depends_on:
-      - frontend
       - main-api
       - payment-api
     networks:
