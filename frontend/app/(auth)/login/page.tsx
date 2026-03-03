@@ -21,8 +21,8 @@ export default function LoginPage() {
 
   // Dynamic schema inside component to use translations
   const loginSchema = z.object({
-    emailOrUsername: z.string().min(1, t('auth.emailOrUsername') + ' ' + t('common.error')),
-    password: z.string().min(1, t('auth.password') + ' ' + t('common.error')),
+    emailOrUsername: z.string().min(1, t('auth.emailOrUsername', 'Email or Username') + ' ' + t('common.error', 'Error')),
+    password: z.string().min(1, t('auth.password', 'Password') + ' ' + t('common.error', 'Error')),
   });
   type LoginFormData = z.infer<typeof loginSchema>;
 
@@ -39,13 +39,13 @@ export default function LoginPage() {
         redirect: false,
       });
       if (result?.error) {
-        toast.error(t('auth.emailPasswordIncorrect'));
+        toast.error(t('auth.emailPasswordIncorrect', 'Email/password incorrect'));
       } else {
-        toast.success(t('auth.loginSuccess'));
+        toast.success(t('auth.loginSuccess', 'Login successful!'));
         router.push('/');
       }
     } catch {
-      toast.error(t('auth.loginFailed'));
+      toast.error(t('auth.loginFailed', 'Login failed'));
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +56,7 @@ export default function LoginPage() {
     try {
       await signIn('google', { callbackUrl: '/' });
     } catch {
-      toast.error(t('auth.loginFailed'));
+      toast.error(t('auth.loginFailed', 'Login failed'));
       setGoogleLoading(false);
     }
   };
@@ -86,10 +86,10 @@ export default function LoginPage() {
             </div>
           </Link>
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 tracking-tight">
-            {t('auth.welcomeBack')}
+            {t('auth.welcomeBack', 'Welcome Back!')}
           </h1>
           <p className="text-muted-foreground text-sm">
-            {t('auth.loginToContinue')}
+            {t('auth.loginToContinue', 'Log in to continue')}
           </p>
         </div>
 
@@ -109,25 +109,25 @@ export default function LoginPage() {
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
           )}
-          {t('auth.loginWithGoogle')}
+          {t('auth.loginWithGoogle', 'Continue with Google')}
         </button>
 
         <div className="flex items-center gap-3 mb-6">
           <div className="flex-1 h-px bg-border" />
-          <span className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">{t('auth.orContinueWith')} email</span>
+          <span className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">{t('auth.orContinueWith', 'Or continue with')} email</span>
           <div className="flex-1 h-px bg-border" />
         </div>
 
         {/* Credentials Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.emailOrUsername')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.emailOrUsername', 'Email or Username')}</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
                 {...register('emailOrUsername')}
-                placeholder={`Email / ${t('auth.username')}`}
+                placeholder={`Email / ${t('auth.username', 'Username')}`}
                 autoComplete="email"
                 className={inputCls(!!errors.emailOrUsername)}
               />
@@ -142,9 +142,9 @@ export default function LoginPage() {
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-sm font-medium text-foreground">{t('auth.password')}</label>
+              <label className="block text-sm font-medium text-foreground">{t('auth.password', 'Password')}</label>
               <Link href="/forgot-password" className="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
-                {t('auth.forgotPassword')}
+                {t('auth.forgotPassword', 'Forgot password?')}
               </Link>
             </div>
             <div className="relative">
@@ -181,18 +181,18 @@ export default function LoginPage() {
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t('auth.loggingIn')}
+                  <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  {t('auth.loggingIn', 'Logging in...')}
                 </div>
-              ) : t('auth.login')}
+              ) : t('auth.login', 'Login')}
             </Button>
           </div>
         </form>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          {t('auth.dontHaveAccount')}{' '}
+          {t('auth.dontHaveAccount', "Don't have an account?")}{' '}
           <Link href="/register" className="text-primary hover:text-primary/80 font-bold transition-colors">
-            {t('auth.createAccountFree')}
+            {t('auth.createAccountFree', 'Create free account')}
           </Link>
         </p>
 

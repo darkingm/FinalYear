@@ -59,16 +59,16 @@ export default function RegisterPage() {
 
   // Dynamic schema inside to use translations
   const registerSchema = z.object({
-    email: z.string().email('Email ' + t('common.error')),
+    email: z.string().email('Email ' + t('common.error', 'Error')),
     username: z.string().min(3).max(20),
     password: z
       .string()
       .min(8)
       .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
     confirmPassword: z.string(),
-    terms: z.boolean().refine(val => val === true, t('auth.agreeToTerms')),
+    terms: z.boolean().refine(val => val === true, t('auth.agreeToTerms', 'I agree to the Terms and Conditions')),
   }).refine(d => d.password === d.confirmPassword, {
-    message: t('auth.confirmPassword') + ' ' + t('common.error'),
+    message: t('auth.confirmPassword', 'Confirm Password') + ' ' + t('common.error', 'Error'),
     path: ['confirmPassword'],
   });
 
@@ -88,10 +88,10 @@ export default function RegisterPage() {
         username: data.username,
         password: data.password,
       });
-      toast.success(t('auth.registerSuccess'));
+      toast.success(t('auth.registerSuccess', 'Registration successful!'));
       router.push('/login');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || t('common.error'));
+      toast.error(error.response?.data?.message || t('common.error', 'Error'));
     } finally {
       setIsLoading(false);
     }
@@ -122,17 +122,17 @@ export default function RegisterPage() {
             </div>
           </Link>
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 tracking-tight">
-            {t('auth.createAccount')}
+            {t('auth.createAccount', 'Create Account')}
           </h1>
           <p className="text-muted-foreground text-sm">
-            {t('auth.noCreditCard')}
+            {t('auth.noCreditCard', 'Free to join, no credit card required')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.email')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.email', 'Email')}</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -153,7 +153,7 @@ export default function RegisterPage() {
 
           {/* Username */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.username')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.username', 'Username')}</label>
             <div className="relative">
               <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -168,7 +168,7 @@ export default function RegisterPage() {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.password')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.password', 'Password')}</label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -191,7 +191,7 @@ export default function RegisterPage() {
 
           {/* Confirm Password */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.confirmPassword')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{t('auth.confirmPassword', 'Confirm Password')}</label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -231,7 +231,7 @@ export default function RegisterPage() {
                 </div>
               </div>
               <span className="text-sm text-muted-foreground leading-relaxed">
-                {t('auth.termsText')} <Link href="#" className="text-primary hover:underline font-medium">{t('auth.termsLink')}</Link> {t('auth.and')} <Link href="#" className="text-primary hover:underline font-medium">{t('auth.privacyPolicy')}</Link>
+                {t('auth.termsText', 'I agree to the')} <Link href="#" className="text-primary hover:underline font-medium">{t('auth.termsLink', 'Terms of Service')}</Link> {t('auth.and', 'and')} <Link href="#" className="text-primary hover:underline font-medium">{t('auth.privacyPolicy', 'Privacy Policy')}</Link>
               </span>
             </label>
             {errors.terms && <p className="mt-1.5 text-xs text-destructive pl-8">{errors.terms.message}</p>}
@@ -247,17 +247,17 @@ export default function RegisterPage() {
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                  {t('auth.creatingAccount')}
+                  {t('auth.creatingAccount', 'Creating account...')}
                 </div>
-              ) : t('auth.createAccountFree')}
+              ) : t('auth.createAccountFree', 'Create free account')}
             </Button>
           </div>
         </form>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          {t('auth.alreadyHaveAccount')}{' '}
+          {t('auth.alreadyHaveAccount', 'Already have an account?')}{' '}
           <Link href="/login" className="text-primary hover:text-primary/80 font-bold transition-colors">
-            {t('auth.login')}
+            {t('auth.login', 'Login')}
           </Link>
         </p>
       </div>
@@ -266,7 +266,7 @@ export default function RegisterPage() {
       <div className="absolute bottom-6 left-0 right-0 text-center">
         <p className="text-[11px] text-muted-foreground font-medium flex items-center justify-center gap-2">
           <Zap className="w-3.5 h-3.5 text-primary" />
-          {t('auth.connectWalletAfter')}
+          {t('auth.connectWalletAfter', 'After logging in, you can connect your crypto wallet for payments.')}
         </p>
       </div>
     </div>
