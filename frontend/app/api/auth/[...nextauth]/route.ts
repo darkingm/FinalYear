@@ -5,6 +5,8 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { apiClient } from '@/lib/api/client';
 
 export const authOptions: NextAuthOptions = {
+  useSecureCookies: process.env.NODE_ENV === 'production',
+  debug: process.env.NODE_ENV !== 'production',
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
