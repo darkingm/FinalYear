@@ -11,6 +11,8 @@ import { apiClient } from '@/lib/api/client';
 import Link from 'next/link';
 import { Eye, EyeOff, Mail, Lock, User, Zap, CheckCircle, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useEffect } from 'react';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 
 function PasswordStrengthBar({ password, t }: { password: string, t: any }) {
   const checks = [
@@ -56,6 +58,11 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const siteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || '';
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Dynamic schema inside to use translations
   const registerSchema = z.object({
@@ -81,12 +88,17 @@ export default function RegisterPage() {
   const password = watch('password', '');
 
   const onSubmit = async (data: RegisterFormData) => {
+    if (siteKey && !captchaToken) {
+      toast.error(t('auth.completeCaptcha', 'Please complete the CAPTCHA'));
+      return;
+    }
     setIsLoading(true);
     try {
       await apiClient.post('/api/auth/register', {
         email: data.email,
         username: data.username,
         password: data.password,
+        captcha: captchaToken || 'no-captcha',
       });
       toast.success(t('auth.registerSuccess', 'Registration successful!'));
       router.push('/login');
@@ -236,6 +248,18 @@ export default function RegisterPage() {
             </label>
             {errors.terms && <p className="mt-1.5 text-xs text-destructive pl-8">{errors.terms.message}</p>}
           </div>
+
+          {/* hCaptcha */}
+          {siteKey && mounted && (
+            <div className="flex justify-center pt-2">
+              <HCaptcha
+                sitekey={siteKey}
+                onVerify={(token) => setCaptchaToken(token)}
+                onExpire={() => setCaptchaToken(null)}
+                theme="dark"
+              />
+            </div>
+          )}
 
           {/* Submit */}
           <div className="pt-4">

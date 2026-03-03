@@ -26,4 +26,12 @@ if (process.env.NODE_ENV !== 'production') {
       ),
     })
   );
+} else {
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.simple()
+      ),
+    })
+  );
 }
