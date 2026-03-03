@@ -150,10 +150,10 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://kienai.id.vn}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       GOOGLE_CLIENT_ID: 946575631331-1p51ll7tpqd0bo1impek2nggoqjrcoo8.apps.googleusercontent.com
-      GOOGLE_CLIENT_SECRET: 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
+      GOOGLE_CLIENT_SECRET: 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
       FACEBOOK_CLIENT_ID: 1497732641781702
-      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET}
-      PAYPAL_SECRET: ${PAYPAL_SECRET}
+      FACEBOOK_CLIENT_SECRET: 7bbce842d85baa3c21fca3101b42c832
+      PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
     ports:
       - "127.0.0.1:3000:3000" # Chỉ localhost — nginx proxy vào
     depends_on:
