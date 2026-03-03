@@ -251,4 +251,88 @@ export class AuthService {
     const { password_hash, nonce, ...sanitized } = user;
     return sanitized;
   }
+
+  async forgotPassword(email: string) {
+    const result = await query('SELECT user_id, email FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) {
+      // Don't reveal if email exists
+      return { message: 'If an account exists, a reset link has been sent.' };
+    }
+
+    const user = result.rows[0];
+    const resetToken = jwt.sign(
+      { user_id: user.user_id, email: user.email, purpose: 'reset' },
+      process.env.JWT_SECRET!,
+      { expiresIn: '15m' }
+    );
+
+    // Store token in Redis with 15min TTL
+    await setCache(`reset:${user.user_id}`, resetToken, 15 * 60);
+
+    // Send email
+    const frontendUrl = process.env.FRONTEND_URL || 'https://kienai.id.vn';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    try {
+      const nodemailer = require('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD,
+        },
+      });
+
+      await transporter.sendMail({
+        from: `"Crypto Marketplace" <${process.env.SMTP_USER}>`,
+        to: user.email,
+        subject: 'Reset Your Password',
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+            <h2 style="color:#f0b90b;">Reset Password</h2>
+            <p>Click the button below to reset your password. This link expires in 15 minutes.</p>
+            <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#f0b90b;color:#000;text-decoration:none;border-radius:8px;font-weight:bold;">Reset Password</a>
+            <p style="color:#888;font-size:12px;margin-top:20px;">If you didn't request this, ignore this email.</p>
+          </div>
+        `,
+      });
+      logger.info(`Reset email sent to ${user.email}`);
+    } catch (err) {
+      logger.error('Failed to send reset email:', err);
+      // Still return success to not reveal info
+    }
+
+    return { message: 'If an account exists, a reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      if (decoded.purpose !== 'reset') {
+        throw new AppError('Invalid reset token', 400);
+      }
+
+      // Check token in Redis
+      const storedToken = await getCache(`reset:${decoded.user_id}`);
+      if (!storedToken || storedToken !== token) {
+        throw new AppError('Reset token expired or already used', 400);
+      }
+
+      // Hash new password
+      const password_hash = await bcrypt.hash(newPassword, 10);
+
+      // Update user
+      await query('UPDATE users SET password_hash = $1 WHERE user_id = $2', [password_hash, decoded.user_id]);
+
+      // Remove token from Redis
+      await deleteCache(`reset:${decoded.user_id}`);
+
+      return { message: 'Password updated successfully' };
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      throw new AppError('Invalid or expired reset token', 400);
+    }
+  }
 }
