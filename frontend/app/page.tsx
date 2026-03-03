@@ -92,7 +92,7 @@ function useFlashSaleTimer() {
 /* ─── Wallet Balance Section ─────────────────────── */
 function WalletBalanceSection() {
   const { isConnected, tokenBalances, totalUSDT, isLoading, refetch } = useWallet();
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
 
   return (
     <div className="bg-gradient-to-br from-[#1a1d26] to-[#0f1117] border border-border rounded-2xl overflow-hidden">
@@ -179,7 +179,7 @@ function WalletBalanceSection() {
 
 /* ─── Market Table ───────────────────────────────── */
 function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boolean }) {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
@@ -396,7 +396,7 @@ function FlashSaleCard({ product, index, getProductImage, failedImgs, setFailedI
 /* ─── Product Card ───────────────────────────────── */
 function ProductCard({ product, index, getProductImage, failedImgs, setFailedImgs }: any) {
   const addItem = useCartStore((state) => state.addItem);
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -478,7 +478,7 @@ function ProductCard({ product, index, getProductImage, failedImgs, setFailedImg
 
 /* ─── Main Page ──────────────────────────────────── */
 export default function HomePage() {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
   const { isAuthenticated, isLoading } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [prodLoading, setProdLoading] = useState(true);

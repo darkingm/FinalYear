@@ -245,7 +245,7 @@ function RecommendedProducts({ symbol }: { symbol: string }) {
   const [products, setProducts] = useState<any[]>([]);
   const [failed, setFailed] = useState<Set<number>>(new Set());
   const addItem = useCartStore(s => s.addItem);
-  const { t } = useTranslation('common');
+  const { t } = useTranslation();
 
   useEffect(() => {
     productService.list({ limit: 4 }).then(res => {
