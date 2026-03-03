@@ -1,12 +1,16 @@
 version: '3.8'
 
 # ============================================================
-# PRODUCTION compose file - dùng pre-built images từ Docker Hub
-# VPS chỉ cần: docker compose -f docker-compose.prod.yml pull && up -d
-# KHÔNG build trên VPS, tiết kiệm RAM
+# PRODUCTION compose — Security-hardened
+# - Database / Redis / RabbitMQ KHÔNG mở cổng ra internet
+# - Nginx duy nhất expose port 80 ra ngoài
+# - Các service backend chỉ giao tiếp qua Docker internal network
 # ============================================================
 
 services:
+
+  # ── Infrastructure ─────────────────────────────────────────
+
   postgres:
     image: postgres:15-alpine
     container_name: marketplace-postgres
@@ -14,8 +18,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "@Kien2909"
       POSTGRES_DB: marketplace_db
-    ports:
-      - "5433:5432"
+    # KHÔNG mở ports ra ngoài — chỉ accessible trong Docker network
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init_database.sql:/docker-entrypoint-initdb.d/init.sql
@@ -32,8 +37,9 @@ services:
     image: redis:7-alpine
     container_name: marketplace-redis
     command: redis-server --appendonly yes --requirepass '@Kien2909'
-    ports:
-      - "6379:6379"
+    # KHÔNG mở ports ra ngoài
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -52,9 +58,11 @@ services:
       RABBITMQ_DEFAULT_USER: kaitojpla
       RABBITMQ_DEFAULT_PASS: "@Kien2909"
       RABBITMQ_DEFAULT_VHOST: /
+    # Management UI chỉ bind localhost (127.0.0.1) — không ra internet
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:15672:15672" # Management UI — chỉ xem qua SSH tunnel
+    expose:
+      - "5672" # AMQP — chỉ trong Docker network
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -66,34 +74,44 @@ services:
       - marketplace-network
     restart: unless-stopped
 
+  # ── Application Services ────────────────────────────────────
+
   main-api:
-    image: ${DOCKERHUB_USERNAME}/marketplace-main-api:latest # Pull từ Docker Hub
+    image: ${DOCKERHUB_USERNAME}/marketplace-main-api:latest
     container_name: marketplace-main-api
     environment:
       NODE_ENV: production
       PORT: 3001
+      # Connection strings (@ URL-encoded thành %40)
       DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
       REDIS_URL: redis://:%40Kien2909@redis:6379
       RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
-      JWT_SECRET: your_jwt_secret_here
-      JWT_REFRESH_SECRET: your_jwt_refresh_secret
+      # JWT — dùng giá trị thật từ docker/.env hoặc secret manager
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_EXPIRES_IN: 24h
       JWT_REFRESH_EXPIRES_IN: 7d
-      AWS_S3_BUCKET: your-product-images-bucket
-      AWS_ACCESS_KEY_ID: your_aws_access_key
-      AWS_SECRET_ACCESS_KEY: your_aws_secret_key
-      AWS_REGION: us-east-1
+      # Email
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: 587
       SMTP_USER: kaitojpla@gmail.com
       SMTP_PASSWORD: kien2909
+      # hCaptcha
       HCAPTCHA_SECRET: ES_9a13fd597b2c4cd5a3b0ded489fd5e17
-      CLOUDINARY_CLOUD_NAME: your_cloudinary_cloud
-      CLOUDINARY_API_KEY: your_cloudinary_key
-      CLOUDINARY_API_SECRET: your_cloudinary_secret
-      FRONTEND_URL: http://localhost:3000
-    ports:
-      - "3001:3001"
+      # AWS S3 (nếu dùng)
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-your-product-images-bucket}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-your_aws_access_key}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-your_aws_secret_key}
+      AWS_REGION: us-east-1
+      # Cloudinary (nếu dùng)
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-your_cloudinary_cloud}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-your_cloudinary_key}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-your_cloudinary_secret}
+      # Domain
+      FRONTEND_URL: https://kienai.id.vn
+    # KHÔNG expose port ra ngoài — chỉ Nginx được quyền gọi
+    expose:
+      - "3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,7 +124,7 @@ services:
     restart: unless-stopped
 
   payment-api:
-    image: ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest # Pull từ Docker Hub
+    image: ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest
     container_name: marketplace-payment-api
     environment:
       NODE_ENV: production
@@ -114,18 +132,20 @@ services:
       DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
       REDIS_URL: redis://:%40Kien2909@redis:6379
       RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
+      # PayPal
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
       PAYPAL_MODE: sandbox
+      # Blockchain
       ESCROW_CONTRACT_ADDRESS: 0xcde08be019048000000000000000000000000000
       POLYGON_RPC_URL: https://polygon.drpc.org
       POLYGON_MUMBAI_RPC_URL: https://rpc-amoy.polygon.technology
       ARBITRUM_RPC_URL: https://arb1.arbitrum.io/rpc
-      MORALIS_API_KEY: your_moralis_api_key
-      PRIVATE_KEY: your_private_key_here
-      FRONTEND_URL: http://localhost:3000
-    ports:
-      - "3002:3002"
+      MORALIS_API_KEY: ${MORALIS_API_KEY:-your_moralis_api_key}
+      PRIVATE_KEY: ${BLOCKCHAIN_PRIVATE_KEY:-your_private_key_here}
+      FRONTEND_URL: https://kienai.id.vn
+    expose:
+      - "3002"
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,27 +158,52 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ${DOCKERHUB_USERNAME}/marketplace-frontend:latest # Pull từ Docker Hub
+    image: ${DOCKERHUB_USERNAME}/marketplace-frontend:latest
     container_name: marketplace-frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
-      NEXT_PUBLIC_PAYMENT_API_URL: http://localhost:3002
+      NODE_ENV: production
+      # Server-side calls (Next.js SSR trong Docker network)
+      NEXT_PUBLIC_API_URL: https://kienai.id.vn/api
+      NEXT_PUBLIC_PAYMENT_API_URL: https://kienai.id.vn/payment
+      # Public config
       NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
       NEXT_PUBLIC_PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       NEXT_PUBLIC_POLYGON_RPC: https://polygon.drpc.org
       NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON: 0xcde08be019048000000000000000000000000000
       NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: 2025428d471768844b11469874320127
-      NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: qo/QS42PzUNj0lFF9JbxXhD2S247Yf5ZMCoar3leqaw=
-      PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
+      # NextAuth — PHẢI là domain thật
+      NEXTAUTH_URL: https://kienai.id.vn
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      # OAuth (server-side secrets)
       GOOGLE_CLIENT_ID: 946575631331-1p51ll7tpqd0bo1impek2nggoqjrcoo8.apps.googleusercontent.com
-      GOOGLE_CLIENT_SECRET: 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
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       FACEBOOK_CLIENT_ID: 1497732641781702
-      FACEBOOK_CLIENT_SECRET: 7bbce842d85baa3c21fca3101b42c832
-    ports:
-      - "3000:3000"
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET}
+      PAYPAL_SECRET: ${PAYPAL_SECRET}
+    expose:
+      - "3000"
     depends_on:
+      - main-api
+      - payment-api
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+  # ── Nginx Reverse Proxy ─────────────────────────────────────
+  # Đây là cổng DUY NHẤT ra Internet
+
+  nginx:
+    image: nginx:alpine
+    container_name: marketplace-nginx
+    ports:
+      - "80:80" # HTTP
+      # - "443:443"   # HTTPS (bật khi có SSL cert — xem hướng dẫn bên dưới)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./nginx/certs:/etc/nginx/certs:ro   # SSL certs (Let's Encrypt)
+    depends_on:
+      - frontend
       - main-api
       - payment-api
     networks:
