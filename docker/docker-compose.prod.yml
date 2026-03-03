@@ -18,7 +18,7 @@ services:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../init_database.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../init_database.sql:/docker-entrypoint-initdb.d
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
@@ -49,7 +49,7 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: marketplace-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kiendzpro}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kaitojpla}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: /
     ports:
@@ -73,9 +73,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/marketplace_db
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kiendzpro}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
+      REDIS_URL: redis://:%40Kien2909@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kaitojpla}:%40Kien2909@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_EXPIRES_IN: 24h
@@ -108,9 +108,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3002
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/marketplace_db
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kiendzpro}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
+      REDIS_URL: redis://:%40Kien2909@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kaitojpla}:%40Kien2909@rabbitmq:5672
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_MODE: sandbox
