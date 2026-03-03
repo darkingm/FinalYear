@@ -92,7 +92,7 @@ services:
     restart: unless-stopped
 
   main-api:
-    image: kaitojpla/marketplace-main-api:latest
+    image: kiendzpro/marketplace-main-api:latest
     container_name: marketplace-main-api
     environment:
       NODE_ENV: production
@@ -124,7 +124,7 @@ services:
     restart: unless-stopped
 
   payment-api:
-    image: kaitojpla/marketplace-payment-api:latest
+    image: kiendzpro/marketplace-payment-api:latest
     container_name: marketplace-payment-api
     environment:
       NODE_ENV: production
@@ -154,7 +154,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: kaitojpla/marketplace-frontend:latest
+    image: kiendzpro/marketplace-frontend:latest
     container_name: marketplace-frontend
     environment:
       NODE_ENV: production
@@ -278,7 +278,7 @@ for f in ["kienai.id.vn.conf", "kienai.id.vn.confnano"]:
 print("OK")
 
 # 4. Test + reload nginx
-r = subprocess.run(["nginx", "-t"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+r = subprocess.run(["nginx", "-t"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 print("Nginx test:", r.returncode, r.stdout, r.stderr)
 if r.returncode == 0:
     subprocess.run(["systemctl", "reload", "nginx"])
@@ -288,14 +288,14 @@ if r.returncode == 0:
 print("=== Pulling Docker images ===")
 r = subprocess.run(
     ["docker", "compose", "-f", "docker-compose.prod.yml", "pull"],
-    cwd=DOCKER_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    cwd=DOCKER_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
 )
 print(r.stdout[-500:] if r.stdout else "", r.stderr[-300:] if r.stderr else "")
 
 print("=== Starting containers ===")
 r = subprocess.run(
     ["docker", "compose", "-f", "docker-compose.prod.yml", "up", "-d", "--remove-orphans"],
-    cwd=DOCKER_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    cwd=DOCKER_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
 )
 print(r.stdout, r.stderr[-500:] if r.stderr else "")
 
