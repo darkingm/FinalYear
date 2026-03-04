@@ -23,6 +23,8 @@ CREATE TABLE users (
     google_id VARCHAR(255) UNIQUE,                 -- Google OAuth provider ID
     facebook_id VARCHAR(255) UNIQUE,               -- Facebook OAuth provider ID
     avatar_url VARCHAR(500),                       -- profile picture from OAuth or upload
+    phone TEXT,                                    -- user phone number
+    address_line TEXT,                             -- user default address
     paypal_email VARCHAR(255),                     -- PayPal email for paypal payments
     role VARCHAR(20) NOT NULL DEFAULT 'buyer' CHECK (role IN ('buyer', 'seller', 'admin')),
     status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'banned', 'deleted')),
