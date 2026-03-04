@@ -114,7 +114,7 @@ services:
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_MODE: sandbox
-      ESCROW_CONTRACT_ADDRESS: 0xcde08be019048000000000000000000000000000
+      ESCROW_CONTRACT_ADDRESS: 0xe12c0a89be13b000000000000000000000000000
       POLYGON_RPC_URL: https://polygon.drpc.org
       POLYGON_MUMBAI_RPC_URL: https://rpc-amoy.polygon.technology
       ARBITRUM_RPC_URL: https://arb1.arbitrum.io/rpc
