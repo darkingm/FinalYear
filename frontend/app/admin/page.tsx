@@ -10,6 +10,7 @@ import {
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 
 interface DashboardData {
     totalUsers: number;
@@ -32,6 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
+    const { t } = useTranslation();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -57,17 +59,17 @@ export default function AdminDashboard() {
     );
 
     const stats = [
-        { label: 'Người dùng', value: (data?.totalUsers || 0).toLocaleString(), icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', href: '/admin/users', change: '+12%' },
-        { label: 'Đơn hàng', value: (data?.totalOrders || 0).toLocaleString(), icon: ShoppingCart, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', href: '/admin/orders', change: '+8%' },
-        { label: 'Doanh thu', value: `$${Number(data?.totalRevenue || 0).toFixed(0)}`, icon: DollarSign, color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10 border-[#f0b90b]/20', href: '/admin/orders', change: '+23%' },
-        { label: 'Tranh chấp', value: (data?.activeDisputes || 0).toLocaleString(), icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', href: '/admin/disputes', change: '-5%' },
+        { label: t('admin.totalUsers'), value: (data?.totalUsers || 0).toLocaleString(), icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', href: '/admin/users', change: '+12%' },
+        { label: t('admin.totalOrders'), value: (data?.totalOrders || 0).toLocaleString(), icon: ShoppingCart, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', href: '/admin/orders', change: '+8%' },
+        { label: t('admin.totalRevenue'), value: `$${Number(data?.totalRevenue || 0).toFixed(0)}`, icon: DollarSign, color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10 border-[#f0b90b]/20', href: '/admin/orders', change: '+23%' },
+        { label: t('admin.activeDisputes'), value: (data?.activeDisputes || 0).toLocaleString(), icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', href: '/admin/disputes', change: '-5%' },
     ];
 
     const quickActions = [
-        { icon: Tag, label: 'Tạo Voucher', desc: 'Thêm mã giảm giá mới', href: '/admin/vouchers', color: 'text-[#f0b90b]' },
-        { icon: Package, label: 'Quản lý SP', desc: 'Duyệt sản phẩm mới', href: '/admin/products', color: 'text-blue-400' },
-        { icon: Users, label: 'Người dùng', desc: 'Xem trạng thái users', href: '/admin/users', color: 'text-emerald-400' },
-        { icon: RefreshCw, label: 'Hoàn tiền', desc: 'Xử lý yêu cầu hoàn', href: '/admin/refunds', color: 'text-purple-400' },
+        { icon: Tag, label: t('admin.createVoucher'), desc: t('admin.addNewDiscount'), href: '/admin/vouchers', color: 'text-[#f0b90b]' },
+        { icon: Package, label: t('admin.manageProducts'), desc: t('admin.approveProducts'), href: '/admin/products', color: 'text-blue-400' },
+        { icon: Users, label: t('admin.users'), desc: t('admin.viewUserStatus'), href: '/admin/users', color: 'text-emerald-400' },
+        { icon: RefreshCw, label: t('admin.refunds'), desc: t('admin.processRefunds'), href: '/admin/refunds', color: 'text-purple-400' },
     ];
 
     const chartMax = data?.revenueChart?.length
@@ -79,13 +81,13 @@ export default function AdminDashboard() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-                    <p className="text-gray-500 text-sm mt-0.5">Tổng quan thị trường Web3Market</p>
+                    <h1 className="text-2xl font-bold text-white">{t('admin.dashboard')}</h1>
+                    <p className="text-gray-500 text-sm mt-0.5">{t('admin.overview')}</p>
                 </div>
                 <button onClick={refresh} disabled={refreshing}
                     className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white text-sm transition-colors">
                     <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                    <span className="hidden sm:inline">Làm mới</span>
+                    <span className="hidden sm:inline">{t('admin.refresh')}</span>
                 </button>
             </div>
 
@@ -114,7 +116,7 @@ export default function AdminDashboard() {
 
             {/* Quick Actions */}
             <div>
-                <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Thao tác nhanh</h3>
+                <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">{t('admin.quickActions')}</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {quickActions.map((a, i) => (
                         <motion.div key={a.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.05 }}>
@@ -138,7 +140,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="font-semibold text-white flex items-center gap-2">
                             <BarChart3 className="w-4 h-4 text-[#f0b90b]" />
-                            Doanh thu 30 ngày
+                            {t('admin.revenue30Days')}
                         </h3>
                         <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">+23%</span>
                     </div>
@@ -157,7 +159,7 @@ export default function AdminDashboard() {
                             })}
                         </div>
                     ) : (
-                        <div className="h-40 flex items-center justify-center text-gray-600 text-sm">Chưa có dữ liệu</div>
+                        <div className="h-40 flex items-center justify-center text-gray-600 text-sm">{t('admin.noData')}</div>
                     )}
                 </motion.div>
 
@@ -166,7 +168,7 @@ export default function AdminDashboard() {
                     className="bg-[#1a1d26] border border-white/8 rounded-xl p-6">
                     <h3 className="font-semibold text-white flex items-center gap-2 mb-6">
                         <Activity className="w-4 h-4 text-[#f0b90b]" />
-                        Trạng thái đơn hàng
+                        {t('admin.orderStatus')}
                     </h3>
                     {data?.ordersByStatus?.length ? (
                         <div className="space-y-3">
@@ -188,7 +190,7 @@ export default function AdminDashboard() {
                             })}
                         </div>
                     ) : (
-                        <div className="h-40 flex items-center justify-center text-gray-600 text-sm">Chưa có dữ liệu</div>
+                        <div className="h-40 flex items-center justify-center text-gray-600 text-sm">{t('admin.noData')}</div>
                     )}
                 </motion.div>
             </div>
@@ -199,17 +201,17 @@ export default function AdminDashboard() {
                 <div className="p-5 flex items-center justify-between border-b border-white/8">
                     <h3 className="font-semibold text-white flex items-center gap-2">
                         <Package className="w-4 h-4 text-[#f0b90b]" />
-                        Đơn hàng gần đây
+                        {t('admin.recentOrders')}
                     </h3>
                     <Link href="/admin/orders" className="text-xs text-[#f0b90b] hover:text-[#e6a800] font-medium">
-                        Xem tất cả →
+                        {t('admin.viewAll')} →
                     </Link>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead>
                             <tr className="text-[10px] text-gray-600 uppercase tracking-wider border-b border-white/5">
-                                {['Đơn hàng', 'Người mua', 'Giá trị', 'Trạng thái', 'Ngày'].map(h => (
+                                {[t('admin.orderNo'), t('admin.buyerName'), t('admin.value'), t('common.status'), t('common.date')].map(h => (
                                     <th key={h} className="text-left px-5 py-3 font-medium">{h}</th>
                                 ))}
                             </tr>
@@ -235,7 +237,7 @@ export default function AdminDashboard() {
                                 </tr>
                             ))}
                             {(!data?.recentOrders || data.recentOrders.length === 0) && (
-                                <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-600 text-sm">Chưa có đơn hàng</td></tr>
+                                <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-600 text-sm">{t('admin.noOrders')}</td></tr>
                             )}
                         </tbody>
                     </table>

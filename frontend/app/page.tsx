@@ -60,14 +60,14 @@ const TOP_COINS = [
 ];
 
 const CATEGORIES = [
-  { name: 'Điện tử', icon: '💻', color: 'from-blue-600 to-blue-700', href: '/products?category=electronics', count: '1.2K+' },
-  { name: 'Thời trang', icon: '👕', color: 'from-pink-500 to-rose-600', href: '/products?category=fashion', count: '800+' },
-  { name: 'Nhà cửa', icon: '🏠', color: 'from-amber-500 to-orange-600', href: '/products?category=home', count: '650+' },
-  { name: 'Thể thao', icon: '⚽', color: 'from-green-500 to-emerald-600', href: '/products?category=sports', count: '500+' },
-  { name: 'Sách', icon: '📚', color: 'from-purple-500 to-violet-600', href: '/products?category=books', count: '900+' },
-  { name: 'Đồ chơi', icon: '🧸', color: 'from-red-500 to-pink-600', href: '/products?category=toys', count: '300+' },
-  { name: 'Làm đẹp', icon: '💄', color: 'from-fuchsia-500 to-pink-600', href: '/products?category=beauty', count: '400+' },
-  { name: 'Thực phẩm', icon: '🛒', color: 'from-lime-500 to-green-600', href: '/products?category=food', count: '200+' },
+  { nameKey: 'home.electronics', icon: '💻', color: 'from-blue-600 to-blue-700', href: '/products?category=electronics', count: '1.2K+' },
+  { nameKey: 'home.fashion', icon: '👕', color: 'from-pink-500 to-rose-600', href: '/products?category=fashion', count: '800+' },
+  { nameKey: 'home.home_living', icon: '🏠', color: 'from-amber-500 to-orange-600', href: '/products?category=home', count: '650+' },
+  { nameKey: 'home.collectibles', icon: '⚽', color: 'from-green-500 to-emerald-600', href: '/products?category=sports', count: '500+' },
+  { nameKey: 'home.nft', icon: '📚', color: 'from-purple-500 to-violet-600', href: '/products?category=books', count: '900+' },
+  { nameKey: 'home.gaming', icon: '🧸', color: 'from-red-500 to-pink-600', href: '/products?category=toys', count: '300+' },
+  { nameKey: 'home.accessories', icon: '💄', color: 'from-fuchsia-500 to-pink-600', href: '/products?category=beauty', count: '400+' },
+  { nameKey: 'home.food', icon: '🛒', color: 'from-lime-500 to-green-600', href: '/products?category=food', count: '200+' },
 ];
 
 /* ─── Flash Sale Timer ───────────────────────────── */
@@ -707,13 +707,13 @@ export default function HomePage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
               {CATEGORIES.map((cat, i) => (
-                <motion.div key={cat.name} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }}>
+                <motion.div key={cat.nameKey} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }}>
                   <Link href={cat.href}>
                     <div className="group bg-card border border-border rounded-xl p-3 text-center hover:border-[#f0b90b]/30 hover:shadow-lg hover:shadow-[#f0b90b]/5 transition-all cursor-pointer hover:-translate-y-1 duration-300">
                       <div className={`w-12 h-12 rounded-xl mx-auto mb-2 flex items-center justify-center bg-gradient-to-br ${cat.color} text-2xl shadow-lg`}>
                         {cat.icon}
                       </div>
-                      <h3 className="text-xs font-semibold text-gray-300 group-hover:text-[#f0b90b] transition-colors line-clamp-1">{cat.name}</h3>
+                      <h3 className="text-xs font-semibold text-gray-300 group-hover:text-[#f0b90b] transition-colors line-clamp-1">{t(cat.nameKey)}</h3>
                       <p className="text-xs text-gray-600 mt-0.5">{cat.count}</p>
                     </div>
                   </Link>

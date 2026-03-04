@@ -110,6 +110,9 @@ services:
       SMTP_USER: kaitojpla@gmail.com
       SMTP_PASSWORD: cltk gtwx cgek mofm
       HCAPTCHA_SECRET: ES_9a13fd597b2c4cd5a3b0ded489fd5e17
+      CLOUDINARY_CLOUD_NAME: deyjlti3v
+      CLOUDINARY_API_KEY: 769799281583264
+      CLOUDINARY_API_SECRET: FpgAWZCGduORuwPClfJXt5d6aas
       FRONTEND_URL: https://kienai.id.vn
     ports:
       - '127.0.0.1:3001:3001'

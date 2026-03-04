@@ -85,9 +85,9 @@ services:
       SMTP_USER: kaitojpla@gmail.com
       SMTP_PASSWORD: cltk gtwx cgek mofm
       HCAPTCHA_SECRET: ES_9a13fd597b2c4cd5a3b0ded489fd5e17
-      CLOUDINARY_CLOUD_NAME: your_cloudinary_cloud
-      CLOUDINARY_API_KEY: your_cloudinary_key
-      CLOUDINARY_API_SECRET: your_cloudinary_secret
+      CLOUDINARY_CLOUD_NAME: deyjlti3v
+      CLOUDINARY_API_KEY: 769799281583264
+      CLOUDINARY_API_SECRET: FpgAWZCGduORuwPClfJXt5d6aas
       FRONTEND_URL: https://kienai.id.vn
     ports:
       - "127.0.0.1:3001:3001" # Chỉ localhost — nginx proxy vào

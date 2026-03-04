@@ -12,22 +12,24 @@ import {
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import { useDisconnect } from 'wagmi';
+import { useTranslation } from 'react-i18next';
 
-const navItems = [
-    { href: '/admin', icon: LayoutDashboard, label: 'Dashboard', exact: true, badge: null },
-    { href: '/admin/orders', icon: ShoppingCart, label: 'Đơn hàng', badge: null },
-    { href: '/admin/users', icon: Users, label: 'Người dùng', badge: null },
-    { href: '/admin/products', icon: Package, label: 'Sản phẩm', badge: null },
-    { href: '/admin/vouchers', icon: Tag, label: 'Voucher', badge: 'NEW' },
-    { href: '/admin/disputes', icon: AlertTriangle, label: 'Tranh chấp', badge: null },
-    { href: '/admin/refunds', icon: RefreshCcw, label: 'Hoàn tiền', badge: null },
-    { href: '/admin/escrow', icon: Zap, label: 'Smart Contract', badge: null },
-    { href: '/admin/tokens', icon: Coins, label: 'Tokens', badge: null },
-    { href: '/admin/audit-logs', icon: FileText, label: 'Audit Logs', badge: null },
+const NAV_KEYS = [
+    { href: '/admin', labelKey: 'admin.dashboard', icon: LayoutDashboard, exact: true, badge: null },
+    { href: '/admin/orders', labelKey: 'admin.orders', icon: ShoppingCart, badge: null },
+    { href: '/admin/users', labelKey: 'admin.users', icon: Users, badge: null },
+    { href: '/admin/products', labelKey: 'admin.products', icon: Package, badge: null },
+    { href: '/admin/vouchers', labelKey: 'admin.vouchers', icon: Tag, badge: 'NEW' },
+    { href: '/admin/disputes', labelKey: 'admin.disputes', icon: AlertTriangle, badge: null },
+    { href: '/admin/refunds', labelKey: 'admin.refunds', icon: RefreshCcw, badge: null },
+    { href: '/admin/escrow', labelKey: 'admin.smartContract', icon: Zap, badge: null },
+    { href: '/admin/tokens', labelKey: 'admin.tokens', icon: Coins, badge: null },
+    { href: '/admin/audit-logs', labelKey: 'admin.auditLogs', icon: FileText, badge: null },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const { user, isAuthenticated, isLoading } = useAuth();
+    const { t } = useTranslation();
     const router = useRouter();
     const pathname = usePathname();
     const { disconnect } = useDisconnect();
@@ -45,12 +47,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="min-h-screen flex items-center justify-center bg-[#0c0e14]">
                 <div className="text-center">
                     <div className="w-10 h-10 rounded-full border-2 border-[#f0b90b] border-t-transparent animate-spin mx-auto mb-3" />
-                    <p className="text-gray-500 text-sm">Đang xác thực quyền truy cập...</p>
+                    <p className="text-gray-500 text-sm">{t('common.loading')}...</p>
                 </div>
             </div>
         );
     }
 
+    const navItems = NAV_KEYS.map(n => ({ ...n, label: t(n.labelKey) }));
     const handleLogout = () => { disconnect(); signOut({ callbackUrl: '/' }); };
     const isActive = (href: string, exact?: boolean) => exact ? pathname === href : pathname?.startsWith(href);
     const activePage = navItems.find(n => isActive(n.href, n.exact))?.label || 'Admin';
@@ -65,7 +68,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             <Shield className="w-4 h-4 text-black" />
                         </div>
                         <div>
-                            <p className="font-bold text-white text-sm">Admin Panel</p>
+                            <p className="font-bold text-white text-sm">{t('admin.adminPanel')}</p>
                             <p className="text-[10px] text-gray-600">Web3Market</p>
                         </div>
                     </div>
@@ -89,8 +92,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     return (
                         <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}>
                             <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${active
-                                    ? 'bg-[#f0b90b]/12 text-[#f0b90b] border border-[#f0b90b]/20'
-                                    : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'
+                                ? 'bg-[#f0b90b]/12 text-[#f0b90b] border border-[#f0b90b]/20'
+                                : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'
                                 }`}>
                                 <item.icon className={`flex-shrink-0 ${collapsed ? 'w-5 h-5 mx-auto' : 'w-4.5 h-4.5'} ${active ? 'text-[#f0b90b]' : 'text-gray-500 group-hover:text-gray-300'}`} style={{ width: '18px', height: '18px' }} />
                                 {!collapsed && (
@@ -112,12 +115,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link href="/">
                     <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-colors">
                         <Home className="flex-shrink-0 text-gray-600" style={{ width: '18px', height: '18px' }} />
-                        {!collapsed && <span>Về trang chủ</span>}
+                        {!collapsed && <span>{t('admin.backToHome')}</span>}
                     </div>
                 </Link>
                 <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-500/70 hover:bg-red-500/10 hover:text-red-400 transition-colors">
                     <LogOut className="flex-shrink-0" style={{ width: '18px', height: '18px' }} />
-                    {!collapsed && <span>Đăng xuất</span>}
+                    {!collapsed && <span>{t('admin.signOut')}</span>}
                 </button>
 
                 {!collapsed && (
