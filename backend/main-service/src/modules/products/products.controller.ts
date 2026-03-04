@@ -100,19 +100,23 @@ export async function deleteProduct(req: AuthRequest, res: Response, next: NextF
 
 export async function uploadImages(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    // This would integrate with multer and S3/Cloudinary
-    // For now, return mock URLs
-    const urls = [
-      'https://example.com/image1.jpg',
-      'https://example.com/image2.jpg',
-    ];
+    const files = (req as any).files as Array<{ buffer: Buffer; originalname: string; mimetype: string }>;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No files uploaded' });
+    }
 
-    res.json({
-      success: true,
-      urls,
-    });
+    const { uploadToCloudinary } = await import('../../config/cloudinary');
+    const urls: string[] = [];
+
+    for (const file of files) {
+      const url = await uploadToCloudinary(file.buffer, 'products');
+      urls.push(url);
+    }
+
+    res.json({ success: true, urls });
   } catch (error: any) {
     logger.error('Upload images error:', error);
     next(error);
   }
 }
+
