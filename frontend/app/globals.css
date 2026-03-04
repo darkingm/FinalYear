@@ -6,17 +6,17 @@
   :root {
     /* Light theme - White + Ocean Blue */
     --background: 210 25% 98%;
-    --foreground: 215 25% 15%;
+    --foreground: 215 25% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 15%;
+    --card-foreground: 215 25% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 15%;
+    --popover-foreground: 215 25% 12%;
     --primary: 210 100% 50%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 30% 95%;
     --secondary-foreground: 210 100% 35%;
     --muted: 210 20% 96%;
-    --muted-foreground: 215 15% 50%;
+    --muted-foreground: 215 15% 40%;
     --accent: 199 89% 48%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
@@ -25,7 +25,7 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --border: 210 20% 90%;
+    --border: 210 20% 85%;
     --input: 210 20% 92%;
     --ring: 210 100% 50%;
     --radius: 0.75rem;
@@ -94,8 +94,16 @@
   @apply backdrop-blur-xl bg-white/80 border border-white/40;
 }
 
+.dark .glass {
+  @apply bg-black/40 border-white/10;
+}
+
 .glass-strong {
   @apply backdrop-blur-2xl bg-white/90 border border-gray-200/60;
+}
+
+.dark .glass-strong {
+  @apply bg-black/60 border-white/10;
 }
 
 /* ── Animations ── */

@@ -44,15 +44,15 @@ export class CryptoPaymentService {
       throw new AppError('Order is not in UNPAID status', 400);
     }
 
-    // Get seller's wallet address (escrow deposit expects address, not user_id)
+    // Get seller's wallet address (payout_wallet from seller_profiles)
     const sellerResult = await query(
-      'SELECT wallet_address FROM users WHERE user_id = $1',
+      'SELECT payout_wallet FROM seller_profiles WHERE seller_id = $1',
       [order.seller_id]
     );
-    const sellerWallet = sellerResult.rows[0]?.wallet_address;
+    const sellerWallet = sellerResult.rows[0]?.payout_wallet;
     if (!sellerWallet || !ethers.isAddress(sellerWallet)) {
       throw new AppError(
-        `Seller (user_id: ${order.seller_id}) has no valid wallet_address in users table. Sellers must connect a wallet to receive crypto payments.`,
+        `Seller (seller_id: ${order.seller_id}) has no valid payout_wallet in seller_profiles table. Sellers must connect a wallet to receive crypto payments.`,
         400
       );
     }

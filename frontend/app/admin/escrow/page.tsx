@@ -9,12 +9,12 @@ import {
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseAbi } from 'viem';
+import { parseAbi, keccak256, toHex } from 'viem';
 import { ESCROW_CONTRACTS } from '@/lib/web3/config';
 
 const ESCROW_WRITE_ABI = parseAbi([
-    'function releasePayment(string memory orderId) external',
-    'function refund(string memory orderId) external',
+    'function releasePayment(bytes32 orderId) external',
+    'function refund(bytes32 orderId) external',
     'function pause() external',
     'function unpause() external',
     'function updatePlatformFee(uint256 newFeePercent) external',
@@ -89,7 +89,7 @@ export default function AdminEscrowPage() {
                 address: escrowAddr,
                 abi: ESCROW_WRITE_ABI,
                 functionName: 'releasePayment',
-                args: [order.internal_order_id],
+                args: [keccak256(toHex(order.internal_order_id))],
             });
             // Also update backend
             await adminApi.orders.updateStatus(order.order_id, 'COMPLETED', 'Admin released payment from escrow');
@@ -115,7 +115,7 @@ export default function AdminEscrowPage() {
                 address: escrowAddr,
                 abi: ESCROW_WRITE_ABI,
                 functionName: 'refund',
-                args: [order.internal_order_id],
+                args: [keccak256(toHex(order.internal_order_id))],
             });
             // Also update backend
             await adminApi.orders.updateStatus(order.order_id, 'refunded', 'Admin refunded from escrow');

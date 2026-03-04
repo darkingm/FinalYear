@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\EscrowCore.sol": {
-      "lastModificationDate": 1769616354832,
-      "contentHash": "133fb92eb0a04b7b386ec6273465b00a",
+      "lastModificationDate": 1772611891815,
+      "contentHash": "5489d0585ab36f579bbfaaad80b20ead",
       "sourceName": "contracts/EscrowCore.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -40,7 +40,8 @@
         "^0.8.20"
       ],
       "artifacts": [
-        "EscrowCore"
+        "EscrowCore",
+        "ISwapRouter"
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {

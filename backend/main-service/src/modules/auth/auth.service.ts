@@ -286,15 +286,46 @@ export class AuthService {
       });
 
       await transporter.sendMail({
-        from: `"Crypto Marketplace" <${process.env.SMTP_USER}>`,
+        from: `"Web3Market 🚀" <${process.env.SMTP_USER}>`,
         to: user.email,
-        subject: 'Reset Your Password',
+        subject: 'Khôi phục mật khẩu tài khoản Web3Market',
         html: `
-          <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-            <h2 style="color:#f0b90b;">Reset Password</h2>
-            <p>Click the button below to reset your password. This link expires in 15 minutes.</p>
-            <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#f0b90b;color:#000;text-decoration:none;border-radius:8px;font-weight:bold;">Reset Password</a>
-            <p style="color:#888;font-size:12px;margin-top:20px;">If you didn't request this, ignore this email.</p>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #eaeaea; border-radius: 12px; background-color: #ffffff; color: #333333;">
+            <div style="text-align: center; margin-bottom: 25px;">
+              <h1 style="color: #f0b90b; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">Web3Market.</h1>
+              <p style="color: #888888; font-size: 14px; margin-top: 5px;">Công ty CP TMĐT Web3Market - Nền tảng TMĐT Crypto hàng đầu</p>
+            </div>
+            
+            <div style="background-color: #fafafa; border-radius: 8px; padding: 25px; text-align: left;">
+              <h2 style="color: #1a1d26; margin-top: 0; font-size: 20px;">Yêu cầu Khôi phục Mật khẩu 🔒</h2>
+              <p style="font-size: 15px; line-height: 1.6; color: #555555;">
+                Chào bạn,<br/><br/>
+                Chúng tôi nhận được yêu cầu khôi phục mật khẩu cho tài khoản liên kết với địa chỉ email này. Để đặt lại mật khẩu của bạn, vui lòng click vào nút xác nhận bên dưới:
+              </p>
+              
+              <div style="text-align: center; margin: 35px 0;">
+                <a href="${resetUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #f0b90b 0%, #e6a800 100%); color: #000000; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(240, 185, 11, 0.25); transition: background 0.3s;">
+                  Khôi Phục Mật Khẩu Ngay
+                </a>
+              </div>
+              
+              <p style="font-size: 14px; line-height: 1.5; color: #666666;">
+                <strong>Lưu ý:</strong> Liên kết này chỉ có hiệu lực trong vòng <strong>15 phút</strong> vì lý do bảo mật.
+              </p>
+            </div>
+            
+            <hr style="border: none; border-top: 1px solid #eeeeee; margin: 25px 0;"/>
+            
+            <div style="text-align: center; font-size: 12px; color: #999999; line-height: 1.5;">
+              <p style="margin: 0 0 10px 0;">
+                Nếu bạn không yêu cầu thay đổi này, hãy bỏ qua email này hoặc liên hệ ngay với bộ phận CSKH của chúng tôi.
+              </p>
+              <p style="margin: 0;">
+                &copy; ${new Date().getFullYear()} Công ty Cổ phần Web3Market.<br/>
+                Tòa nhà Bitexco, Q.1, TP. Hồ Chí Minh, Việt Nam<br/>
+                Hotline: 1900 1000 • Email: support@web3market.vn
+              </p>
+            </div>
           </div>
         `,
       });

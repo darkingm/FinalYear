@@ -53,10 +53,11 @@ export class ProductService {
     // Get products
     params.push(limit, offset);
     const result = await query(
-      `SELECT p.*, i.available as stock, u.username as seller_name
+      `SELECT p.*, i.available as stock, sp.display_name as seller_name, u.user_id as owner_user_id
        FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
-       LEFT JOIN users u ON p.seller_id = u.user_id
+       LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
+       LEFT JOIN users u ON sp.user_id = u.user_id
        WHERE ${whereClause}
        ORDER BY p.created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -83,10 +84,11 @@ export class ProductService {
     }
 
     const result = await query(
-      `SELECT p.*, i.available as stock, i.total_stock, u.username as seller_name, u.email as seller_email
+      `SELECT p.*, i.available as stock, i.total_stock, sp.display_name as seller_name, u.email as seller_email, u.user_id as owner_user_id
        FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
-       LEFT JOIN users u ON p.seller_id = u.user_id
+       LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
+       LEFT JOIN users u ON sp.user_id = u.user_id
        WHERE p.product_id = $1`,
       [productId]
     );
@@ -126,9 +128,8 @@ export class ProductService {
   }
 
   async updateProduct(productId: number, userId: number, updates: any) {
-    // Check ownership
     const productResult = await query(
-      'SELECT * FROM products WHERE product_id = $1',
+      'SELECT p.*, sp.user_id as owner_user_id FROM products p JOIN seller_profiles sp ON p.seller_id = sp.seller_id WHERE p.product_id = $1',
       [productId]
     );
 
@@ -138,7 +139,7 @@ export class ProductService {
 
     const product = productResult.rows[0];
 
-    if (product.seller_id !== userId) {
+    if (product.owner_user_id !== userId) {
       throw new AppError('Not authorized to update this product', 403);
     }
 
@@ -170,7 +171,7 @@ export class ProductService {
   async deleteProduct(productId: number, userId: number) {
     // Check ownership
     const productResult = await query(
-      'SELECT * FROM products WHERE product_id = $1',
+      'SELECT p.*, sp.user_id as owner_user_id FROM products p JOIN seller_profiles sp ON p.seller_id = sp.seller_id WHERE p.product_id = $1',
       [productId]
     );
 
@@ -180,7 +181,7 @@ export class ProductService {
 
     const product = productResult.rows[0];
 
-    if (product.seller_id !== userId) {
+    if (product.owner_user_id !== userId) {
       throw new AppError('Not authorized to delete this product', 403);
     }
 

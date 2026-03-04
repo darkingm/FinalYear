@@ -53,6 +53,10 @@ declare module "hardhat/types/runtime" {
       name: "EscrowCore",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.EscrowCore__factory>;
+    getContractFactory(
+      name: "ISwapRouter",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ISwapRouter__factory>;
 
     getContractAt(
       name: "AccessControl",
@@ -104,6 +108,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.EscrowCore>;
+    getContractAt(
+      name: "ISwapRouter",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ISwapRouter>;
 
     deployContract(
       name: "AccessControl",
@@ -145,6 +154,10 @@ declare module "hardhat/types/runtime" {
       name: "EscrowCore",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.EscrowCore>;
+    deployContract(
+      name: "ISwapRouter",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ISwapRouter>;
 
     deployContract(
       name: "AccessControl",
@@ -196,6 +209,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.EscrowCore>;
+    deployContract(
+      name: "ISwapRouter",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ISwapRouter>;
 
     // default types
     getContractFactory(

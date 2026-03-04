@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { User, Mail, Wallet, Shield, Phone, MapPin, Camera, CreditCard, Save, X, Calendar, Activity } from 'lucide-react';
+import { User, Mail, Wallet, Shield, Phone, MapPin, Camera, CreditCard, Save, X, Calendar, Activity, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 
@@ -37,7 +37,10 @@ export default function ProfilePage() {
     phone: '',
     address_line: '',
     paypal_email: '',
+    avatar_url: '',
   });
+
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -60,6 +63,7 @@ export default function ProfilePage() {
         phone: userData.phone || '',
         address_line: userData.address_line || '',
         paypal_email: userData.paypal_email || '',
+        avatar_url: userData.avatar_url || '',
       });
     } catch (error) {
       toast.error('Failed to load profile');
@@ -75,6 +79,33 @@ export default function ProfilePage() {
       fetchProfile();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to update profile');
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingAvatar(true);
+      const formData = new FormData();
+      formData.append('images', file); // Use existing upload route
+      const res = await apiClient.post('/api/products/upload-images', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      // The endpoint returns { urls: string[] }
+      if (res.data?.urls?.[0]) {
+        const newAvatarUrl = res.data.urls[0];
+        setFormData(prev => ({ ...prev, avatar_url: newAvatarUrl }));
+        await apiClient.put('/api/users/profile', { avatar_url: newAvatarUrl });
+        toast.success('Avatar updated successfully!');
+        fetchProfile();
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -95,6 +126,13 @@ export default function ProfilePage() {
           transition={{ duration: 0.5 }}
           className="flex flex-col gap-8"
         >
+          {/* Back Button */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" className="gap-2 text-muted-foreground hover:text-foreground" onClick={() => router.back()}>
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Button>
+          </div>
+
           {/* Header Section */}
           <div className="relative rounded-3xl bg-card border border-border overflow-hidden shadow-2xl">
             {/* Cover Image */}
@@ -114,9 +152,10 @@ export default function ProfilePage() {
                         </div>
                       )}
                     </div>
-                    <button className="absolute bottom-2 right-2 p-2 bg-primary/90 text-primary-foreground rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110">
-                      <Camera className="w-5 h-5" />
-                    </button>
+                    <label className="absolute bottom-2 right-2 p-2 bg-primary/90 text-primary-foreground rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer">
+                      <Camera className={`w-5 h-5 ${uploadingAvatar ? 'animate-pulse' : ''}`} />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+                    </label>
                   </div>
 
                   <div className="pb-4">

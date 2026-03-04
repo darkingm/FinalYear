@@ -1,9 +1,43 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import type { Config } from 'wagmi';
-import { polygon, polygonMumbai, arbitrum, arbitrumGoerli } from 'wagmi/chains';
+import {
+  polygon,
+  arbitrum,
+  arbitrumGoerli,
+  polygonAmoy as baseAmoy,
+  baseSepolia,
+  bscTestnet,
+  optimismSepolia,
+  arbitrumSepolia
+} from 'wagmi/chains';
 import { defineChain } from 'viem';
 
-// Hardhat / Anvil local node (chainId 31337) – dùng khi chạy `npx hardhat node` hoặc `anvil`
+// Polygon Amoy testnet
+export const polygonAmoy = defineChain({
+  ...baseAmoy,
+  rpcUrls: {
+    ...baseAmoy.rpcUrls,
+    default: {
+      http: [
+        'https://polygon-amoy.drpc.org',
+        'https://polygon-amoy.blockpi.network/v1/rpc/public',
+        'https://rpc-amoy.polygon.technology'
+      ]
+    },
+    public: {
+      http: [
+        'https://polygon-amoy.drpc.org',
+        'https://polygon-amoy.blockpi.network/v1/rpc/public',
+        'https://rpc-amoy.polygon.technology'
+      ]
+    },
+  },
+  blockExplorers: {
+    default: { name: 'OKLink', url: 'https://www.oklink.com/amoy' },
+  },
+});
+
+// Hardhat / Anvil local node (chainId 31337)
 export const localhost = defineChain({
   id: 31337,
   name: 'Localhost',
@@ -13,7 +47,17 @@ export const localhost = defineChain({
   },
 });
 
-const allChains = [localhost, polygon, polygonMumbai, arbitrum, arbitrumGoerli] as const;
+const allChains = [
+  polygonAmoy,
+  polygon,
+  localhost,
+  arbitrum,
+  arbitrumGoerli,
+  baseSepolia,
+  bscTestnet,
+  optimismSepolia,
+  arbitrumSepolia
+] as const;
 
 // Singleton: create config once per context to avoid "WalletConnect Core is already initialized"
 let _wagmiConfig: Config | null = null;
@@ -43,4 +87,8 @@ export const ESCROW_CONTRACTS: Record<number, string> = {
   80001: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON || '0x0000000000000000000000000000000000000000', // Mumbai testnet
   80002: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON || '0x0000000000000000000000000000000000000000', // Amoy testnet
   421613: '0x0000000000000000000000000000000000000000', // Arbitrum Goerli testnet
+  84532: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BASE_SEPOLIA || '0x0000000000000000000000000000000000000000', // Base Sepolia
+  97: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BSC_TESTNET || '0x0000000000000000000000000000000000000000', // BSC Testnet
+  11155420: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_OP_SEPOLIA || '0x0000000000000000000000000000000000000000', // Optimism Sepolia
+  421614: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARB_SEPOLIA || '0x0000000000000000000000000000000000000000', // Arbitrum Sepolia
 };

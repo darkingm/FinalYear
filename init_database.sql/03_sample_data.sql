@@ -18,11 +18,11 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- password_hash = bcrypt('password123')
 -- wallet_address is optional (NULL for OAuth-only users)
 INSERT INTO users (email, wallet_address, username, password_hash, google_id, avatar_url, paypal_email, role, status) VALUES
-('admin@marketplace.com',   NULL,                                          'admin_master',  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', NULL, NULL, NULL, 'admin', 'active'),
-('john.buyer@email.com',    '0x2345678901234567890123456789012345678901',   'john_buyer',    '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', NULL, NULL, 'john.buyer@paypal.test', 'buyer', 'active'),
-('jane.seller@email.com',   '0x3456789012345678901234567890123456789012',   'jane_tech',     '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', NULL, NULL, 'jane.seller@paypal.test', 'seller', 'active'),
-('mike.seller@email.com',   '0x4567890123456789012345678901234567890123',   'mike_fashion',  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', NULL, NULL, 'mike.seller@paypal.test', 'seller', 'active'),
-('sarah.buyer@email.com',   '0x5678901234567890123456789012345678901234',   'sarah_shopper', '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'google_sarah_123', 'https://lh3.googleusercontent.com/a/default-user', 'sarah.buyer@paypal.test', 'buyer', 'active')
+('admin@marketplace.com',   NULL,                                          'admin_master',  '$2b$10$k9ex1/2SJU77fkh1jSL5DebbZ.mSnG/YtO74i0qYpjU2um5rinR8e', NULL, NULL, NULL, 'admin', 'active'),
+('john.buyer@email.com',    '0x2345678901234567890123456789012345678901',   'john_buyer',    '$2b$10$k9ex1/2SJU77fkh1jSL5DebbZ.mSnG/YtO74i0qYpjU2um5rinR8e', NULL, NULL, 'john.buyer@paypal.test', 'buyer', 'active'),
+('jane.seller@email.com',   '0x3456789012345678901234567890123456789012',   'jane_tech',     '$2b$10$k9ex1/2SJU77fkh1jSL5DebbZ.mSnG/YtO74i0qYpjU2um5rinR8e', NULL, NULL, 'jane.seller@paypal.test', 'seller', 'active'),
+('mike.seller@email.com',   '0x4567890123456789012345678901234567890123',   'mike_fashion',  '$2b$10$k9ex1/2SJU77fkh1jSL5DebbZ.mSnG/YtO74i0qYpjU2um5rinR8e', NULL, NULL, 'mike.seller@paypal.test', 'seller', 'active'),
+('sarah.buyer@email.com',   '0x5678901234567890123456789012345678901234',   'sarah_shopper', '$2b$10$k9ex1/2SJU77fkh1jSL5DebbZ.mSnG/YtO74i0qYpjU2um5rinR8e', 'google_sarah_123', 'https://lh3.googleusercontent.com/a/default-user', 'sarah.buyer@paypal.test', 'buyer', 'active')
 ON CONFLICT (email) DO NOTHING;
 
 -- Insert seller profiles

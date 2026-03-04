@@ -9,7 +9,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ShoppingCart, Heart, Share2, Truck, Shield, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Heart, Share2, Truck, Shield, RefreshCw, MapPin, Trash, Edit } from 'lucide-react';
 import Link from 'next/link';
 
 // Import new components
@@ -32,6 +32,7 @@ interface Product {
   stock: number;
   seller_name: string;
   seller_id: number;
+  owner_user_id: number;
 }
 
 export default function ProductDetailPage() {
@@ -82,6 +83,19 @@ export default function ProductDetailPage() {
       toast.error(error.response?.data?.message || 'Failed to create order');
     } finally {
       setBuyLoading(false);
+    }
+  };
+
+  const isOwner = session?.user?.id === String(product?.owner_user_id);
+
+  const handleDeleteProduct = async () => {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+    try {
+      await apiClient.delete(`/api/products/${product?.product_id}`);
+      toast.success('Product deleted successfully');
+      router.push('/products');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to delete product');
     }
   };
 
@@ -164,6 +178,7 @@ export default function ProductDetailPage() {
             <ImageGallery
               images={product.metadata?.images || []}
               productName={product.name}
+              category={product.metadata?.category}
             />
           </motion.div>
 
@@ -303,9 +318,37 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Seller Info */}
-            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-              <p className="text-sm text-muted-foreground mb-1">Sold by</p>
-              <p className="font-semibold text-lg">{product.seller_name}</p>
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Sold by</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#e6a800] text-black font-bold flex items-center justify-center text-lg shadow-sm">
+                    {product.seller_name?.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-lg">{product.seller_name}</p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5" /> {(product.metadata as any)?.location || 'Global Seller'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {isOwner && (
+                <div className="pt-4 border-t border-border flex flex-col gap-3">
+                  <p className="text-xs font-semibold text-[#f0b90b] uppercase tracking-wider flex items-center gap-2">
+                    <Shield className="w-3 h-3" /> Your Owned Product
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button variant="outline" className="gap-2 border-primary/20 hover:bg-primary/10 transition-colors" onClick={() => router.push('/seller/dashboard')}>
+                      <Edit className="w-4 h-4" /> Manage
+                    </Button>
+                    <Button variant="outline" className="gap-2 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={handleDeleteProduct}>
+                      <Trash className="w-4 h-4" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>

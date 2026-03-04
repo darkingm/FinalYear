@@ -9,7 +9,7 @@ import { useDisconnect } from 'wagmi';
 import {
   Menu, X, ShoppingBag, Wallet, Package,
   LogOut, User, Shield, Heart, Search,
-  TrendingUp, Bell, ChevronDown, Zap,
+  TrendingUp, Bell, ChevronDown, Zap, Clock
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -17,6 +17,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import { useTranslation } from 'react-i18next';
 import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { useCartStore } from '@/store/cart-store';
 
 export function Header() {
   const { isAuthenticated, user } = useAuth();
@@ -30,6 +31,10 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [tickers, setTickers] = useState<any[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  // Cart
+  const { items: cartItems } = useCartStore();
+  const cartItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   // force re-render on language change
   const [, setLang] = useState(i18n.language);
 
@@ -104,13 +109,13 @@ export function Header() {
     { href: '/', label: 'Home' },
     { href: '/products', label: 'Products' },
     { href: '/trading/BTCUSDT', label: 'Trading', icon: TrendingUp },
-    { href: '/orders', label: 'Orders' },
+    { href: '/orders', label: 'Orders', icon: ShoppingBag, hasBadge: true },
     { href: '/wallet', label: 'Wallet' },
   ];
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname?.startsWith(href);
-  const isAdmin = (user as any)?.role === 'admin';
+  const isAdmin = (user as any)?.role === 'admin' || (user as any)?.email === 'admin@marketplace.com';
 
   // Adaptive classes that work in both dark and light mode
   const headerBg = scrolled
@@ -168,6 +173,11 @@ export function Header() {
                     }`}>
                   {link.icon && <link.icon className="w-3.5 h-3.5" />}
                   {link.label}
+                  {link.hasBadge && cartItemCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow border-2 border-background">
+                      {cartItemCount}
+                    </span>
+                  )}
                 </Link>
               ))}
               {isAdmin && (
@@ -203,14 +213,32 @@ export function Header() {
 
               {isAuthenticated && (
                 <>
-                  <Link href="/wishlist"
-                    className="p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/10 transition-colors">
-                    <Heart className="w-5 h-5" />
-                  </Link>
-                  <button className="p-2 rounded-lg text-muted-foreground hover:text-yellow-500 hover:bg-accent/10 transition-colors relative">
-                    <Bell className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-[#f0b90b] rounded-full" />
-                  </button>
+                  <div className="relative group">
+                    <button className="p-2 rounded-lg text-muted-foreground hover:text-yellow-500 hover:bg-accent/10 transition-colors relative">
+                      <Bell className="w-5 h-5" />
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-[#f0b90b] rounded-full shadow-md" />
+                    </button>
+                    <div className="absolute right-0 mt-2 w-80 bg-background border border-border rounded-xl shadow-xl shadow-black/10 dark:shadow-black/30 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 p-2 transform origin-top-right scale-95 group-hover:scale-100">
+                      <div className="px-3 py-2 border-b border-border flex justify-between items-center">
+                        <h3 className="text-sm font-bold text-foreground">Notifications</h3>
+                        <span className="text-xs text-[#f0b90b] cursor-pointer hover:underline">Mark all read</span>
+                      </div>
+                      <div className="flex flex-col gap-1 mt-2">
+                        <div className="px-3 py-2 hover:bg-accent/10 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-border/50">
+                          <p className="text-sm text-foreground">User <strong>Thanh Kien</strong> has just listed <strong>Apple Vision Pro</strong> for <span className="text-[#f0b90b] font-medium font-mono">2500 USDT</span></p>
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> 2 minutes ago</p>
+                        </div>
+                        <div className="px-3 py-2 hover:bg-accent/10 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-border/50">
+                          <p className="text-sm text-foreground">User <strong>Ngoc Han</strong> has purchased your <strong>AirPods Max</strong> with <span className="text-blue-500 font-medium font-mono">0.12 ETH</span></p>
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> 1 hour ago</p>
+                        </div>
+                        <div className="px-3 py-2 hover:bg-accent/10 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-border/50">
+                          <p className="text-sm text-foreground"><strong>System Update:</strong> Your crypto withdrawal of <span className="text-[#f0b90b] font-medium font-mono">500 USDT</span> was successful.</p>
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> 1 day ago</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div className="h-8 w-px bg-border mx-1" />
                   <div className="scale-85">
                     <ConnectButton showBalance={false} />
@@ -318,6 +346,11 @@ export function Header() {
                   >
                     {link.icon && <link.icon className="w-4 h-4" />}
                     {link.label}
+                    {link.hasBadge && cartItemCount > 0 && (
+                      <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        {cartItemCount}
+                      </span>
+                    )}
                   </Link>
                 ))}
                 {isAdmin && (

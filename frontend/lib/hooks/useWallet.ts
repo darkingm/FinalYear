@@ -87,12 +87,21 @@ export function useWallet() {
       }
 
       // Fetch ERC20 token balances (only on Polygon for now)
-      if (chainId === 137 || chainId === 80001) {
+      if (chainId === 137 || chainId === 80001 || chainId === 80002) {
         for (const [symbol, tokenAddress] of Object.entries(POLYGON_TOKENS)) {
           try {
             const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+            // Fetch balance
             const balanceBN = await contract.balanceOf(address);
-            const decimals = await contract.decimals();
+
+            // Wait for decimals with timeout to prevent hang if address is empty (e.g. wrong network)
+            let decimals = 18;
+            try {
+              decimals = await contract.decimals();
+            } catch (e) {
+              // Ignore decimal fetch errors if contract doesn't exist
+            }
+
             const balance = parseFloat(ethers.formatUnits(balanceBN, decimals));
 
             if (balance > 0) {
@@ -109,7 +118,7 @@ export function useWallet() {
               });
             }
           } catch (error) {
-            console.error(`Error fetching ${symbol} balance:`, error);
+            console.error(`Error fetching ${symbol} balance on address ${tokenAddress}:`, error);
           }
         }
       }

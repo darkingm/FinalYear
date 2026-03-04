@@ -13,10 +13,11 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Grid3X3, List, SlidersHorizontal, X, Star, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { useCartStore } from '@/store/cart-store';
+import { getProductGallery } from '@/lib/utils/product-images';
 
 const PRODUCT_IMAGES = [
-  '/products/headphones.png', '/products/smartwatch.png', '/products/laptop.png',
-  '/products/camera.png', '/products/sneakers.png', '/products/backpack.png',
+  '/products/gallery/headphones-1.png', '/products/gallery/smartwatch-1.png', '/products/gallery/laptop-1.png',
+  '/products/gallery/camera-1.png', '/products/gallery/sneakers-1.png', '/products/gallery/speaker-1.png',
 ];
 
 interface Product {
@@ -31,10 +32,10 @@ interface Product {
 
 function ProductCard({ product, index, viewMode }: { product: Product; index: number; viewMode: 'grid' | 'list' }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const metaImg = product.metadata?.images?.[0];
-  const displaySrc = (metaImg && metaImg !== '/placeholder-product.svg' && !imgFailed)
-    ? metaImg
-    : PRODUCT_IMAGES[index % PRODUCT_IMAGES.length];
+  const gallery = getProductGallery(product.name, product.metadata?.category, product.metadata?.images);
+  const displaySrc = imgFailed
+    ? PRODUCT_IMAGES[index % PRODUCT_IMAGES.length]
+    : (gallery[0] || PRODUCT_IMAGES[index % PRODUCT_IMAGES.length]);
 
   const addItem = useCartStore((state) => state.addItem);
 
