@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, Request } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { ProductService } from './products.service';
 import { logger } from '../../utils/logger';
@@ -27,6 +27,20 @@ export async function getProducts(req: AuthRequest, res: Response, next: NextFun
     });
   } catch (error: any) {
     logger.error('Get products error:', error);
+    next(error);
+  }
+}
+
+export async function getTokens(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { query } = await import('../../config/database');
+    const result = await query('SELECT * FROM token_whitelist WHERE is_active = true ORDER BY symbol');
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error: any) {
+    logger.error('Get tokens error:', error);
     next(error);
   }
 }

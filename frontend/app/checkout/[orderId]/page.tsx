@@ -27,6 +27,10 @@ interface Order {
   product_metadata: { images?: string[]; category?: string; accepted_tokens?: { crypto?: string[]; fiat?: string[] } };
   quantity: number;
   price_usd: number;
+  pricing_mode?: string;
+  product_token_id?: number | null;
+  price_token?: number | null;
+  subtotal_token?: number | null;
   status: string;
   payment_method: string | null;
   buyer_name: string;
@@ -248,8 +252,17 @@ export default function CheckoutPage() {
                 <p className="text-sm text-gray-500">Người bán: {order.seller_name}</p>
               </div>
               <div className="text-right flex-shrink-0">
-                <p className="text-xl font-bold text-[#f0b90b]">${Number(order.price_usd).toFixed(2)}</p>
-                <p className="text-xs text-gray-600">USD</p>
+                {order.pricing_mode === 'usd' ? (
+                  <>
+                    <p className="text-xl font-bold text-[#f0b90b]">${Number(order.price_usd).toFixed(2)}</p>
+                    <p className="text-xs text-gray-600">USD</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xl font-bold text-[#f0b90b]">{Number(order.subtotal_token).toFixed(4)}</p>
+                    <p className="text-xs text-gray-600">Crypto Token</p>
+                  </>
+                )}
               </div>
             </div>
             {/* Escrow badge */}
@@ -321,7 +334,9 @@ export default function CheckoutPage() {
                     <div>
                       <p className="text-xs text-gray-600">Ước tính cần thanh toán</p>
                       <p className="text-base font-bold text-white font-mono">
-                        {(Number(order.price_usd) / coinPrices[selectedToken]).toFixed(6)} {selectedToken}
+                        {order?.pricing_mode !== 'crypto'
+                          ? (Number(order?.price_usd) / coinPrices[selectedToken]).toFixed(6)
+                          : 'Lấy báo giá để xem '} {selectedToken}
                       </p>
                     </div>
                     <div className="text-right">

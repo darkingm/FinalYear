@@ -257,3 +257,153 @@ export async function getEscrowOrders(req: AuthRequest, res: Response, next: Nex
         next(error);
     }
 }
+
+// ─── Extended Product Management ────────────────────────────────
+
+export async function createProduct(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const adminId = req.user!.user_id;
+        const product = await adminService.createProduct(req.body, adminId);
+        res.json({ success: true, product });
+    } catch (error: any) {
+        logger.error('Admin create product error:', error);
+        next(error);
+    }
+}
+
+export async function updateProductDetail(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const productId = parseInt(req.params.id);
+        const adminId = req.user!.user_id;
+        await adminService.updateProductDetail(productId, req.body, adminId);
+        res.json({ success: true, message: 'Product details updated' });
+    } catch (error: any) {
+        logger.error('Admin update product details error:', error);
+        next(error);
+    }
+}
+
+// ─── Categories Management ──────────────────────────────────────
+
+export async function getCategories(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const categories = await adminService.getAllCategories();
+        res.json({ success: true, categories });
+    } catch (error: any) {
+        logger.error('Admin get categories error:', error);
+        next(error);
+    }
+}
+
+export async function createCategory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const category = await adminService.createCategory(req.body);
+        res.json({ success: true, category });
+    } catch (error: any) {
+        logger.error('Admin create category error:', error);
+        next(error);
+    }
+}
+
+export async function updateCategory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const categoryId = parseInt(req.params.id);
+        const category = await adminService.updateCategory(categoryId, req.body);
+        res.json({ success: true, category });
+    } catch (error: any) {
+        logger.error('Admin update category error:', error);
+        next(error);
+    }
+}
+
+export async function deleteCategory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const categoryId = parseInt(req.params.id);
+        await adminService.deleteCategory(categoryId);
+        res.json({ success: true, message: 'Category deleted' });
+    } catch (error: any) {
+        logger.error('Admin delete category error:', error);
+        next(error);
+    }
+}
+
+// ─── Payouts Management ─────────────────────────────────────────
+
+export async function getPayouts(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const { page, limit, status, seller_id } = req.query;
+        const result = await adminService.getAllPayouts({
+            page: page ? parseInt(page as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            status: status as string,
+            seller_id: seller_id ? parseInt(seller_id as string) : undefined
+        });
+        res.json({ success: true, ...result });
+    } catch (error: any) {
+        logger.error('Admin get payouts error:', error);
+        next(error);
+    }
+}
+
+export async function updatePayoutStatus(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const payoutId = parseInt(req.params.id);
+        const { status, tx_hash, notes } = req.body;
+        const adminId = req.user!.user_id;
+        const payout = await adminService.updatePayoutStatus(payoutId, status, adminId, tx_hash, notes);
+        res.json({ success: true, payout });
+    } catch (error: any) {
+        logger.error('Admin update payout status error:', error);
+        next(error);
+    }
+}
+
+// ─── Platform Settings ──────────────────────────────────────────
+
+export async function getSettings(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const settings = await adminService.getAllSettings();
+        res.json({ success: true, settings });
+    } catch (error: any) {
+        logger.error('Admin get settings error:', error);
+        next(error);
+    }
+}
+
+export async function updateSetting(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const { key } = req.params;
+        const adminId = req.user!.user_id;
+        await adminService.updatePlatformSetting(key, req.body.value, adminId);
+        res.json({ success: true, message: 'Setting updated' });
+    } catch (error: any) {
+        logger.error('Admin update setting error:', error);
+        next(error);
+    }
+}
+
+// ─── Dispute Evidence & Chat ────────────────────────────────────
+
+export async function getDisputeMessages(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const disputeId = parseInt(req.params.id);
+        const messages = await adminService.getDisputeMessages(disputeId);
+        res.json({ success: true, messages });
+    } catch (error: any) {
+        logger.error('Admin get dispute messages error:', error);
+        next(error);
+    }
+}
+
+export async function addDisputeMessage(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const disputeId = parseInt(req.params.id);
+        const adminId = req.user!.user_id;
+        const { message, attachments, is_admin_note } = req.body;
+        const savedMessage = await adminService.addDisputeMessage(disputeId, adminId, message, attachments, is_admin_note);
+        res.json({ success: true, message: savedMessage });
+    } catch (error: any) {
+        logger.error('Admin add dispute message error:', error);
+        next(error);
+    }
+}

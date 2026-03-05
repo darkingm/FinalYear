@@ -28,6 +28,9 @@ interface Product {
   name: string;
   description: string;
   base_price_usd: number;
+  pricing_mode?: string;
+  price_token?: string;
+  token_symbol?: string;
   metadata?: { images?: string[]; category?: string };
   stock?: number;
 }
@@ -335,12 +338,20 @@ function FlashSaleCard({ product, index, getProductImage, failedImgs, setFailedI
 
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-lg font-bold text-[#f0b90b]">
-                  ${Number(product.base_price_usd).toFixed(2)}
-                </span>
-                <span className="text-xs text-muted-foreground line-through ml-2">
-                  ${originalPrice.toFixed(2)}
-                </span>
+                {product.pricing_mode === 'usd' || !product.pricing_mode ? (
+                  <>
+                    <span className="text-lg font-bold text-[#f0b90b]">
+                      ${Number(product.base_price_usd).toFixed(2)}
+                    </span>
+                    <span className="text-xs text-muted-foreground line-through ml-2">
+                      ${originalPrice.toFixed(2)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-lg font-bold text-[#f0b90b]">
+                    {Number(product.price_token).toFixed(4)} {product.token_symbol || 'Crypto'}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1 text-yellow-400">
                 <Star className="w-3 h-3 fill-current" />
@@ -445,9 +456,15 @@ function ProductCard({ product, index, getProductImage, failedImgs, setFailedImg
             <p className="text-muted-foreground text-xs mb-3 line-clamp-2 min-h-[32px]">{product.description}</p>
             <div className="mt-auto">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-base font-bold text-foreground">
-                  ${Number(product.base_price_usd).toFixed(2)}
-                </span>
+                {product.pricing_mode === 'usd' || !product.pricing_mode ? (
+                  <span className="text-base font-bold text-foreground">
+                    ${Number(product.base_price_usd).toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="text-base font-bold text-foreground overflow-hidden text-ellipsis whitespace-nowrap" title={`${Number(product.price_token).toFixed(4)} ${product.token_symbol || 'Crypto'}`}>
+                    {Number(product.price_token).toFixed(4)} {product.token_symbol || 'Crypto'}
+                  </span>
+                )}
                 <div className="flex items-center gap-1 text-yellow-500">
                   <Star className="w-3.5 h-3.5 fill-current" />
                   <span className="text-xs text-muted-foreground">4.8</span>

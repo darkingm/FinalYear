@@ -6,11 +6,11 @@ import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
 
 const ESCROW_ABI = [
-  'function deposit(string orderId, address token, uint256 amount, address seller) external',
+  'function deposit(bytes32 orderId, address token, uint256 amount, address seller) external',
 ];
 
 // Chains with RPC and escrow support (31337 = Hardhat/Anvil local)
-const SUPPORTED_CHAIN_IDS = [31337, 137, 80001, 42161];
+const SUPPORTED_CHAIN_IDS = [31337, 137, 80001, 80002, 42161];
 
 export class CryptoPaymentService {
   private binanceService: BinanceService;
@@ -24,6 +24,7 @@ export class CryptoPaymentService {
     this.providers.set(31337, new ethers.JsonRpcProvider(localRpc));
     this.providers.set(137, new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
     this.providers.set(80001, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
+    this.providers.set(80002, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL)); // Amoy
     this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
   }
 
@@ -57,7 +58,7 @@ export class CryptoPaymentService {
       );
     }
 
-    // Get token only on supported chains (Polygon, Mumbai, Arbitrum) to avoid wrong-chain / Internal JSON-RPC errors
+    // Get token only on supported chains (Polygon, Mumbai, Amoy, Arbitrum)
     const tokenResult = await query(
       `SELECT * FROM token_whitelist 
        WHERE symbol = $1 AND is_active = true AND chain_id = ANY($2::int[]) 
@@ -67,7 +68,7 @@ export class CryptoPaymentService {
 
     if (tokenResult.rows.length === 0) {
       throw new AppError(
-        `Token "${tokenSymbol}" is not available on supported networks (Polygon, Arbitrum). Use USDT or USDC on Polygon.`,
+        `Token "${tokenSymbol}" is not available on supported networks.`,
         400
       );
     }
@@ -78,8 +79,42 @@ export class CryptoPaymentService {
     const tokenPrice = await this.binanceService.getPrice(`${tokenSymbol}USDT`);
 
     // Calculate token amount needed
-    const priceUsd = Number(order.price_usd);
-    const amountToken = priceUsd / tokenPrice;
+    let amountToken: number;
+
+    if (order.pricing_mode === 'crypto' || order.pricing_mode === 'both') {
+      if (order.subtotal_token && order.product_token_id) {
+        // Product was explicitly priced in crypto
+        const prodTokenResult = await query(
+          'SELECT symbol FROM token_whitelist WHERE token_id = $1 LIMIT 1',
+          [order.product_token_id]
+        );
+        if (prodTokenResult.rows.length > 0) {
+          const prodTokenSymbol = prodTokenResult.rows[0].symbol;
+          if (prodTokenSymbol === tokenSymbol) {
+            // Same token, exact amount
+            amountToken = Number(order.subtotal_token);
+          } else {
+            // Different token, swap based on USDT value
+            const prodTokenPrice = await this.binanceService.getPrice(`${prodTokenSymbol}USDT`);
+            const valueUsd = Number(order.subtotal_token) * prodTokenPrice;
+            amountToken = valueUsd / tokenPrice;
+          }
+        } else {
+          // Fallback if token not found
+          const priceUsd = Number(order.price_usd);
+          amountToken = priceUsd / tokenPrice;
+        }
+      } else {
+        // Fallback
+        const priceUsd = Number(order.price_usd);
+        amountToken = priceUsd / tokenPrice;
+      }
+    } else {
+      // USD mode
+      const priceUsd = Number(order.price_usd);
+      amountToken = priceUsd / tokenPrice;
+    }
+
     const amountWei = ethers.parseUnits(amountToken.toFixed(token.decimals), token.decimals);
 
     // Generate calldata for escrow contract
@@ -89,7 +124,7 @@ export class CryptoPaymentService {
     );
 
     const calldata = escrowContract.interface.encodeFunctionData('deposit', [
-      order.internal_order_id,
+      ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id)),
       token.token_address,
       amountWei,
       sellerWallet,

@@ -2,6 +2,7 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import type { Config } from 'wagmi';
 import {
   polygon,
+  polygonMumbai,
   arbitrum,
   arbitrumGoerli,
   polygonAmoy as baseAmoy,
@@ -48,6 +49,7 @@ export const localhost = defineChain({
 });
 
 const allChains = [
+  polygonMumbai,
   polygonAmoy,
   polygon,
   localhost,

@@ -38,10 +38,15 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     }
 
     // Calculate price
-    const priceUsd = product.base_price_usd * quantity;
+    const pricingMode = product.pricing_mode || 'usd';
+    const priceUsd = product.base_price_usd ? Number(product.base_price_usd) * quantity : 0;
     const subtotal = priceUsd;
     const shippingFee = 0; // TODO: calculate from shipping method
     const totalAmount = subtotal + shippingFee;
+
+    const priceToken = product.price_token ? parseFloat(product.price_token) : 0;
+    const subtotalToken = priceToken * quantity;
+
     const internalOrderId = uuidv4();
 
     // Generate order number: ORD-YYYY-NNNNN
@@ -59,10 +64,15 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       `INSERT INTO orders (
         internal_order_id, buyer_id, seller_id, product_id, quantity, 
         price_usd, subtotal, shipping_fee, total_amount,
-        payment_method, order_number, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'UNPAID')
+        payment_method, order_number, status, pricing_mode, product_token_id, price_token, subtotal_token
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'UNPAID', $12, $13, $14, $15)
       RETURNING *`,
-      [internalOrderId, buyerId, product.seller_id, product_id, quantity, priceUsd, subtotal, shippingFee, totalAmount, payment_method || 'crypto', orderNumber]
+      [
+        internalOrderId, buyerId, product.seller_id, product_id, quantity,
+        priceUsd, subtotal, shippingFee, totalAmount,
+        payment_method || 'crypto', orderNumber,
+        pricingMode, product.token_id, product.price_token, subtotalToken
+      ]
     );
 
     const order = orderResult.rows[0];
@@ -249,6 +259,61 @@ export async function cancelOrder(req: AuthRequest, res: Response, next: NextFun
     });
   } catch (error: any) {
     logger.error('Cancel order error:', error);
+    next(error);
+  }
+}
+
+export async function updateOrderStatus(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.user_id;
+    const orderId = parseInt(req.params.id);
+    const { status } = req.body;
+
+    const allowedStatuses = ['SHIPPED', 'DELIVERED', 'COMPLETED', 'DISPUTED'];
+    if (!allowedStatuses.includes(status)) {
+      throw new AppError('Invalid status update', 400);
+    }
+
+    const orderResult = await query(
+      'SELECT * FROM orders WHERE order_id = $1 AND (buyer_id = $2 OR seller_id = $2)',
+      [orderId, userId, userId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      throw new AppError('Order not found', 404);
+    }
+
+    const order = orderResult.rows[0];
+
+    // Basic permission checks:
+    // Seller can mark SHIPPED, DELIVERED
+    // Buyer can mark COMPLETED, DISPUTED
+    if (order.seller_id === userId && !['SHIPPED', 'DELIVERED'].includes(status)) {
+      throw new AppError('Sellers can only mark order as SHIPPED or DELIVERED', 403);
+    }
+    if (order.buyer_id === userId && !['COMPLETED', 'DISPUTED'].includes(status)) {
+      throw new AppError('Buyers can only mark order as COMPLETED or DISPUTED', 403);
+    }
+
+    await query(
+      `UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`,
+      [status, orderId]
+    );
+
+    // Publish event
+    await publishEvent('order.status_updated', {
+      order_id: orderId,
+      status: status,
+      timestamp: Date.now(),
+    });
+
+    res.json({
+      success: true,
+      message: 'Order status updated successfully',
+      status: status
+    });
+  } catch (error: any) {
+    logger.error('Update order status error:', error);
     next(error);
   }
 }

@@ -19,6 +19,18 @@ import {
     updateToken,
     getAuditLogs,
     getEscrowOrders,
+    createProduct,
+    updateProductDetail,
+    getCategories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    getPayouts,
+    updatePayoutStatus,
+    getSettings,
+    updateSetting,
+    getDisputeMessages,
+    addDisputeMessage
 } from './admin.controller';
 
 const router = Router();
@@ -42,6 +54,8 @@ router.patch('/users/:id/role', updateUserRole);
 // Disputes
 router.get('/disputes', getDisputes);
 router.patch('/disputes/:id/resolve', resolveDispute);
+router.get('/disputes/:id/messages', getDisputeMessages);
+router.post('/disputes/:id/messages', addDisputeMessage);
 
 // Refunds
 router.post('/refunds', initiateRefund);
@@ -50,9 +64,23 @@ router.patch('/refunds/:id/status', updateRefundStatus);
 
 // Products
 router.get('/products', getProducts);
+router.post('/products', createProduct);
 router.patch('/products/:id/status', updateProductStatus);
+router.put('/products/:id', updateProductDetail);
+
+// Categories
+router.get('/categories', getCategories);
+router.post('/categories', createCategory);
+router.put('/categories/:id', updateCategory);
+router.delete('/categories/:id', deleteCategory);
+
+// Payouts
+router.get('/payouts', getPayouts);
+router.patch('/payouts/:id/status', updatePayoutStatus);
 
 // Platform Settings
+router.get('/settings', getSettings);
+router.patch('/settings/:key', updateSetting);
 router.get('/tokens', getTokens);
 router.patch('/tokens/:id', updateToken);
 

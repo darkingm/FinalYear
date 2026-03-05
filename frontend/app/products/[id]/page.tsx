@@ -23,16 +23,23 @@ interface Product {
   name: string;
   description: string;
   base_price_usd: number;
+  pricing_mode?: string;
+  price_token?: string | number;
+  token_symbol?: string;
+  token_decimals?: number;
   metadata: {
     images?: string[];
     category?: string;
     accepted_tokens?: { crypto?: string[]; fiat?: string[] };
     attributes?: any;
+    location?: string;
   };
   stock: number;
+  stock_available?: number;
   seller_name: string;
   seller_id: number;
   owner_user_id: number;
+  rating_avg?: number;
 }
 
 export default function ProductDetailPage() {
@@ -205,11 +212,38 @@ export default function ProductDetailPage() {
             <h1 className="text-3xl lg:text-4xl font-bold">{product.name}</h1>
 
             {/* Price */}
-            <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-bold text-primary">
-                ${Number(product.base_price_usd).toFixed(2)}
-              </span>
-              <span className="text-muted-foreground">USD</span>
+            <div className="flex flex-col gap-1">
+              {product.pricing_mode === 'crypto' && product.price_token ? (
+                <div className="flex items-baseline gap-3">
+                  <span className="text-4xl font-bold">
+                    {Number(product.price_token).toString()}
+                  </span>
+                  <span className="text-lg font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded">
+                    {product.token_symbol}
+                  </span>
+                </div>
+              ) : product.pricing_mode === 'both' && product.price_token ? (
+                <>
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-4xl font-bold text-primary">
+                      ${Number(product.base_price_usd).toFixed(2)}
+                    </span>
+                    <span className="text-muted-foreground font-medium">USD</span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-muted-foreground">or</span>
+                    <span className="text-2xl font-bold">{Number(product.price_token).toString()}</span>
+                    <span className="text-blue-500 font-bold">{product.token_symbol}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-baseline gap-3">
+                  <span className="text-4xl font-bold text-primary">
+                    ${Number(product.base_price_usd).toFixed(2)}
+                  </span>
+                  <span className="text-muted-foreground font-medium">USD</span>
+                </div>
+              )}
             </div>
 
             {/* Description */}

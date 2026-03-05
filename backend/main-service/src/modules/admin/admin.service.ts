@@ -117,7 +117,8 @@ export class AdminService {
               buyer.username as buyer_name, buyer.email as buyer_email, buyer.wallet_address as buyer_wallet,
               seller_u.username as seller_username, seller_u.email as seller_email, seller_u.wallet_address as seller_wallet,
               seller_p.display_name as seller_name,
-              p.name as product_name, p.base_price_usd as product_price,
+              p.name as product_name, p.base_price_usd as product_price, p.pricing_mode, p.price_token,
+              p.token_id as product_token_id, tw.symbol as product_token_symbol, tw.decimals as product_token_decimals,
               pay.tx_hash as payment_tx_hash, pay.status as payment_status, pay.confirmations,
               pay.block_number as payment_block, pay.gas_used as payment_gas
        FROM orders o
@@ -125,6 +126,7 @@ export class AdminService {
        LEFT JOIN seller_profiles seller_p ON o.seller_id = seller_p.seller_id
        LEFT JOIN users seller_u ON seller_p.user_id = seller_u.user_id
        LEFT JOIN products p ON o.product_id = p.product_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
        LEFT JOIN payments pay ON o.order_id = pay.order_id
        WHERE o.order_id = $1`,
             [orderId]
@@ -523,11 +525,13 @@ export class AdminService {
 
         const result = await query(
             `SELECT p.*, sp.display_name as seller_name, u.email as seller_email,
+              tw.symbol as token_symbol, tw.decimals as token_decimals,
               (SELECT COUNT(*) FROM orders WHERE product_id = p.product_id) as order_count,
               i.available as stock_available, i.reserved as stock_reserved
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u ON sp.user_id = u.user_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
        LEFT JOIN inventory i ON p.product_id = i.product_id
        ${whereClause}
        ORDER BY p.created_at DESC
@@ -628,4 +632,264 @@ export class AdminService {
 
         return result.rows;
     }
+
+    // ─── 1. Extended Product Management ───────────────────────────────
+
+    async createProduct(data: any, adminId: number) {
+        const { seller_id, name, description, category, base_price_usd, status, stock, warehouse_id, pricing_mode, token_id, price_token } = data;
+
+        await query('BEGIN');
+        try {
+            const productResult = await query(
+                `INSERT INTO products (seller_id, name, description, category, base_price_usd, status, pricing_mode, token_id, price_token)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+                [seller_id, name, description, category, base_price_usd || 0, status || 'active', pricing_mode || 'usd', token_id || null, price_token || null]
+            );
+
+            const product = productResult.rows[0];
+
+            if (stock && warehouse_id) {
+                await query(
+                    `INSERT INTO inventory (product_id, warehouse_id, total_stock, available)
+                     VALUES ($1, $2, $3, $4)`,
+                    [product.product_id, warehouse_id, stock, stock]
+                );
+            }
+
+            await query(
+                `INSERT INTO audit_logs (entity_type, entity_id, action, new_value, changed_by)
+                 VALUES ('product', $1, 'created_by_admin', $2, $3)`,
+                [product.product_id, JSON.stringify(product), adminId]
+            );
+
+            await query('COMMIT');
+            return product;
+        } catch (error) {
+            await query('ROLLBACK');
+            throw error;
+        }
+    }
+
+    async updateProductDetail(productId: number, data: any, adminId: number) {
+        const { name, description, category, base_price_usd, status, stock, warehouse_id, pricing_mode, token_id, price_token } = data;
+
+        await query('BEGIN');
+        try {
+            const upFields = [];
+            const upValues = [];
+            let idx = 1;
+
+            if (name !== undefined) { upFields.push(`name = $${idx++}`); upValues.push(name); }
+            if (description !== undefined) { upFields.push(`description = $${idx++}`); upValues.push(description); }
+            if (category !== undefined) { upFields.push(`category = $${idx++}`); upValues.push(category); }
+            if (base_price_usd !== undefined) { upFields.push(`base_price_usd = $${idx++}`); upValues.push(base_price_usd); }
+            if (status !== undefined) { upFields.push(`status = $${idx++}`); upValues.push(status); }
+            if (pricing_mode !== undefined) { upFields.push(`pricing_mode = $${idx++}`); upValues.push(pricing_mode); }
+            if (token_id !== undefined) { upFields.push(`token_id = $${idx++}`); upValues.push(token_id); }
+            if (price_token !== undefined) { upFields.push(`price_token = $${idx++}`); upValues.push(price_token); }
+
+            if (upFields.length > 0) {
+                upValues.push(productId);
+                await query(
+                    `UPDATE products SET ${upFields.join(', ')}, updated_at = NOW()
+                     WHERE product_id = $${idx}`,
+                    upValues
+                );
+            }
+
+            if (stock !== undefined && warehouse_id !== undefined) {
+                // Upsert inventory
+                await query(
+                    `INSERT INTO inventory (product_id, warehouse_id, total_stock, available)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (product_id, warehouse_id) 
+                     DO UPDATE SET total_stock = $3, available = $3 - inventory.reserved, updated_at = NOW()`,
+                    [productId, warehouse_id, stock, stock]
+                );
+            }
+
+            await query(
+                `INSERT INTO audit_logs (entity_type, entity_id, action, new_value, changed_by)
+                 VALUES ('product', $1, 'detail_updated', $2, $3)`,
+                [productId, JSON.stringify(data), adminId]
+            );
+
+            await query('COMMIT');
+            logger.info('Admin updated product details', { productId, adminId });
+        } catch (error) {
+            await query('ROLLBACK');
+            throw error;
+        }
+    }
+
+    // ─── 2. Categories Management ─────────────────────────────────────
+
+    async getAllCategories() {
+        const result = await query(`SELECT * FROM categories ORDER BY display_order ASC, created_at DESC`);
+        return result.rows;
+    }
+
+    async createCategory(data: { name: string, slug: string, description?: string, image_url?: string, is_active?: boolean, display_order?: number }) {
+        const result = await query(
+            `INSERT INTO categories (name, slug, description, image_url, is_active, display_order)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [data.name, data.slug, data.description, data.image_url, data.is_active ?? true, data.display_order ?? 0]
+        );
+        return result.rows[0];
+    }
+
+    async updateCategory(categoryId: number, data: any) {
+        const dbCat = await query('SELECT * FROM categories WHERE category_id = $1', [categoryId]);
+        if (!dbCat.rows.length) throw new AppError('Category not found', 404);
+
+        const upFields = [];
+        const upValues = [];
+        let idx = 1;
+
+        if (data.name !== undefined) { upFields.push(`name = $${idx++}`); upValues.push(data.name); }
+        if (data.slug !== undefined) { upFields.push(`slug = $${idx++}`); upValues.push(data.slug); }
+        if (data.description !== undefined) { upFields.push(`description = $${idx++}`); upValues.push(data.description); }
+        if (data.image_url !== undefined) { upFields.push(`image_url = $${idx++}`); upValues.push(data.image_url); }
+        if (data.is_active !== undefined) { upFields.push(`is_active = $${idx++}`); upValues.push(data.is_active); }
+        if (data.display_order !== undefined) { upFields.push(`display_order = $${idx++}`); upValues.push(data.display_order); }
+
+        if (upFields.length === 0) return dbCat.rows[0];
+
+        upValues.push(categoryId);
+        const result = await query(
+            `UPDATE categories SET ${upFields.join(', ')}, updated_at = NOW() WHERE category_id = $${idx} RETURNING *`,
+            upValues
+        );
+        return result.rows[0];
+    }
+
+    async deleteCategory(categoryId: number) {
+        await query('DELETE FROM categories WHERE category_id = $1', [categoryId]);
+        return { success: true };
+    }
+
+    // ─── 3. Withdrawals / Payouts ─────────────────────────────────────
+
+    async getAllPayouts(params: { page?: number; limit?: number; status?: string; seller_id?: number }) {
+        const page = params.page || 1;
+        const limit = params.limit || 20;
+        const offset = (page - 1) * limit;
+
+        let whereClause = 'WHERE 1=1';
+        const queryParams: any[] = [];
+        let paramIdx = 1;
+
+        if (params.status) {
+            whereClause += ` AND p.status = $${paramIdx++}`;
+            queryParams.push(params.status);
+        }
+
+        if (params.seller_id) {
+            whereClause += ` AND p.seller_id = $${paramIdx++}`;
+            queryParams.push(params.seller_id);
+        }
+
+        const countResult = await query(`SELECT COUNT(*) as total FROM seller_payouts p ${whereClause}`, queryParams);
+        const result = await query(
+            `SELECT p.*, sp.display_name, sp.payout_wallet as seller_wallet, u.username as processed_by_name
+             FROM seller_payouts p
+             JOIN seller_profiles sp ON p.seller_id = sp.seller_id
+             LEFT JOIN users u ON p.processed_by = u.user_id
+             ${whereClause}
+             ORDER BY p.created_at DESC
+             LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+            [...queryParams, limit, offset]
+        );
+
+        return {
+            payouts: result.rows,
+            total: parseInt(countResult.rows[0].total),
+            page, limit,
+            totalPages: Math.ceil(parseInt(countResult.rows[0].total) / limit),
+        };
+    }
+
+    async updatePayoutStatus(payoutId: number, status: string, adminId: number, txHash?: string, notes?: string) {
+        const updateFields: string[] = ['status = $1', 'processed_by = $2', 'updated_at = NOW()'];
+        const params: any[] = [status, adminId];
+        let idx = 3;
+
+        if (['completed', 'rejected'].includes(status)) {
+            updateFields.push(`processed_at = NOW()`);
+        }
+
+        if (txHash) {
+            updateFields.push(`tx_hash = $${idx++}`);
+            params.push(txHash);
+        }
+
+        if (notes) {
+            updateFields.push(`notes = $${idx++}`);
+            params.push(notes);
+        }
+
+        params.push(payoutId);
+
+        const result = await query(
+            `UPDATE seller_payouts SET ${updateFields.join(', ')} WHERE payout_id = $${idx} RETURNING *`,
+            params
+        );
+
+        if (!result.rows.length) {
+            throw new AppError('Payout not found', 404);
+        }
+
+        return result.rows[0];
+    }
+
+    // ─── 4. Platform Settings (Fees, Banners, Announcements) ──────────
+
+    async getPlatformSetting(key: string) {
+        const result = await query('SELECT value FROM platform_settings WHERE key = $1', [key]);
+        return result.rows.length ? result.rows[0].value : null;
+    }
+
+    async getAllSettings() {
+        const result = await query('SELECT * FROM platform_settings');
+        return result.rows;
+    }
+
+    async updatePlatformSetting(key: string, value: any, adminId: number) {
+        await query(
+            `INSERT INTO platform_settings (key, value, updated_by) 
+             VALUES ($1, $2, $3)
+             ON CONFLICT (key) DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+            [key, JSON.stringify(value), adminId]
+        );
+        return { success: true };
+    }
+
+    // ─── 5. Dispute Evidence & Chat ───────────────────────────────────
+
+    async getDisputeMessages(disputeId: number) {
+        const result = await query(
+            `SELECT dm.*, u.username as sender_name, u.role as sender_role, u.avatar_url
+             FROM dispute_messages dm
+             JOIN users u ON dm.sender_id = u.user_id
+             WHERE dm.dispute_id = $1
+             ORDER BY dm.created_at ASC`,
+            [disputeId]
+        );
+        return result.rows;
+    }
+
+    async addDisputeMessage(disputeId: number, senderId: number, message: string, attachments?: string[], isAdminNote: boolean = false) {
+        // Verify dispute exists
+        const dCheck = await query('SELECT 1 FROM disputes WHERE dispute_id = $1', [disputeId]);
+        if (!dCheck.rows.length) throw new AppError('Dispute not found', 404);
+
+        const att = attachments ? JSON.stringify(attachments) : null;
+        const result = await query(
+            `INSERT INTO dispute_messages (dispute_id, sender_id, message, attachments, is_admin_note)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [disputeId, senderId, message, att, isAdminNote]
+        );
+        return result.rows[0];
+    }
 }
+

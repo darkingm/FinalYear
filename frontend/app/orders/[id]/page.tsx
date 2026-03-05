@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Package, ArrowLeft, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Package, ArrowLeft, CheckCircle, XCircle, Loader2, Truck, Check, AlertTriangle } from 'lucide-react';
+import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/order/OrderStepper';
 
 interface Order {
   order_id: number;
@@ -20,8 +21,12 @@ interface Order {
   product_metadata: { images?: string[]; category?: string };
   quantity: number;
   price_usd: number;
-  status: string;
+  pricing_mode?: string;
+  subtotal_token?: number;
+  status: OrderStatus;
   payment_method: string | null;
+  buyer_id: number;
+  seller_id: number;
   buyer_name: string;
   seller_name: string;
   created_at: string;
@@ -38,10 +43,11 @@ export default function OrderDetailPage() {
   const success = searchParams.get('success') === 'true';
   const cancelled = searchParams.get('cancelled') === 'true';
 
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, session } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const isInternalId = UUID_REGEX.test(id);
 
@@ -97,6 +103,22 @@ export default function OrderDetailPage() {
       setCapturing(false);
     }
   };
+
+  const handleUpdateStatus = async (newStatus: OrderStatus) => {
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/api/orders/${order?.order_id}/status`, { status: newStatus });
+      toast.success('Cập nhật trạng thái thành công!');
+      fetchOrder();
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Cập nhật thất bại');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const isBuyer = session?.user?.id === String(order?.buyer_id);
+  const isSeller = session?.user?.id === String(order?.seller_id);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -212,27 +234,83 @@ export default function OrderDetailPage() {
                   <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Ảnh</div>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <h2 className="font-semibold text-lg mb-1">{order.product_name}</h2>
                 <p className="text-sm text-gray-500">Số lượng: {order.quantity}</p>
-                <p className="text-xl font-bold text-primary mt-1">${Number(order.price_usd).toFixed(2)} USD</p>
+                {order.pricing_mode === 'usd' || !order.pricing_mode ? (
+                  <p className="text-xl font-bold text-primary mt-1">${Number(order.price_usd).toFixed(2)} USD</p>
+                ) : (
+                  <p className="text-xl font-bold text-primary mt-1">{Number(order.subtotal_token).toFixed(4)} Crypto</p>
+                )}
               </div>
             </div>
 
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              <dt className="text-gray-500">Người mua</dt>
-              <dd>{order.buyer_name}</dd>
-              <dt className="text-gray-500">Người bán</dt>
-              <dd>{order.seller_name}</dd>
-              <dt className="text-gray-500">Phương thức</dt>
-              <dd>{order.payment_method || '—'}</dd>
+            <OrderStepper currentStatus={order.status} className="my-8 py-6 border-y border-gray-100 dark:border-gray-700" />
+
+            <dl className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+              <div>
+                <dt className="text-gray-500 text-xs uppercase tracking-wider mb-1">Người mua</dt>
+                <dd className="font-medium text-base">{order.buyer_name} {isBuyer && '(Bạn)'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs uppercase tracking-wider mb-1">Người bán</dt>
+                <dd className="font-medium text-base">{order.seller_name} {isSeller && '(Bạn)'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs uppercase tracking-wider mb-1">Phương thức</dt>
+                <dd className="font-medium text-base uppercase">{order.payment_method || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs uppercase tracking-wider mb-1">Mã đơn hệ thống</dt>
+                <dd className="font-medium font-mono text-xs">{order.internal_order_id.split('-')[0]}</dd>
+              </div>
             </dl>
           </div>
 
-          {order.status === 'UNPAID' && (
+          {order.status === 'UNPAID' && isBuyer && (
             <Link href={`/checkout/${order.order_id}`}>
-              <Button className="w-full">Tiếp tục thanh toán</Button>
+              <Button className="w-full h-12 text-lg font-semibold">Tiếp tục thanh toán</Button>
             </Link>
+          )}
+
+          {/* Action Buttons for Seller */}
+          {isSeller && (order.status === 'PAID' || order.status === 'ONCHAIN_CONFIRMED') && (
+            <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6 border-l-4 border-blue-500">
+              <h3 className="font-bold text-lg mb-2">Thao tác dành cho người bán</h3>
+              <p className="text-sm text-gray-500 mb-4">Người mua đã thanh toán. Vui lòng đóng gói và giao hàng.</p>
+              <Button
+                className="w-full gap-2"
+                onClick={() => handleUpdateStatus('SHIPPED')}
+                disabled={actionLoading}
+              >
+                <Truck className="w-5 h-5" /> Xác nhận đã Giao hàng (Shipped)
+              </Button>
+            </div>
+          )}
+
+          {/* Action Buttons for Buyer */}
+          {isBuyer && order.status === 'SHIPPED' && (
+            <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md mb-6 border-l-4 border-green-500">
+              <h3 className="font-bold text-lg mb-2">Xác nhận nhận hàng</h3>
+              <p className="text-sm text-gray-500 mb-4">Bạn đã nhận được sản phẩm và hài lòng với chất lượng? Tiền sẽ được chuyển cho người bán.</p>
+              <div className="flex gap-4">
+                <Button
+                  className="flex-1 gap-2 border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  variant="outline"
+                  onClick={() => handleUpdateStatus('DISPUTED')}
+                  disabled={actionLoading}
+                >
+                  <AlertTriangle className="w-5 h-5" /> Báo cáo / Có vấn đề
+                </Button>
+                <Button
+                  className="flex-1 gap-2 bg-green-600 hover:bg-green-700"
+                  onClick={() => handleUpdateStatus('COMPLETED')}
+                  disabled={actionLoading}
+                >
+                  <Check className="w-5 h-5" /> Đã nhận hàng tốt
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </div>

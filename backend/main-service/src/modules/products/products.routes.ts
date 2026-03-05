@@ -8,12 +8,14 @@ import {
   updateProduct,
   deleteProduct,
   uploadImages,
+  getTokens,
 } from './products.controller';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.get('/', getProducts);
+router.get('/tokens', getTokens);
 router.get('/:id', getProduct);
 router.post('/', authenticate, createProduct);
 router.put('/:id', authenticate, updateProduct);

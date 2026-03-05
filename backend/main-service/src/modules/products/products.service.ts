@@ -53,11 +53,12 @@ export class ProductService {
     // Get products
     params.push(limit, offset);
     const result = await query(
-      `SELECT p.*, i.available as stock, sp.display_name as seller_name, u.user_id as owner_user_id
+      `SELECT p.*, i.available as stock, sp.display_name as seller_name, u.user_id as owner_user_id, tw.symbol as token_symbol
        FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u ON sp.user_id = u.user_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
        WHERE ${whereClause}
        ORDER BY p.created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -84,11 +85,12 @@ export class ProductService {
     }
 
     const result = await query(
-      `SELECT p.*, i.available as stock, i.total_stock, sp.display_name as seller_name, u.email as seller_email, u.user_id as owner_user_id
+      `SELECT p.*, i.available as stock, i.total_stock, sp.display_name as seller_name, u.email as seller_email, u.user_id as owner_user_id, tw.symbol as token_symbol
        FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u ON sp.user_id = u.user_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
        WHERE p.product_id = $1`,
       [productId]
     );
@@ -105,12 +107,28 @@ export class ProductService {
     return product;
   }
 
-  async createProduct(sellerId: number, data: any) {
+  async createProduct(userId: number, data: any) {
+    // Get seller_id from user_id
+    const sellerResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
+    if (sellerResult.rows.length === 0) {
+      throw new AppError('Seller profile not found', 404);
+    }
+    const realSellerId = sellerResult.rows[0].seller_id;
+
     const result = await query(
-      `INSERT INTO products (seller_id, name, description, base_price_usd, metadata, status)
-       VALUES ($1, $2, $3, $4, $5, 'active')
+      `INSERT INTO products (seller_id, name, description, base_price_usd, metadata, status, pricing_mode, token_id, price_token)
+       VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $8)
        RETURNING *`,
-      [sellerId, data.name, data.description, data.price || data.base_price_usd, JSON.stringify(data.metadata)]
+      [
+        realSellerId,
+        data.name,
+        data.description,
+        data.price || data.base_price_usd,
+        JSON.stringify(data.metadata),
+        data.pricing_mode || 'usd',
+        data.token_id || null,
+        data.price_token || null
+      ]
     );
 
     const product = result.rows[0];
@@ -150,14 +168,20 @@ export class ProductService {
            description = COALESCE($2, description),
            base_price_usd = COALESCE($3, base_price_usd),
            metadata = COALESCE($4, metadata),
+           pricing_mode = COALESCE($5, pricing_mode),
+           token_id = COALESCE($6, token_id),
+           price_token = COALESCE($7, price_token),
            updated_at = NOW()
-       WHERE product_id = $5
+       WHERE product_id = $8
        RETURNING *`,
       [
         updates.name,
         updates.description,
         updates.price || updates.base_price_usd,
         updates.metadata ? JSON.stringify(updates.metadata) : null,
+        updates.pricing_mode,
+        updates.token_id,
+        updates.price_token,
         productId,
       ]
     );
