@@ -38,14 +38,11 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     }
 
     // Calculate price
-    const pricingMode = product.pricing_mode || 'usd';
     const priceUsd = product.base_price_usd ? Number(product.base_price_usd) * quantity : 0;
     const subtotal = priceUsd;
     const shippingFee = 0; // TODO: calculate from shipping method
     const totalAmount = subtotal + shippingFee;
 
-    const priceToken = product.price_token ? parseFloat(product.price_token) : 0;
-    const subtotalToken = priceToken * quantity;
 
     const internalOrderId = uuidv4();
 
@@ -62,16 +59,15 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     // Create order
     const orderResult = await query(
       `INSERT INTO orders (
-        internal_order_id, buyer_id, seller_id, product_id, quantity, 
+        internal_order_id, buyer_id, seller_id, product_id, quantity,
         price_usd, subtotal, shipping_fee, total_amount,
-        payment_method, order_number, status, pricing_mode, product_token_id, price_token, subtotal_token
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'UNPAID', $12, $13, $14, $15)
+        payment_method, order_number, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'UNPAID')
       RETURNING *`,
       [
         internalOrderId, buyerId, product.seller_id, product_id, quantity,
         priceUsd, subtotal, shippingFee, totalAmount,
         payment_method || 'crypto', orderNumber,
-        pricingMode, product.token_id, product.price_token, subtotalToken
       ]
     );
 
@@ -317,3 +313,5 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     next(error);
   }
 }
+
+

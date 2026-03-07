@@ -24,6 +24,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'graph.facebook.com' },
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
       { protocol: 'https', hostname: 'res.cloudinary.com' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'plus.unsplash.com' },
       { protocol: 'https', hostname: 's3.amazonaws.com' },
     ],
     formats: ['image/webp', 'image/avif'],
@@ -102,3 +104,4 @@ const nextConfig = {
 };
 
 export default nextConfig;
+

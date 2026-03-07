@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getSession } from 'next-auth/react';
 
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_MAIN_API_URL || 'http://localhost:3001',
@@ -16,9 +17,25 @@ export const paymentClient = axios.create({
   withCredentials: true,
 });
 
+// Helper: get token from localStorage or refresh from session
+async function getAuthToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem('auth_token');
+  if (stored) return stored;
+  // Try to refresh from NextAuth session
+  try {
+    const session = await getSession() as any;
+    if (session?.accessToken) {
+      localStorage.setItem('auth_token', session.accessToken);
+      return session.accessToken;
+    }
+  } catch (_) { /* ignore */ }
+  return null;
+}
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -27,13 +44,11 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 paymentClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -42,21 +57,30 @@ paymentClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle errors
+// Response interceptor: on 401, try refreshing session token before redirecting
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
-        window.location.href = '/login';
+  async (error) => {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      // Attempt to refresh token from NextAuth session
+      const originalRequest = error.config;
+      if (!originalRequest._retried) {
+        originalRequest._retried = true;
+        try {
+          const session = await getSession() as any;
+          if (session?.accessToken) {
+            localStorage.setItem('auth_token', session.accessToken);
+            originalRequest.headers.Authorization = `Bearer ${session.accessToken}`;
+            return apiClient(originalRequest);
+          }
+        } catch (_) { /* session unavailable */ }
       }
+      // Token cannot be refreshed — clear and redirect to login
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -64,12 +88,22 @@ apiClient.interceptors.response.use(
 
 paymentClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
-        window.location.href = '/login';
+  async (error) => {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      const originalRequest = error.config;
+      if (!originalRequest._retried) {
+        originalRequest._retried = true;
+        try {
+          const session = await getSession() as any;
+          if (session?.accessToken) {
+            localStorage.setItem('auth_token', session.accessToken);
+            originalRequest.headers.Authorization = `Bearer ${session.accessToken}`;
+            return paymentClient(originalRequest);
+          }
+        } catch (_) { /* ignore */ }
       }
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
