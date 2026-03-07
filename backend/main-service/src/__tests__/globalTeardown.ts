@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 
 export default async function globalTeardown() {
-  // Close any lingering PG pool connections
+  if (!process.env.DATABASE_URL) return;
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     await pool.end();
