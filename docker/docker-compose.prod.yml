@@ -18,8 +18,8 @@ services:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../docs/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ../docs/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
+      - ../init_database.sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ../init_database.sql/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
@@ -173,5 +173,6 @@ volumes:
 networks:
   marketplace-network:
     driver: bridge
+
 
 

@@ -7,9 +7,11 @@
     "dev": "kill-port 3001 && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "kill-port 3001 && node dist/server.js",
-    "test": "jest",
+    "test": "jest --forceExit --detectOpenHandles",
     "test:watch": "jest --watch",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "test:coverage": "jest --coverage --forceExit",
+    "test:ci": "jest --forceExit --detectOpenHandles --ci"
   },
   "keywords": [],
   "author": "",
@@ -51,6 +53,7 @@
     "kill-port": "^2.0.1",
     "supertest": "^6.3.4",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "ts-jest": "^29.2.0"
   }
 }
