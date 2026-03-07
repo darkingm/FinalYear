@@ -146,46 +146,51 @@ export class ProductService {
   }
 
   async createProduct(sellerId: number, data: any) {
-    const result = await query(
-      `INSERT INTO products
-         (seller_id, name, description, category, base_price_usd,
-          token_id, price_in_token, metadata, status, product_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',$9)
-       RETURNING *`,
-      [
-        sellerId,
-        data.name,
-        data.description,
-        data.category || 'general',
-        data.price || data.base_price_usd,
-        data.token_id || null,
-        data.price_in_token || null,
-        JSON.stringify(data.metadata || {}),
-        data.product_type || 'physical',
-      ]
-    );
-
-    const product = result.rows[0];
-
-    // Get default warehouse
-    const whResult = await query(
-      `SELECT warehouse_id FROM warehouses WHERE status = 'active' ORDER BY warehouse_id LIMIT 1`
-    );
-    const warehouseId = whResult.rows[0]?.warehouse_id;
-
-    if (warehouseId) {
-      const stockQty = data.stock || 0;
-      await query(
-        `INSERT INTO inventory (product_id, warehouse_id, total_stock, available, reserved)
-         VALUES ($1, $2, $3, $3, 0)
-         ON CONFLICT (product_id, warehouse_id) DO UPDATE
-         SET total_stock = EXCLUDED.total_stock, available = EXCLUDED.available`,
-        [product.product_id, warehouseId, stockQty]
+    try {
+      const result = await query(
+        `INSERT INTO products
+           (seller_id, name, description, category, base_price_usd,
+            token_id, price_in_token, metadata, status, product_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',$9)
+         RETURNING *`,
+        [
+          sellerId,
+          data.name,
+          data.description,
+          data.category || 'general',
+          data.price || data.base_price_usd,
+          data.token_id || null,
+          data.price_in_token || null,
+          JSON.stringify(data.metadata || {}),
+          data.product_type || 'physical',
+        ]
       );
-    }
 
-    logger.info('Product created', { product_id: product.product_id });
-    return product;
+      const product = result.rows[0];
+
+      // Get default warehouse
+      const whResult = await query(
+        `SELECT warehouse_id FROM warehouses WHERE status = 'active' ORDER BY warehouse_id LIMIT 1`
+      );
+      const warehouseId = whResult.rows[0]?.warehouse_id;
+
+      if (warehouseId) {
+        const stockQty = data.stock || 0;
+        await query(
+          `INSERT INTO inventory (product_id, warehouse_id, total_stock, available, reserved)
+           VALUES ($1, $2, $3, $3, 0)
+           ON CONFLICT (product_id, warehouse_id) DO UPDATE
+           SET total_stock = EXCLUDED.total_stock, available = EXCLUDED.available`,
+          [product.product_id, warehouseId, stockQty]
+        );
+      }
+
+      logger.info('Product created', { product_id: product.product_id });
+      return product;
+    } catch (error: any) {
+      logger.error('Create product error:', error);
+      throw error;
+    }
   }
 
   async updateProduct(productId: number, userId: number, updates: any) {

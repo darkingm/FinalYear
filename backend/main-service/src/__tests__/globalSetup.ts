@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { Pool } from 'pg';
+import 'dotenv/config';
 
 function findSchemaFile(startDir: string): string | null {
   let dir = startDir;
@@ -29,31 +30,39 @@ export default async function globalSetup() {
 
   const pool = new Pool({ connectionString: dbUrl, connectionTimeoutMillis: 3000 });
   let schemaExists = false;
-  let dbReachable  = false;
+  let dbReachable = false;
 
   try {
     const res = await pool.query(
       `SELECT COUNT(*) FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = 'users'`
     );
-    dbReachable  = true;
+    dbReachable = true;
     schemaExists = parseInt(res.rows[0].count) > 0;
   } catch {
     // DB not reachable — likely schema already applied by CI psql command
     dbReachable = false;
-  } finally {
-    await pool.end().catch(() => {});
   }
 
   if (!dbReachable) {
     console.warn('[globalSetup] DB not reachable — assuming schema already applied by CI.');
+    await pool.end().catch(() => { });
     return;
   }
 
   if (schemaExists) {
-    console.log('[globalSetup] Schema already applied — skipping.');
-    return;
+    console.log('[globalSetup] Dropping existing schema to ensure fresh start...');
+    const client = await pool.connect();
+    try {
+      await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+      await client.query('GRANT ALL ON SCHEMA public TO public;');
+      await client.query('GRANT ALL ON SCHEMA public TO postgres;');
+    } finally {
+      client.release();
+    }
   }
+
+  await pool.end().catch(() => { });
 
   const schemaFile = findSchemaFile(__dirname);
   if (!schemaFile) {
@@ -63,5 +72,12 @@ export default async function globalSetup() {
 
   console.log(`[globalSetup] Applying schema from: ${schemaFile}`);
   execSync(`psql "${dbUrl}" -f "${schemaFile}"`, { stdio: 'inherit' });
-  console.log('[globalSetup] Schema applied successfully.');
+
+  const seedFile = schemaFile.replace('01_schema.sql', '02_seed_data.sql');
+  if (fs.existsSync(seedFile)) {
+    console.log(`[globalSetup] Applying seed data from: ${seedFile}`);
+    execSync(`psql "${dbUrl}" -f "${seedFile}"`, { stdio: 'inherit' });
+  }
+
+  console.log('[globalSetup] Database initialization complete.');
 }

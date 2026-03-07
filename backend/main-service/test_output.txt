@@ -1,0 +1,258 @@
+
+> marketplace-main-service@1.0.0 test:ci
+> jest --forceExit --detectOpenHandles --ci src/__tests__/products.test.ts
+
+[globalSetup] Dropping existing schema to ensure fresh start...
+[globalSetup] Applying schema from: C:\Users\Asus\Documents\FYP\FYP\init_database.sql\01_schema.sql
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE VIEW
+CREATE VIEW
+CREATE VIEW
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+[globalSetup] Applying seed data from: C:\Users\Asus\Documents\FYP\FYP\init_database.sql\02_seed_data.sql
+BEGIN
+INSERT 0 6
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 3
+INSERT 0 5
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+DO
+INSERT 0 5
+COMMIT
+[globalSetup] Database initialization complete.
+  console.log
+    DATABASE_URL = postgresql://postgres:kien2909@localhost:5433/marketplace_db
+
+      at Object.<anonymous> (src/config/database.ts:15:9)
+
+PASS src/__tests__/products.test.ts
+  GET /api/products
+    ΓêÜ returns 200 with data array and pagination (32 ms)
+    ΓêÜ respects limit and page params (15 ms)
+    ΓêÜ accepts category filter and returns only matching products (14 ms)
+    ΓêÜ accepts price range filter (14 ms)
+    ΓêÜ accepts search query (14 ms)
+    ΓêÜ returns empty data array for non-matching search (18 ms)
+    ΓêÜ handles invalid page param gracefully (14 ms)
+    ΓêÜ has product fields: product_id, name, base_price_usd (12 ms)
+  GET /api/products/:id
+    ΓêÜ returns 404 for non-existent product (17 ms)
+    ΓêÜ returns 400/404/500 for invalid id format (12 ms)
+    ΓêÜ returns product data for existing id (from seed) (79 ms)
+  POST /api/products
+    ΓêÜ rejects unauthenticated product creation with 401 (11 ms)
+    ΓêÜ creates a product when authenticated as seller (27 ms)
+  Protected product mutations
+    ΓêÜ PUT without token returns 401 (9 ms)
+    ΓêÜ DELETE without token returns 401 (10 ms)
+  GET /api/products/tokens
+    ΓêÜ returns 200 with token list (9 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       16 passed, 16 total
+Snapshots:   0 total
+Time:        1.716 s, estimated 2 s
+Ran all test suites matching /src\\__tests__\\products.test.ts/i.
+[globalTeardown] Cleanup complete.
+
+Jest has detected the following 1 open handle potentially keeping Jest from exiting:
+
+  ΓùÅ  TCPWRAP
+
+      126 |
+      127 |   it('returns product data for existing id (from seed)', async () => {
+    > 128 |     const listRes = await request(app).get('/api/products?limit=1');
+          |                                        ^
+      129 |     if ((listRes.body.data as any[])?.length > 0) {
+      130 |       const pid = listRes.body.data[0].product_id;
+      131 |       const res = await request(app).get(`/api/products/${pid}`);
+
+      at Test.serverAddress (node_modules/supertest/lib/test.js:48:35)
+      at new Test (node_modules/supertest/lib/test.js:34:14)
+      at Object.obj.<computed> [as get] (node_modules/supertest/index.js:43:18)
+      at Object.<anonymous> (src/__tests__/products.test.ts:128:40)
+

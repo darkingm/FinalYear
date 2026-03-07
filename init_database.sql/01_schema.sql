@@ -73,6 +73,19 @@ CREATE TABLE addresses (
 -- SECTION 2: PRODUCT CATALOG
 -- =====================================================
 
+CREATE TABLE token_whitelist (
+    token_id          SERIAL       PRIMARY KEY,
+    symbol            VARCHAR(10)  NOT NULL,
+    token_address     VARCHAR(42)  NOT NULL,
+    chain_id          INT          NOT NULL,
+    decimals          INT          NOT NULL CHECK (decimals >= 0 AND decimals <= 18),
+    oracle_price_feed VARCHAR(42),
+    is_active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    metadata          JSONB,
+    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(token_address, chain_id)
+);
+
 CREATE TABLE products (
     product_id      BIGSERIAL     PRIMARY KEY,
     seller_id       BIGINT        NOT NULL,
@@ -80,6 +93,8 @@ CREATE TABLE products (
     description     TEXT,
     category        VARCHAR(50),
     base_price_usd  DECIMAL(18,2) NOT NULL CHECK (base_price_usd >= 0),
+    token_id        INT,                                    -- ID from token_whitelist
+    price_in_token  DECIMAL(36,18),                         -- Price in the specific token
     metadata        JSONB,
     is_featured     BOOLEAN       NOT NULL DEFAULT FALSE,
     product_type    VARCHAR(20)   NOT NULL DEFAULT 'physical'
@@ -91,7 +106,8 @@ CREATE TABLE products (
     review_count    INT           NOT NULL DEFAULT 0,
     created_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (seller_id) REFERENCES seller_profiles(seller_id) ON DELETE CASCADE
+    FOREIGN KEY (seller_id) REFERENCES seller_profiles(seller_id) ON DELETE CASCADE,
+    FOREIGN KEY (token_id)  REFERENCES token_whitelist(token_id) ON DELETE SET NULL
 );
 
 CREATE TABLE product_images (
@@ -257,18 +273,6 @@ CREATE TABLE order_items (
     FOREIGN KEY (variant_id) REFERENCES product_variants(variant_id) ON DELETE RESTRICT
 );
 
-CREATE TABLE token_whitelist (
-    token_id          SERIAL       PRIMARY KEY,
-    symbol            VARCHAR(10)  NOT NULL,
-    token_address     VARCHAR(42)  NOT NULL,
-    chain_id          INT          NOT NULL,
-    decimals          INT          NOT NULL CHECK (decimals >= 0 AND decimals <= 18),
-    oracle_price_feed VARCHAR(42),
-    is_active         BOOLEAN      NOT NULL DEFAULT TRUE,
-    metadata          JSONB,
-    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(token_address, chain_id)
-);
 
 CREATE TABLE order_payments (
     payment_id          BIGSERIAL      PRIMARY KEY,

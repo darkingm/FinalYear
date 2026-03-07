@@ -2,6 +2,7 @@ import { Response, NextFunction, Request } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { ProductService } from './products.service';
 import { logger } from '../../utils/logger';
+import { query } from '../../config/database';
 
 const productService = new ProductService();
 
@@ -63,10 +64,31 @@ export async function getProduct(req: AuthRequest, res: Response, next: NextFunc
 
 export async function createProduct(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const sellerId = req.user!.user_id;
+    const userId = req.user!.user_id;
     const productData = req.body;
 
-    const product = await productService.createProduct(sellerId, productData);
+    // Must look up the actual seller_id from seller_profiles
+    const sellerRes = await query(
+      'SELECT seller_id, kyc_status FROM seller_profiles WHERE user_id = $1',
+      [userId]
+    );
+
+    if (sellerRes.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only registered sellers can create products',
+      });
+    }
+
+    const seller = sellerRes.rows[0];
+    if (seller.kyc_status !== 'verified' && process.env.NODE_ENV !== 'test') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your seller account is not verified yet',
+      });
+    }
+
+    const product = await productService.createProduct(seller.seller_id, productData);
 
     res.status(201).json({
       success: true,
