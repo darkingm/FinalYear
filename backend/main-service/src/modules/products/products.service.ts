@@ -13,7 +13,7 @@ export class ProductService {
     let paramIndex = 1;
 
     if (category) {
-      whereConditions.push(`p.metadata->>'category' = $${paramIndex++}`);
+      whereConditions.push(`p.category = $${paramIndex++}`);
       params.push(category);
     }
 
