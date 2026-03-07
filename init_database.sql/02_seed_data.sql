@@ -339,7 +339,7 @@ BEGIN
 
     -- 21
     INSERT INTO products (seller_id, name, description, category, base_price_usd, status, metadata)
-    VALUES (sid2, "Men's Classic Oxford Shirt", 'Premium 100% Egyptian cotton Oxford shirt. Slim-fit, button-down collar.', 'fashion', 59.00, 'active',
+    VALUES (sid2, 'Men''s Classic Oxford Shirt', 'Premium 100% Egyptian cotton Oxford shirt. Slim-fit, button-down collar.', 'fashion', 59.00, 'active',
             '{"brand":"FashionHub","material":"Egyptian Cotton"}')
     RETURNING product_id INTO pid;
     INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (pid, '/images/products/mens-oxford-shirt.jpg', 0, TRUE);
@@ -353,7 +353,7 @@ BEGIN
 
     -- 22
     INSERT INTO products (seller_id, name, description, category, base_price_usd, status, metadata)
-    VALUES (sid2, "Women's Wrap Midi Dress", 'Floral wrap midi dress in sustainable viscose. Adjustable tie waist.', 'fashion', 79.00, 'active',
+    VALUES (sid2, 'Women''s Wrap Midi Dress', 'Floral wrap midi dress in sustainable viscose. Adjustable tie waist.', 'fashion', 79.00, 'active',
             '{"brand":"FashionHub","material":"Viscose","sustainable":true}')
     RETURNING product_id INTO pid;
     INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (pid, '/images/products/womens-wrap-dress.jpg', 0, TRUE);
@@ -366,7 +366,7 @@ BEGIN
 
     -- 23
     INSERT INTO products (seller_id, name, description, category, base_price_usd, status, metadata)
-    VALUES (sid2, "Men's Slim Fit Chino Pants", '97% cotton chino pants with stretch. Available in 4 colours.', 'fashion', 49.00, 'active',
+    VALUES (sid2, 'Men''s Slim Fit Chino Pants', '97% cotton chino pants with stretch. Available in 4 colours.', 'fashion', 49.00, 'active',
             '{"brand":"FashionHub","material":"Cotton Stretch"}')
     RETURNING product_id INTO pid;
     INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (pid, '/images/products/mens-chino-pants.jpg', 0, TRUE);
@@ -390,7 +390,7 @@ BEGIN
 
     -- 25
     INSERT INTO products (seller_id, name, description, category, base_price_usd, status, metadata)
-    VALUES (sid2, "Women's Running Sneakers", 'Lightweight mesh running shoes, responsive foam sole, reflective accents.', 'fashion', 89.00, 'active',
+    VALUES (sid2, 'Women''s Running Sneakers', 'Lightweight mesh running shoes, responsive foam sole, reflective accents.', 'fashion', 89.00, 'active',
             '{"brand":"FashionHub","sole":"Responsive Foam","closure":"Lace-up"}')
     RETURNING product_id INTO pid;
     INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (pid, '/images/products/womens-running-sneakers.jpg', 0, TRUE);
@@ -425,7 +425,7 @@ BEGIN
 
     -- 28
     INSERT INTO products (seller_id, name, description, category, base_price_usd, status, metadata)
-    VALUES (sid2, "Men's Merino Wool Sweater", 'Fine-knit 100% merino wool crewneck. Naturally temperature-regulating.', 'fashion', 109.00, 'active',
+    VALUES (sid2, 'Men''s Merino Wool Sweater', 'Fine-knit 100% merino wool crewneck. Naturally temperature-regulating.', 'fashion', 109.00, 'active',
             '{"brand":"FashionHub","material":"100% Merino Wool"}')
     RETURNING product_id INTO pid;
     INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (pid, '/images/products/merino-sweater.jpg', 0, TRUE);
@@ -446,7 +446,7 @@ BEGIN
 
     -- 30
     INSERT INTO products (seller_id, name, description, category, base_price_usd, status, metadata)
-    VALUES (sid2, "Women's High-Rise Yoga Pants", 'Four-way stretch fabric, squat-proof, side pockets for phone.', 'fashion', 69.00, 'active',
+    VALUES (sid2, 'Women''s High-Rise Yoga Pants', 'Four-way stretch fabric, squat-proof, side pockets for phone.', 'fashion', 69.00, 'active',
             '{"brand":"FashionHub","fabric":"4-way Stretch","squat_proof":true}')
     RETURNING product_id INTO pid;
     INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (pid, '/images/products/yoga-pants.jpg', 0, TRUE);
@@ -658,3 +658,4 @@ VALUES
 ON CONFLICT (code) DO NOTHING;
 
 COMMIT;
+
