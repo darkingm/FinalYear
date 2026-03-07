@@ -21,10 +21,11 @@ services:
       - ../init_database.sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ../init_database.sql/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-marketplace_db}" ]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
     networks:
       - marketplace-network
     restart: unless-stopped
@@ -173,6 +174,7 @@ volumes:
 networks:
   marketplace-network:
     driver: bridge
+
 
 
 

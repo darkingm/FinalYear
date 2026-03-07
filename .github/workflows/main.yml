@@ -189,11 +189,27 @@ jobs:
                 -c "SELECT 1" > /dev/null 2>&1 && echo "DB reachable, skipping schema re-apply" || true
             fi
 
-            echo "=== Restarting services (zero-downtime) ==="
+            echo "=== Ensuring infrastructure is running ==="
+            docker compose -f docker-compose.prod.yml up -d \
+              --no-recreate \
+              postgres redis rabbitmq
+
+            echo "=== Waiting for postgres to be healthy ==="
+            for i in $(seq 1 20); do
+              if docker compose -f docker-compose.prod.yml ps postgres | grep -q "healthy"; then
+                echo "Postgres is healthy"
+                break
+              fi
+              echo "Waiting for postgres... attempt $i/20"
+              sleep 5
+            done
+
+            echo "=== Restarting app services (zero-downtime) ==="
             DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} \
               docker compose -f docker-compose.prod.yml up -d \
                 --remove-orphans \
                 --no-deps \
+                --force-recreate \
                 main-api payment-api frontend
 
             echo "=== Waiting for main-api health check ==="
@@ -214,3 +230,4 @@ jobs:
           else
             echo "Deployment FAILED for commit ${{ github.sha }}"
           fi
+
