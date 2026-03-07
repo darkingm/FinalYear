@@ -57,7 +57,9 @@ export class ProductService {
               COALESCE(SUM(i.available), 0) AS stock,
               sp.display_name AS seller_name,
               (SELECT image_url FROM product_images
-               WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image
+               WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image,
+              (SELECT json_agg(image_url ORDER BY sort_order)
+               FROM product_images WHERE product_id = p.product_id) AS images
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN inventory i ON p.product_id = i.product_id
@@ -94,7 +96,9 @@ export class ProductService {
               sp.display_name AS seller_name,
               sp.payout_wallet AS seller_wallet,
               (SELECT image_url FROM product_images
-               WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image
+               WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image,
+              (SELECT json_agg(image_url ORDER BY sort_order)
+               FROM product_images WHERE product_id = p.product_id) AS images
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN inventory i ON p.product_id = i.product_id
@@ -249,3 +253,4 @@ export class ProductService {
     logger.info('Product deleted', { product_id: productId });
   }
 }
+
