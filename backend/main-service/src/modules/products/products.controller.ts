@@ -16,6 +16,7 @@ export async function getProducts(req: AuthRequest, res: Response, next: NextFun
       search: req.query.search as string,
       acceptsCrypto: req.query.acceptsCrypto === 'true',
       acceptsPayPal: req.query.acceptsPayPal === 'true',
+      tokenSymbol: req.query.token as string,
     };
 
     const result = await productService.getProducts(filters);
@@ -133,4 +134,6 @@ export async function uploadImages(req: AuthRequest, res: Response, next: NextFu
     next(error);
   }
 }
+
+
 

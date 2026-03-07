@@ -803,3 +803,4 @@ COMMENT ON TABLE notifications        IS 'In-app notification feed';
 COMMENT ON TABLE coupons              IS 'Discount codes with limits';
 COMMENT ON TABLE wishlist_items       IS 'User product wish-list';
 COMMENT ON TABLE dead_letter_events   IS 'Failed async events queue';
+

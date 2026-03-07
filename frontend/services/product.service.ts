@@ -33,9 +33,9 @@ class ProductService {
   async getById(id: number): Promise<Product | null> {
     try {
       const res = await productsApi.getById(id);
-      return res.data.product || res.data || null;
+      return res.data.data || res.data.product || null;
     } catch {
-      toast.error('Không tìm thấy sản phẩm');
+      toast.error('Product not found');
       return null;
     }
   }
@@ -43,10 +43,10 @@ class ProductService {
   async create(data: FormData): Promise<Product | null> {
     try {
       const res = await productsApi.create(data);
-      toast.success('Tạo sản phẩm thành công');
+      toast.success('Product created successfully');
       return res.data.product || res.data;
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Tạo sản phẩm thất bại');
+      toast.error(e.response?.data?.message || 'Failed to create product');
       return null;
     }
   }
@@ -54,10 +54,10 @@ class ProductService {
   async update(id: number, data: FormData): Promise<Product | null> {
     try {
       const res = await productsApi.update(id, data);
-      toast.success('Cập nhật sản phẩm thành công');
+      toast.success('Product updated successfully');
       return res.data.product || res.data;
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Cập nhật sản phẩm thất bại');
+      toast.error(e.response?.data?.message || 'Failed to update product');
       return null;
     }
   }
@@ -65,13 +65,14 @@ class ProductService {
   async delete(id: number): Promise<boolean> {
     try {
       await productsApi.delete(id);
-      toast.success('Đã xóa sản phẩm');
+      toast.success('Product deleted');
       return true;
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Xóa sản phẩm thất bại');
+      toast.error(e.response?.data?.message || 'Failed to delete product');
       return false;
     }
   }
 }
 
 export const productService = new ProductService();
+

@@ -134,7 +134,25 @@
     "noReviews": "No reviews yet",
     "quantity": "Quantity",
     "addedToCart": "Added to cart!",
-    "specifications": "Specifications"
+    "specifications": "Specifications",
+    "listedBy": "Listed by",
+    "listedOn": "Listed on",
+    "payWith": "Pay with",
+    "filterByToken": "Filter by token",
+    "allTokens": "All Tokens",
+    "priceIn": "Price in",
+    "tokenPrice": "Token Price",
+    "sellerInfo": "Seller Info",
+    "sellerRating": "Seller Rating",
+    "adjustFilters": "Try adjusting your filters or search terms.",
+    "firstToSell": "Be the first to list a product!",
+    "createProduct": "List a Product",
+    "items": "items",
+    "minPrice": "Min Price",
+    "maxPrice": "Max Price",
+    "apply": "Apply",
+    "clearAll": "Clear All",
+    "sellBtn": "Sell a Product"
   },
   "checkout": {
     "checkout": "Checkout",
@@ -424,3 +442,4 @@
     "suggestedProducts": "Suggested Products"
   }
 }
+
