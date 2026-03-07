@@ -54,3 +54,5 @@ jest.mock('../utils/logger', () => ({
 process.env.JWT_SECRET         = process.env.JWT_SECRET         || 'test_jwt_secret_minimum_32_chars_xxx';
 process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test_refresh_secret_min_32chars_xxx';
 process.env.NODE_ENV           = 'test';
+process.env.HCAPTCHA_SECRET    = 'your_hcaptcha_secret'; // disable captcha API calls in tests
+

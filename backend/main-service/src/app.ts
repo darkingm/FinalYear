@@ -38,14 +38,16 @@ app.get('/health/detailed', async (_req, res) => {
   let overall: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
 
   const dbStart = Date.now();
+  let pgClient: any;
   try {
-    const client = await pool.connect();
-    await client.query('SELECT 1');
-    client.release();
+    pgClient = await pool.connect();
+    await pgClient.query('SELECT 1');
     checks.postgres = { status: 'ok', latency_ms: Date.now() - dbStart };
   } catch (err: any) {
     checks.postgres = { status: 'error', error: err.message };
     overall = 'unhealthy';
+  } finally {
+    if (pgClient) pgClient.release();
   }
 
   const redisStart = Date.now();
@@ -134,4 +136,5 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 export default app;
+
 

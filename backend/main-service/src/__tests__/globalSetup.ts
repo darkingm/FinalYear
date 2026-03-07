@@ -1,10 +1,7 @@
 /**
  * Runs ONCE before all test suites.
- * Applies the database schema to the test PostgreSQL instance if not yet applied.
- *
- * Path layout (from __dirname):
- *   __dirname = .../backend/main-service/src/__tests__
- *   repo root = ../../../../  (4 levels up)
+ * Applies the database schema if the DB is reachable and schema not yet applied.
+ * Gracefully skips when DB is unreachable (schema already applied by CI psql step).
  */
 import { execSync } from 'child_process';
 import path from 'path';
@@ -12,13 +9,12 @@ import fs from 'fs';
 import { Pool } from 'pg';
 
 function findSchemaFile(startDir: string): string | null {
-  // Walk up directories until we find init_database.sql/ or docs/
   let dir = startDir;
   while (dir !== path.dirname(dir)) {
-    const candidate = path.join(dir, 'init_database.sql', '01_schema.sql');
-    if (fs.existsSync(candidate)) return candidate;
-    const fallback = path.join(dir, 'docs', '01_schema.sql');
-    if (fs.existsSync(fallback)) return fallback;
+    const a = path.join(dir, 'init_database.sql', '01_schema.sql');
+    if (fs.existsSync(a)) return a;
+    const b = path.join(dir, 'docs', '01_schema.sql');
+    if (fs.existsSync(b)) return b;
     dir = path.dirname(dir);
   }
   return null;
@@ -31,28 +27,37 @@ export default async function globalSetup() {
     return;
   }
 
-  // Check if schema is already applied (tables exist)
-  const pool = new Pool({ connectionString: dbUrl, connectionTimeoutMillis: 5000 });
+  const pool = new Pool({ connectionString: dbUrl, connectionTimeoutMillis: 3000 });
+  let schemaExists = false;
+  let dbReachable  = false;
+
   try {
     const res = await pool.query(
       `SELECT COUNT(*) FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = 'users'`
     );
-    if (parseInt(res.rows[0].count) > 0) {
-      console.log('[globalSetup] Schema already applied — skipping.');
-      await pool.end();
-      return;
-    }
-  } catch (err) {
-    console.warn('[globalSetup] Could not check schema status:', err);
+    dbReachable  = true;
+    schemaExists = parseInt(res.rows[0].count) > 0;
+  } catch {
+    // DB not reachable — likely schema already applied by CI psql command
+    dbReachable = false;
+  } finally {
     await pool.end().catch(() => {});
   }
-  await pool.end().catch(() => {});
 
-  // Find schema file by walking up from __dirname
+  if (!dbReachable) {
+    console.warn('[globalSetup] DB not reachable — assuming schema already applied by CI.');
+    return;
+  }
+
+  if (schemaExists) {
+    console.log('[globalSetup] Schema already applied — skipping.');
+    return;
+  }
+
   const schemaFile = findSchemaFile(__dirname);
   if (!schemaFile) {
-    console.warn('[globalSetup] Schema file not found — assuming already applied by CI.');
+    console.warn('[globalSetup] Schema file not found — skipping (assume CI handles it).');
     return;
   }
 
