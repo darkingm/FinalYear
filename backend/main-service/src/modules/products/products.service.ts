@@ -53,13 +53,16 @@ export class ProductService {
     // Get products
     params.push(limit, offset);
     const result = await query(
-      `SELECT p.*, i.available as stock, sp.display_name as seller_name, u.user_id as owner_user_id, tw.symbol as token_symbol
+      `SELECT p.*,
+              COALESCE(SUM(i.available), 0) AS stock,
+              sp.display_name AS seller_name,
+              (SELECT image_url FROM product_images
+               WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image
        FROM products p
-       LEFT JOIN inventory i ON p.product_id = i.product_id
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
-       LEFT JOIN users u ON sp.user_id = u.user_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+       LEFT JOIN inventory i ON p.product_id = i.product_id
        WHERE ${whereClause}
+       GROUP BY p.product_id, sp.display_name
        ORDER BY p.created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
       params
@@ -85,13 +88,18 @@ export class ProductService {
     }
 
     const result = await query(
-      `SELECT p.*, i.available as stock, i.total_stock, sp.display_name as seller_name, u.email as seller_email, u.user_id as owner_user_id, tw.symbol as token_symbol
+      `SELECT p.*,
+              COALESCE(SUM(i.available), 0) AS stock,
+              COALESCE(SUM(i.total_stock), 0) AS total_stock,
+              sp.display_name AS seller_name,
+              sp.payout_wallet AS seller_wallet,
+              (SELECT image_url FROM product_images
+               WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image
        FROM products p
-       LEFT JOIN inventory i ON p.product_id = i.product_id
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
-       LEFT JOIN users u ON sp.user_id = u.user_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
-       WHERE p.product_id = $1`,
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.product_id = $1
+       GROUP BY p.product_id, sp.display_name, sp.payout_wallet`,
       [productId]
     );
 
@@ -107,38 +115,41 @@ export class ProductService {
     return product;
   }
 
-  async createProduct(userId: number, data: any) {
-    // Get seller_id from user_id
-    const sellerResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
-    if (sellerResult.rows.length === 0) {
-      throw new AppError('Seller profile not found', 404);
-    }
-    const realSellerId = sellerResult.rows[0].seller_id;
-
+  async createProduct(sellerId: number, data: any) {
+    // sellerId here is seller_profiles.seller_id (not user_id)
     const result = await query(
-      `INSERT INTO products (seller_id, name, description, base_price_usd, metadata, status, pricing_mode, token_id, price_token)
-       VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $8)
+      `INSERT INTO products (seller_id, name, description, category, base_price_usd, metadata, status, product_type)
+       VALUES ($1, $2, $3, $4, $5, $6, 'active', $7)
        RETURNING *`,
       [
-        realSellerId,
+        sellerId,
         data.name,
         data.description,
+        data.category || 'general',
         data.price || data.base_price_usd,
-        JSON.stringify(data.metadata),
-        data.pricing_mode || 'usd',
-        data.token_id || null,
-        data.price_token || null
+        JSON.stringify(data.metadata || {}),
+        data.product_type || 'physical',
       ]
     );
 
     const product = result.rows[0];
 
-    // Initialize inventory
-    await query(
-      `INSERT INTO inventory (product_id, total_stock, available)
-       VALUES ($1, $2, $2)`,
-      [product.product_id, data.stock || 0]
+    // Get default warehouse
+    const whResult = await query(
+      `SELECT warehouse_id FROM warehouses WHERE status = 'active' ORDER BY warehouse_id LIMIT 1`
     );
+    const warehouseId = whResult.rows[0]?.warehouse_id;
+
+    if (warehouseId) {
+      const stockQty = data.stock || 0;
+      await query(
+        `INSERT INTO inventory (product_id, warehouse_id, total_stock, available, reserved)
+         VALUES ($1, $2, $3, $3, 0)
+         ON CONFLICT (product_id, warehouse_id) DO UPDATE
+         SET total_stock = EXCLUDED.total_stock, available = EXCLUDED.available`,
+        [product.product_id, warehouseId, stockQty]
+      );
+    }
 
     logger.info('Product created', { product_id: product.product_id });
 
@@ -146,8 +157,19 @@ export class ProductService {
   }
 
   async updateProduct(productId: number, userId: number, updates: any) {
+    // Resolve seller_id from user_id
+    const sellerRes = await query(
+      'SELECT seller_id FROM seller_profiles WHERE user_id = $1',
+      [userId]
+    );
+    if (sellerRes.rows.length === 0) {
+      throw new AppError('Seller profile not found', 403);
+    }
+    const sellerId = sellerRes.rows[0].seller_id;
+
+    // Check ownership
     const productResult = await query(
-      'SELECT p.*, sp.user_id as owner_user_id FROM products p JOIN seller_profiles sp ON p.seller_id = sp.seller_id WHERE p.product_id = $1',
+      'SELECT * FROM products WHERE product_id = $1',
       [productId]
     );
 
@@ -157,31 +179,27 @@ export class ProductService {
 
     const product = productResult.rows[0];
 
-    if (product.owner_user_id !== userId) {
+    if (product.seller_id !== sellerId) {
       throw new AppError('Not authorized to update this product', 403);
     }
 
     // Update product
     const result = await query(
       `UPDATE products 
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
+       SET name           = COALESCE($1, name),
+           description    = COALESCE($2, description),
            base_price_usd = COALESCE($3, base_price_usd),
-           metadata = COALESCE($4, metadata),
-           pricing_mode = COALESCE($5, pricing_mode),
-           token_id = COALESCE($6, token_id),
-           price_token = COALESCE($7, price_token),
-           updated_at = NOW()
-       WHERE product_id = $8
+           category       = COALESCE($4, category),
+           metadata       = COALESCE($5, metadata),
+           updated_at     = NOW()
+       WHERE product_id = $6
        RETURNING *`,
       [
         updates.name,
         updates.description,
         updates.price || updates.base_price_usd,
+        updates.category,
         updates.metadata ? JSON.stringify(updates.metadata) : null,
-        updates.pricing_mode,
-        updates.token_id,
-        updates.price_token,
         productId,
       ]
     );
@@ -193,9 +211,19 @@ export class ProductService {
   }
 
   async deleteProduct(productId: number, userId: number) {
+    // Resolve seller_id from user_id
+    const sellerRes = await query(
+      'SELECT seller_id FROM seller_profiles WHERE user_id = $1',
+      [userId]
+    );
+    if (sellerRes.rows.length === 0) {
+      throw new AppError('Seller profile not found', 403);
+    }
+    const sellerId = sellerRes.rows[0].seller_id;
+
     // Check ownership
     const productResult = await query(
-      'SELECT p.*, sp.user_id as owner_user_id FROM products p JOIN seller_profiles sp ON p.seller_id = sp.seller_id WHERE p.product_id = $1',
+      'SELECT * FROM products WHERE product_id = $1',
       [productId]
     );
 
@@ -205,7 +233,7 @@ export class ProductService {
 
     const product = productResult.rows[0];
 
-    if (product.owner_user_id !== userId) {
+    if (product.seller_id !== sellerId) {
       throw new AppError('Not authorized to delete this product', 403);
     }
 

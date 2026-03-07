@@ -18,7 +18,8 @@ services:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../init_database.sql:/docker-entrypoint-initdb.d
+      - ../docs/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ../docs/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
@@ -114,7 +115,7 @@ services:
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_MODE: sandbox
-      ESCROW_CONTRACT_ADDRESS: 0xe12c0a89be13b000000000000000000000000000
+      ESCROW_CONTRACT_ADDRESS: 0xCDE08Be0190482691b3288C27240378497d74E79
       POLYGON_RPC_URL: https://polygon.drpc.org
       POLYGON_MUMBAI_RPC_URL: https://rpc-amoy.polygon.technology
       ARBITRUM_RPC_URL: https://arb1.arbitrum.io/rpc
@@ -145,7 +146,7 @@ services:
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
       NEXT_PUBLIC_PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
       NEXT_PUBLIC_POLYGON_RPC: https://polygon.drpc.org
-      NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON: 0xcde08be019048000000000000000000000000000
+      NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY: 0xCDE08Be0190482691b3288C27240378497d74E79
       NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: cea17a07a0cb8c74b022c41e21294643
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://kienai.id.vn}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
@@ -172,3 +173,5 @@ volumes:
 networks:
   marketplace-network:
     driver: bridge
+
+
