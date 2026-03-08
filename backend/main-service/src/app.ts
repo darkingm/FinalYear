@@ -5,12 +5,14 @@ import { errorHandler } from './middleware/error-handler';
 import { pool } from './config/database';
 import { logger } from './utils/logger';
 
-import authRoutes      from './modules/auth/auth.routes';
-import userRoutes      from './modules/users/users.routes';
-import productRoutes   from './modules/products/products.routes';
-import orderRoutes     from './modules/orders/orders.routes';
+import authRoutes from './modules/auth/auth.routes';
+import userRoutes from './modules/users/users.routes';
+import productRoutes from './modules/products/products.routes';
+import orderRoutes from './modules/orders/orders.routes';
 import inventoryRoutes from './modules/inventory/inventory.routes';
-import adminRoutes     from './modules/admin/admin.routes';
+import adminRoutes from './modules/admin/admin.routes';
+import p2pRoutes from './modules/p2p/p2p.routes';
+import walletsRoutes from './modules/wallets/wallets.routes';
 
 const app = express();
 
@@ -85,9 +87,9 @@ app.get('/health/detailed', async (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.round(uptime),
     memory: {
-      rss_mb:        Math.round(memUsage.rss        / 1024 / 1024),
-      heap_used_mb:  Math.round(memUsage.heapUsed   / 1024 / 1024),
-      heap_total_mb: Math.round(memUsage.heapTotal  / 1024 / 1024),
+      rss_mb: Math.round(memUsage.rss / 1024 / 1024),
+      heap_used_mb: Math.round(memUsage.heapUsed / 1024 / 1024),
+      heap_total_mb: Math.round(memUsage.heapTotal / 1024 / 1024),
     },
     checks,
   });
@@ -109,11 +111,11 @@ app.get('/metrics', async (_req, res) => {
       service: 'main-api',
       timestamp: new Date().toISOString(),
       metrics: {
-        total_users:      row.total_users,
-        active_products:  row.active_products,
-        total_orders:     row.total_orders,
+        total_users: row.total_users,
+        active_products: row.active_products,
+        total_orders: row.total_orders,
         completed_orders: row.completed_orders,
-        pending_orders:   row.pending_orders,
+        pending_orders: row.pending_orders,
       },
     });
   } catch (err: any) {
@@ -122,12 +124,14 @@ app.get('/metrics', async (_req, res) => {
   }
 });
 
-app.use('/api/auth',      authRoutes);
-app.use('/api/users',     userRoutes);
-app.use('/api/products',  productRoutes);
-app.use('/api/orders',    orderRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 app.use('/api/inventory', inventoryRoutes);
-app.use('/api/admin',     adminRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/p2p', p2pRoutes);
+app.use('/api/wallets', walletsRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });

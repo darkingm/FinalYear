@@ -1,0 +1,165 @@
+import { query } from '../../config/database';
+import { AppError } from '../../middleware/error-handler';
+import { logger } from '../../utils/logger';
+
+// Chain metadata config
+const CHAIN_INFO: Record<number, { name: string; type: string; symbol: string; explorer: string }> = {
+    1: { name: 'Ethereum', type: 'evm', symbol: 'ETH', explorer: 'https://etherscan.io' },
+    56: { name: 'BNB Smart Chain', type: 'evm', symbol: 'BNB', explorer: 'https://bscscan.com' },
+    137: { name: 'Polygon', type: 'evm', symbol: 'POL', explorer: 'https://polygonscan.com' },
+    42161: { name: 'Arbitrum One', type: 'evm', symbol: 'ETH', explorer: 'https://arbiscan.io' },
+    10: { name: 'Optimism', type: 'evm', symbol: 'ETH', explorer: 'https://optimistic.etherscan.io' },
+    8453: { name: 'Base', type: 'evm', symbol: 'ETH', explorer: 'https://basescan.org' },
+    // Non-EVM stored with negative IDs to avoid collision
+    900000001: { name: 'Solana', type: 'solana', symbol: 'SOL', explorer: 'https://solscan.io' },
+    900000002: { name: 'TRON', type: 'tron', symbol: 'TRX', explorer: 'https://tronscan.org' },
+    900000003: { name: 'TON', type: 'ton', symbol: 'TON', explorer: 'https://tonscan.org' },
+    900000004: { name: 'Aptos', type: 'aptos', symbol: 'APT', explorer: 'https://explorer.aptoslabs.com' },
+};
+
+/** Validate address format by chain type */
+function validateAddress(address: string, chainType: string): boolean {
+    switch (chainType) {
+        case 'evm': return /^0x[0-9a-fA-F]{40}$/.test(address);
+        case 'solana': return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+        case 'tron': return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
+        case 'ton': return /^[UE][Qq][0-9A-Za-z\-_]{46,48}$/.test(address) || /^[0-9a-fA-F]{64}$/.test(address);
+        case 'aptos': return /^0x[0-9a-fA-F]{64}$/.test(address);
+        default: return address.length > 10;
+    }
+}
+
+export class WalletsService {
+    async getUserWallets(userId: number) {
+        const res = await query(
+            `SELECT w.*, 
+              COALESCE($1::jsonb->w.chain_id::text, '{}'::jsonb) AS chain_info
+       FROM user_wallets w
+       WHERE w.user_id = $2
+       ORDER BY w.is_primary DESC, w.created_at ASC`,
+            [JSON.stringify(CHAIN_INFO), userId]
+        );
+        // Enrich with chain info
+        return res.rows.map(row => ({
+            ...row,
+            chain_info: CHAIN_INFO[row.chain_id] || { name: row.chain_type, type: row.chain_type },
+        }));
+    }
+
+    async addWallet(userId: number, data: {
+        chain_type: string; chain_id?: number; address: string; label?: string; is_primary?: boolean;
+    }) {
+        const { chain_type, chain_id, address, label, is_primary } = data;
+
+        const allowedTypes = ['evm', 'solana', 'tron', 'ton', 'aptos', 'near', 'cosmos', 'bitcoin'];
+        if (!allowedTypes.includes(chain_type)) throw new AppError(`Invalid chain_type: ${chain_type}`, 400);
+
+        if (!validateAddress(address, chain_type)) {
+            throw new AppError(`Invalid ${chain_type} address format`, 400);
+        }
+
+        // If setting as primary, unset others
+        if (is_primary) {
+            await query(
+                `UPDATE user_wallets SET is_primary = FALSE WHERE user_id = $1`,
+                [userId]
+            );
+        }
+
+        const res = await query(
+            `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id, chain_type, address) DO UPDATE
+       SET label = EXCLUDED.label, is_primary = EXCLUDED.is_primary, updated_at = NOW()
+       RETURNING *`,
+            [userId, chain_type, chain_id || null, address, label || null, is_primary ?? false]
+        );
+
+        logger.info('Wallet added', { user_id: userId, chain_type, address });
+        return { ...res.rows[0], chain_info: CHAIN_INFO[chain_id!] };
+    }
+
+    async removeWallet(userId: number, walletDbId: number) {
+        const existing = await query(
+            'SELECT * FROM user_wallets WHERE wallet_db_id = $1 AND user_id = $2',
+            [walletDbId, userId]
+        );
+        if (!existing.rows.length) throw new AppError('Wallet not found', 404);
+        await query('DELETE FROM user_wallets WHERE wallet_db_id = $1', [walletDbId]);
+    }
+
+    async setPrimary(userId: number, walletDbId: number) {
+        const existing = await query(
+            'SELECT * FROM user_wallets WHERE wallet_db_id = $1 AND user_id = $2',
+            [walletDbId, userId]
+        );
+        if (!existing.rows.length) throw new AppError('Wallet not found', 404);
+        await query(`UPDATE user_wallets SET is_primary = FALSE WHERE user_id = $1`, [userId]);
+        await query(`UPDATE user_wallets SET is_primary = TRUE, updated_at = NOW() WHERE wallet_db_id = $1`, [walletDbId]);
+    }
+
+    async getDepositHistory(userId: number, status?: string) {
+        const where = status ? `AND wd.status = $2` : '';
+        const params: any[] = [userId];
+        if (status) params.push(status);
+
+        const res = await query(
+            `SELECT wd.*, tw.symbol, tw.decimals, tw.metadata->>'chain' AS chain_name
+       FROM wallet_deposits wd
+       JOIN token_whitelist tw ON wd.token_id = tw.token_id
+       WHERE wd.user_id = $1 ${where}
+       ORDER BY wd.created_at DESC
+       LIMIT 50`,
+            params
+        );
+        return res.rows;
+    }
+
+    async getDepositAddresses() {
+        // Return platform deposit addresses per chain from platform_config
+        const res = await query(
+            `SELECT value FROM platform_config WHERE key = 'deposit_addresses'`
+        );
+        const addresses = res.rows[0]?.value || {};
+
+        // Enrich with chain info
+        return Object.entries(CHAIN_INFO).map(([chainId, info]) => ({
+            chain_id: parseInt(chainId),
+            ...info,
+            deposit_address: addresses[chainId] || null,
+            // Token list for this chain
+        }));
+    }
+
+    async getSupportedChains() {
+        return Object.entries(CHAIN_INFO).map(([chainId, info]) => ({
+            chain_id: parseInt(chainId),
+            ...info,
+        }));
+    }
+
+    async getChainTokens(chainId: number) {
+        const res = await query(
+            `SELECT * FROM token_whitelist WHERE chain_id = $1 AND is_active = TRUE ORDER BY symbol`,
+            [chainId]
+        );
+        return res.rows;
+    }
+
+    /** Admin: record a confirmed deposit (called by deposit monitoring service) */
+    async recordDeposit(userId: number, data: {
+        token_id: number; chain_id: number; amount: number;
+        tx_hash: string; from_address: string; to_address: string;
+    }) {
+        const { token_id, chain_id, amount, tx_hash, from_address, to_address } = data;
+        const res = await query(
+            `INSERT INTO wallet_deposits
+         (user_id, token_id, chain_id, amount, tx_hash, from_address, to_address)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (tx_hash, chain_id) DO NOTHING
+       RETURNING *`,
+            [userId, token_id, chain_id, amount, tx_hash, from_address, to_address]
+        );
+        return res.rows[0];
+    }
+}

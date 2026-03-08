@@ -2,13 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '../../middleware/auth.middleware';
 import {
-  getProducts,
-  getProduct,
-  createProduct,
-  updateProduct,
-  deleteProduct,
-  uploadImages,
-  getTokens,
+  getProducts, getProduct, createProduct, updateProduct,
+  deleteProduct, uploadImages, getTokens, getMyProducts,
 } from './products.controller';
 
 const router = Router();
@@ -16,6 +11,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 router.get('/', getProducts);
 router.get('/tokens', getTokens);
+router.get('/my', authenticate, getMyProducts);
 router.get('/:id', getProduct);
 router.post('/', authenticate, createProduct);
 router.put('/:id', authenticate, updateProduct);

@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { logger } from '../utils/logger';
 import 'dotenv/config';
 
@@ -12,7 +12,7 @@ export const pool = new Pool({
 pool.on('error', (err: Error) => {
   logger.error('Unexpected database error:', err);
 });
-console.log('DATABASE_URL =', process.env.DATABASE_URL);
+
 export async function connectDatabase() {
   try {
     const client = await pool.connect();
@@ -36,4 +36,10 @@ export async function query(text: string, params?: any[]) {
     logger.error('Query error:', { text, error });
     throw error;
   }
+}
+
+/** Get a dedicated client for transactions (caller must release() when done) */
+export async function getClient(): Promise<PoolClient> {
+  const client = await pool.connect();
+  return client;
 }
