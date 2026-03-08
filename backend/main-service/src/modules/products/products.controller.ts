@@ -55,14 +55,28 @@ export async function getProducts(req: AuthRequest, res: Response, next: NextFun
 
 export async function getTokens(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const result = await query(
-      `SELECT tw.*, COUNT(DISTINCT pat.product_id)::int AS product_count
-       FROM token_whitelist tw
-       LEFT JOIN product_accepted_tokens pat ON tw.token_id = pat.token_id
-       WHERE tw.is_active = TRUE
-       GROUP BY tw.token_id
-       ORDER BY tw.symbol`
+    const hasAcceptedTokensTableResult = await query(
+      `SELECT to_regclass('public.product_accepted_tokens') IS NOT NULL AS exists`
     );
+
+    const hasAcceptedTokensTable = Boolean(hasAcceptedTokensTableResult.rows[0]?.exists);
+    const result = hasAcceptedTokensTable
+      ? await query(
+          `SELECT tw.*, COUNT(DISTINCT pat.product_id)::int AS product_count
+           FROM token_whitelist tw
+           LEFT JOIN product_accepted_tokens pat ON tw.token_id = pat.token_id
+           WHERE tw.is_active = TRUE
+           GROUP BY tw.token_id
+           ORDER BY tw.symbol`
+        )
+      : await query(
+          `SELECT tw.*, 0::int AS product_count
+           FROM token_whitelist tw
+           WHERE tw.is_active = TRUE
+           GROUP BY tw.token_id
+           ORDER BY tw.symbol`
+        );
+
     res.json({ success: true, data: result.rows });
   } catch (error: any) {
     next(error);

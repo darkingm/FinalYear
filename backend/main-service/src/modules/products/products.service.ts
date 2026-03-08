@@ -4,6 +4,18 @@ import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
 
 export class ProductService {
+  private hasAcceptedTokensTable: boolean | null = null;
+
+  private async supportsProductAcceptedTokens(): Promise<boolean> {
+    if (this.hasAcceptedTokensTable !== null) return this.hasAcceptedTokensTable;
+
+    const result = await query(
+      `SELECT to_regclass('public.product_accepted_tokens') IS NOT NULL AS exists`
+    );
+    this.hasAcceptedTokensTable = Boolean(result.rows[0]?.exists);
+    return this.hasAcceptedTokensTable;
+  }
+
   async getProducts(filters: any) {
     const { page, limit, category, minPrice, maxPrice, search, acceptsCrypto, tokenSymbol } = filters;
     const pageNum = Math.max(1, page || 1);
@@ -31,16 +43,25 @@ export class ProductService {
       params.push(`%${search}%`);
       paramIndex++;
     }
+    const hasAcceptedTokensTable = await this.supportsProductAcceptedTokens();
+
     if (acceptsCrypto) {
-      whereConditions.push(`EXISTS (SELECT 1 FROM product_accepted_tokens pat WHERE pat.product_id = p.product_id)`);
+      if (hasAcceptedTokensTable) {
+        whereConditions.push(`EXISTS (SELECT 1 FROM product_accepted_tokens pat WHERE pat.product_id = p.product_id)`);
+      }
     }
     if (tokenSymbol) {
-      whereConditions.push(`EXISTS (
-        SELECT 1 FROM product_accepted_tokens pat
-        JOIN token_whitelist tw ON pat.token_id = tw.token_id
-        WHERE pat.product_id = p.product_id AND tw.symbol ILIKE $${paramIndex++}
-      )`);
-      params.push(tokenSymbol);
+      if (hasAcceptedTokensTable) {
+        whereConditions.push(`EXISTS (
+          SELECT 1 FROM product_accepted_tokens pat
+          JOIN token_whitelist tw ON pat.token_id = tw.token_id
+          WHERE pat.product_id = p.product_id AND tw.symbol ILIKE $${paramIndex++}
+        )`);
+      } else {
+        // Legacy schema without product_accepted_tokens cannot filter by token symbol.
+        // Keep API stable by ignoring this filter instead of throwing SQL errors.
+      }
+      if (hasAcceptedTokensTable) params.push(tokenSymbol);
     }
 
     const whereClause = whereConditions.join(' AND ');
@@ -57,6 +78,20 @@ export class ProductService {
     const offsetIdx = paramIndex;     // e.g. $6
     params.push(limitNum, offset);
 
+    const acceptedTokensSelect = hasAcceptedTokensTable
+      ? `(SELECT json_agg(json_build_object(
+            'token_id', pat.token_id,
+            'symbol', tw.symbol,
+            'price_in_token', pat.price_in_token,
+            'is_primary', pat.is_primary,
+            'chain_id', tw.chain_id,
+            'decimals', tw.decimals
+         ))
+         FROM product_accepted_tokens pat
+         JOIN token_whitelist tw ON pat.token_id = tw.token_id
+         WHERE pat.product_id = p.product_id)`
+      : 'NULL';
+
     const result = await query(
       `SELECT
          p.*,
@@ -72,17 +107,7 @@ export class ProductService {
           WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image,
          (SELECT json_agg(image_url ORDER BY sort_order)
           FROM product_images WHERE product_id = p.product_id)           AS images,
-         (SELECT json_agg(json_build_object(
-            'token_id', pat.token_id,
-            'symbol', tw.symbol,
-            'price_in_token', pat.price_in_token,
-            'is_primary', pat.is_primary,
-            'chain_id', tw.chain_id,
-            'decimals', tw.decimals
-         ))
-          FROM product_accepted_tokens pat
-          JOIN token_whitelist tw ON pat.token_id = tw.token_id
-          WHERE pat.product_id = p.product_id)                           AS accepted_tokens
+         ${acceptedTokensSelect}                                         AS accepted_tokens
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u            ON sp.user_id = u.user_id
@@ -106,6 +131,24 @@ export class ProductService {
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
+    const hasAcceptedTokensTable = await this.supportsProductAcceptedTokens();
+    const acceptedTokensSelect = hasAcceptedTokensTable
+      ? `(SELECT json_agg(json_build_object(
+            'token_id', pat.token_id,
+            'symbol', tw.symbol,
+            'name', tw.metadata->>'name',
+            'price_in_token', pat.price_in_token,
+            'is_primary', pat.is_primary,
+            'chain_id', tw.chain_id,
+            'chain_name', tw.metadata->>'chain',
+            'token_address', tw.token_address,
+            'decimals', tw.decimals
+         ))
+         FROM product_accepted_tokens pat
+         JOIN token_whitelist tw ON pat.token_id = tw.token_id
+         WHERE pat.product_id = p.product_id)`
+      : 'NULL';
+
     const result = await query(
       `SELECT
          p.*,
@@ -128,20 +171,7 @@ export class ProductService {
             'url', image_url, 'sort_order', sort_order, 'is_primary', is_primary
           ) ORDER BY sort_order)
           FROM product_images WHERE product_id = p.product_id)           AS images,
-         (SELECT json_agg(json_build_object(
-            'token_id', pat.token_id,
-            'symbol', tw.symbol,
-            'name', tw.metadata->>'name',
-            'price_in_token', pat.price_in_token,
-            'is_primary', pat.is_primary,
-            'chain_id', tw.chain_id,
-            'chain_name', tw.metadata->>'chain',
-            'token_address', tw.token_address,
-            'decimals', tw.decimals
-         ))
-          FROM product_accepted_tokens pat
-          JOIN token_whitelist tw ON pat.token_id = tw.token_id
-          WHERE pat.product_id = p.product_id)                           AS accepted_tokens
+         ${acceptedTokensSelect}                                         AS accepted_tokens
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u            ON sp.user_id = u.user_id
@@ -190,14 +220,16 @@ export class ProductService {
       if (acceptedTokens.length === 0 && data.token_id && data.price_in_token) {
         acceptedTokens.push({ token_id: data.token_id, price_in_token: data.price_in_token, is_primary: true });
       }
-      for (const [idx, at] of acceptedTokens.entries()) {
-        await client.query(
-          `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
-           VALUES ($1,$2,$3,$4)
-           ON CONFLICT (product_id, token_id) DO UPDATE
-           SET price_in_token = EXCLUDED.price_in_token, is_primary = EXCLUDED.is_primary`,
-          [product.product_id, at.token_id, at.price_in_token, at.is_primary ?? idx === 0]
-        );
+      if (acceptedTokens.length > 0 && (await this.supportsProductAcceptedTokens())) {
+        for (const [idx, at] of acceptedTokens.entries()) {
+          await client.query(
+            `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (product_id, token_id) DO UPDATE
+             SET price_in_token = EXCLUDED.price_in_token, is_primary = EXCLUDED.is_primary`,
+            [product.product_id, at.token_id, at.price_in_token, at.is_primary ?? idx === 0]
+          );
+        }
       }
 
       // Save images from metadata.images[] (already uploaded to Cloudinary)
@@ -267,13 +299,17 @@ export class ProductService {
     );
 
     if (Array.isArray(updates.accepted_tokens) && updates.accepted_tokens.length > 0) {
-      await query('DELETE FROM product_accepted_tokens WHERE product_id = $1', [productId]);
-      for (const [idx, at] of updates.accepted_tokens.entries()) {
-        await query(
-          `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
-           VALUES ($1,$2,$3,$4)`,
-          [productId, at.token_id, at.price_in_token, at.is_primary ?? idx === 0]
-        );
+      if (await this.supportsProductAcceptedTokens()) {
+        await query('DELETE FROM product_accepted_tokens WHERE product_id = $1', [productId]);
+        for (const [idx, at] of updates.accepted_tokens.entries()) {
+          await query(
+            `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
+             VALUES ($1,$2,$3,$4)`,
+            [productId, at.token_id, at.price_in_token, at.is_primary ?? idx === 0]
+          );
+        }
+      } else {
+        logger.warn('Skipping accepted_tokens update because product_accepted_tokens table is missing', { productId });
       }
     }
 
