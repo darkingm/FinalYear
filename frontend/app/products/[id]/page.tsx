@@ -114,13 +114,17 @@ export default function ProductDetailPage() {
   };
 
   const galleryImages = product
-    ? (product.images ?? (product.primary_image ? [product.primary_image] : []) ?? product.metadata?.images ?? [])
+    ? (product.images?.length
+      ? product.images
+      : product.primary_image
+        ? [product.primary_image]
+        : (product.metadata?.images ?? []))
     : [];
 
   const priceDisplay = product
     ? (product.price_in_token && product.token_symbol
-        ? `${Number(product.price_in_token).toFixed(product.token_symbol === 'ETH' || product.token_symbol === 'WBTC' ? 6 : 2)} ${product.token_symbol}`
-        : `$${Number(product.base_price_usd).toFixed(2)}`)
+      ? `${Number(product.price_in_token).toFixed(product.token_symbol === 'ETH' || product.token_symbol === 'WBTC' ? 6 : 2)} ${product.token_symbol}`
+      : `$${Number(product.base_price_usd).toFixed(2)}`)
     : '';
 
   const isOwner = session?.user?.id === String(product?.owner_user_id);
@@ -191,7 +195,7 @@ export default function ProductDetailPage() {
 
             {product.rating_avg > 0 && (
               <div className="flex items-center gap-2">
-                <div className="flex">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= Math.round(product.rating_avg) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />)}</div>
+                <div className="flex">{[1, 2, 3, 4, 5].map(s => <Star key={s} className={`w-4 h-4 ${s <= Math.round(product.rating_avg) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />)}</div>
                 <span className="text-sm text-muted-foreground">({product.review_count ?? 0})</span>
               </div>
             )}

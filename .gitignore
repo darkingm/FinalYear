@@ -1,15 +1,38 @@
 node_modules
 .next
-.env
-.env.local
-*.env
-!.env.example
 dist
 build
 coverage
+
+# ── Environment / Secrets ─────────────────────────────────────
+.env
+.env.local
+*.env
+vps*.env
+vps*.txt
+!*.env.example
+!*.env.local.example
+
+# ── Private keys & certificates ──────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Archives / large build artifacts ─────────────────────────
+*.tar.gz
+*.zip
+*.tar
+
+# ── Temp / scratch files ──────────────────────────────────────
+result.txt
+query.sql
+*.sql.tmp
+
+# ── OS / Editor ───────────────────────────────────────────────
 .DS_Store
-*.log
 .vscode
 .idea
 *.swp
 *.swo
+*.log
