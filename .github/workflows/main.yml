@@ -11,14 +11,16 @@ env:
   TEST_DB_USER: testuser
   TEST_DB_PASSWORD: testpassword
   TEST_DB_NAME: marketplace_test
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
   # ============================================================
-  # JOB 1 — Run tests (requires postgres service)
+  # JOB 1 — Run tests
   # ============================================================
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -85,13 +87,14 @@ jobs:
           retention-days: 7
 
   # ============================================================
-  # JOB 2 — Build & push Docker images
+  # JOB 2 — Build & Push Docker images
   # ============================================================
   build-and-push:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
-    needs: test                # Only build if tests passed
+    needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -148,86 +151,126 @@ jobs:
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
-    needs: build-and-push      # Only deploy if build succeeded
+    needs: build-and-push
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout (needed for docker-compose files)
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy updated SQL files to VPS
+      - name: Copy docker-compose & SQL files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "init_database.sql/,docs/"
+          source: "init_database.sql/,docs/,docker/docker-compose.prod.yml"
           target: "/root/services/FinalYear/"
           overwrite: true
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          GIT_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
+          envs: HUB_USER,GIT_SHA
+          command_timeout: 10m
           script: |
             set -e
-            cd /root/services/FinalYear/docker
+            COMPOSE_DIR="/root/services/FinalYear/docker"
+            COMPOSE_FILE="$COMPOSE_DIR/docker-compose.prod.yml"
 
-            echo "=== Pulling latest images ==="
-            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} \
-              docker compose -f docker-compose.prod.yml pull
+            echo "======================================"
+            echo "  DEPLOYING commit: $GIT_SHA"
+            echo "  DOCKERHUB: $HUB_USER"
+            echo "======================================"
 
-            echo "=== Applying any DB schema changes ==="
-            # Only re-apply schema if postgres container is already running
-            if docker compose -f docker-compose.prod.yml ps postgres | grep -q "running"; then
-              docker compose -f docker-compose.prod.yml exec -T postgres \
-                psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-marketplace_db} \
-                -c "SELECT 1" > /dev/null 2>&1 && echo "DB reachable, skipping schema re-apply" || true
-            fi
+            cd "$COMPOSE_DIR"
 
-            echo "=== Ensuring infrastructure is running ==="
-            docker compose -f docker-compose.prod.yml up -d \
-              --no-recreate \
-              postgres redis rabbitmq
+            # ── Step 1: Pull latest images
+            echo "[1/5] Pulling latest Docker images..."
+            docker pull "$HUB_USER/marketplace-main-api:latest"
+            docker pull "$HUB_USER/marketplace-payment-api:latest"
+            docker pull "$HUB_USER/marketplace-frontend:latest"
+            echo "✓ Images pulled"
 
-            echo "=== Waiting for postgres to be healthy ==="
-            for i in $(seq 1 20); do
-              if docker compose -f docker-compose.prod.yml ps postgres | grep -q "healthy"; then
-                echo "Postgres is healthy"
+            # ── Step 2: Ensure infra (postgres, redis, rabbitmq) is running
+            echo "[2/5] Ensuring infrastructure containers are healthy..."
+            docker compose -f "$COMPOSE_FILE" up -d --no-recreate postgres redis rabbitmq
+
+            # ── Step 3: Wait for postgres
+            echo "[3/5] Waiting for postgres to be healthy..."
+            for i in $(seq 1 24); do
+              if docker compose -f "$COMPOSE_FILE" ps postgres | grep -q "healthy"; then
+                echo "✓ Postgres is healthy (attempt $i)"
                 break
               fi
-              echo "Waiting for postgres... attempt $i/20"
+              echo "  Waiting... ($i/24)"
               sleep 5
             done
 
-            echo "=== Restarting app services (zero-downtime) ==="
-            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} \
-              docker compose -f docker-compose.prod.yml up -d \
-                --remove-orphans \
-                --no-deps \
-                --force-recreate \
-                main-api payment-api frontend
+            # ── Step 4: Restart app services with new images
+            echo "[4/5] Restarting app services with new images..."
+            docker compose -f "$COMPOSE_FILE" up -d \
+              --force-recreate \
+              --no-deps \
+              --remove-orphans \
+              main-api payment-api frontend
+            echo "✓ Containers restarted"
 
-            echo "=== Waiting for main-api health check ==="
-            sleep 8
-            curl -sf http://127.0.0.1:3001/health || (echo "main-api health check FAILED" && exit 1)
+            # ── Step 5: Health checks
+            echo "[5/5] Running health checks..."
+            sleep 15
 
-            echo "=== Cleaning up old images ==="
-            docker image prune -f
+            if curl -sf http://127.0.0.1:3001/health > /dev/null; then
+              echo "✓ main-api: HEALTHY"
+            else
+              echo "✗ main-api: FAILED"
+              docker compose -f "$COMPOSE_FILE" logs --tail=50 main-api
+              exit 1
+            fi
 
-            echo "=== Deployment completed successfully! ==="
-            docker compose -f docker-compose.prod.yml ps
+            if curl -sf http://127.0.0.1:3002/health > /dev/null; then
+              echo "✓ payment-api: HEALTHY"
+            else
+              echo "✗ payment-api: FAILED"
+              docker compose -f "$COMPOSE_FILE" logs --tail=30 payment-api
+              exit 1
+            fi
+
+            FRONTEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
+            if [ "$FRONTEND_CODE" = "200" ] || [ "$FRONTEND_CODE" = "307" ]; then
+              echo "✓ frontend: HTTP $FRONTEND_CODE"
+            else
+              echo "✗ frontend: HTTP $FRONTEND_CODE"
+              docker compose -f "$COMPOSE_FILE" logs --tail=30 frontend
+              exit 1
+            fi
+
+            # ── Cleanup old images
+            docker image prune -f --filter "until=24h" || true
+
+            echo ""
+            echo "======================================"
+            echo "  ✅ DEPLOYMENT SUCCESSFUL!"
+            echo "======================================"
+            docker compose -f "$COMPOSE_FILE" ps
 
       - name: Notify deployment status
         if: always()
         run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "Deployment succeeded for commit ${{ github.sha }}"
+          STATUS="${{ job.status }}"
+          SHA_SHORT="${{ github.sha }}"
+          SHA_SHORT="${SHA_SHORT:0:7}"
+          if [ "$STATUS" = "success" ]; then
+            echo "✅ Deploy OK — commit $SHA_SHORT is live on kienai.id.vn"
           else
-            echo "Deployment FAILED for commit ${{ github.sha }}"
+            echo "❌ Deploy FAILED — commit $SHA_SHORT"
           fi
-
