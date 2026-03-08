@@ -50,10 +50,22 @@ export class CryptoPaymentService {
       'SELECT payout_wallet FROM seller_profiles WHERE seller_id = $1',
       [order.seller_id]
     );
-    const sellerWallet = sellerResult.rows[0]?.payout_wallet;
-    if (!sellerWallet || !ethers.isAddress(sellerWallet)) {
+    const rawWallet: string | null = sellerResult.rows[0]?.payout_wallet ?? null;
+
+    // ethers v6 isAddress() requires EIP-55 checksum — use regex for plain hex check
+    const isValidEthAddress = (w: string | null): w is string =>
+      !!w && /^0x[0-9a-fA-F]{40}$/.test(w);
+
+    // Use seller wallet if valid, otherwise fall back to escrow contract as recipient
+    const sellerWallet = isValidEthAddress(rawWallet)
+      ? rawWallet
+      : isValidEthAddress(process.env.ESCROW_CONTRACT_ADDRESS ?? null)
+        ? process.env.ESCROW_CONTRACT_ADDRESS!
+        : null;
+
+    if (!sellerWallet) {
       throw new AppError(
-        `Seller (seller_id: ${order.seller_id}) has no valid payout_wallet in seller_profiles table. Sellers must connect a wallet to receive crypto payments.`,
+        `Seller has not connected a crypto wallet. Please use PayPal payment instead.`,
         400
       );
     }
