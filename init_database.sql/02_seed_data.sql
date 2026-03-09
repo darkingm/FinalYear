@@ -660,3 +660,6 @@ ON CONFLICT (code) DO NOTHING;
 COMMIT;
 
 
+
+
+/* --- Added from 02_p2p_multichain.sql (Seed Data) --- */
