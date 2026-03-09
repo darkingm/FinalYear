@@ -11,7 +11,7 @@ let sellerToken: string;
 let testSellerId: number;
 
 const sellerEmail = `seller_prod_${Date.now()}@example.com`;
-const sellerPw    = 'Seller@Pass123';
+const sellerPw = 'Seller@Pass123';
 
 beforeAll(async () => {
   testPool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -37,9 +37,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (testSellerId) {
-    await testPool.query('DELETE FROM users WHERE user_id=$1', [testSellerId]).catch(() => {});
+    await testPool.query('DELETE FROM users WHERE user_id=$1', [testSellerId]).catch(() => { });
   }
-  await testPool.end().catch(() => {});
+  await testPool.end().catch(() => { });
 });
 
 // ── GET /api/products ───────────────────────────────────────────
@@ -153,18 +153,18 @@ describe('POST /api/products', () => {
       .post('/api/products')
       .set('Authorization', `Bearer ${sellerToken}`)
       .send({
-        name:          `Widget_${Date.now()}`,
-        description:   'Integration test product',
-        category:      'electronics',
+        name: `Widget_${Date.now()}`,
+        description: 'Integration test product',
+        category: 'electronics',
         base_price_usd: 49.99,
-        stock:          10,
+        stock: 10,
       });
-    // 201 success OR 400/403 if seller profile not ready
-    expect([200, 201, 400, 403]).toContain(res.status);
-    if (res.status === 201) {
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.product_id).toBeDefined();
+    if (res.status !== 201) {
+      console.error('Create product failed:', res.status, res.body);
     }
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.product_id).toBeDefined();
   });
 });
 

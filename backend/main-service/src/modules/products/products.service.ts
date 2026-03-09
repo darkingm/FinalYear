@@ -167,8 +167,8 @@ export class ProductService {
       const productResult = await client.query(
         `INSERT INTO products
            (seller_id, name, description, category, base_price_usd,
-            token_id, price_in_token, metadata, status, product_type)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',$9)
+            metadata, status, product_type)
+         VALUES ($1,$2,$3,$4,$5,$6,'active',$7)
          RETURNING *`,
         [
           sellerId,
@@ -176,8 +176,6 @@ export class ProductService {
           data.description || data.name,
           data.category || 'other',
           data.price || data.base_price_usd || 0,
-          data.token_id || null,
-          data.price_in_token || null,
           JSON.stringify(data.metadata || {}),
           data.product_type || 'physical',
         ]
