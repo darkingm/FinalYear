@@ -117,8 +117,8 @@ export class AdminService {
               buyer.username as buyer_name, buyer.email as buyer_email, buyer.wallet_address as buyer_wallet,
               seller_u.username as seller_username, seller_u.email as seller_email, seller_u.wallet_address as seller_wallet,
               seller_p.display_name as seller_name,
-              p.name as product_name, p.base_price_usd as product_price, p.pricing_mode, p.price_token,
-              p.token_id as product_token_id, tw.symbol as product_token_symbol, tw.decimals as product_token_decimals,
+              p.name as product_name, p.base_price_usd as product_price,
+              pat.token_id as product_token_id, tw.symbol as product_token_symbol, tw.decimals as product_token_decimals,
               pay.tx_hash as payment_tx_hash, pay.status as payment_status, pay.confirmations,
               pay.block_number as payment_block, pay.gas_used as payment_gas
        FROM orders o
@@ -126,7 +126,8 @@ export class AdminService {
        LEFT JOIN seller_profiles seller_p ON o.seller_id = seller_p.seller_id
        LEFT JOIN users seller_u ON seller_p.user_id = seller_u.user_id
        LEFT JOIN products p ON o.product_id = p.product_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+       LEFT JOIN product_accepted_tokens pat ON p.product_id = pat.product_id AND pat.is_primary = TRUE
+       LEFT JOIN token_whitelist tw ON pat.token_id = tw.token_id
        LEFT JOIN payments pay ON o.order_id = pay.order_id
        WHERE o.order_id = $1`,
             [orderId]
@@ -531,7 +532,8 @@ export class AdminService {
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u ON sp.user_id = u.user_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+       LEFT JOIN product_accepted_tokens pat ON p.product_id = pat.product_id AND pat.is_primary = TRUE
+       LEFT JOIN token_whitelist tw ON pat.token_id = tw.token_id
        LEFT JOIN inventory i ON p.product_id = i.product_id
        ${whereClause}
        ORDER BY p.created_at DESC
@@ -641,12 +643,19 @@ export class AdminService {
         await query('BEGIN');
         try {
             const productResult = await query(
-                `INSERT INTO products (seller_id, name, description, category, base_price_usd, status, pricing_mode, token_id, price_token)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-                [seller_id, name, description, category, base_price_usd || 0, status || 'active', pricing_mode || 'usd', token_id || null, price_token || null]
+                `INSERT INTO products (seller_id, name, description, category, base_price_usd, status)
+                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+                [seller_id, name, description, category, base_price_usd || 0, status || 'active']
             );
-
             const product = productResult.rows[0];
+
+            if (token_id) {
+                await query(
+                    `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
+                     VALUES ($1, $2, $3, TRUE)`,
+                    [product.product_id, token_id, price_token || 0]
+                );
+            }
 
             if (stock && warehouse_id) {
                 await query(
@@ -684,9 +693,13 @@ export class AdminService {
             if (category !== undefined) { upFields.push(`category = $${idx++}`); upValues.push(category); }
             if (base_price_usd !== undefined) { upFields.push(`base_price_usd = $${idx++}`); upValues.push(base_price_usd); }
             if (status !== undefined) { upFields.push(`status = $${idx++}`); upValues.push(status); }
-            if (pricing_mode !== undefined) { upFields.push(`pricing_mode = $${idx++}`); upValues.push(pricing_mode); }
-            if (token_id !== undefined) { upFields.push(`token_id = $${idx++}`); upValues.push(token_id); }
-            if (price_token !== undefined) { upFields.push(`price_token = $${idx++}`); upValues.push(price_token); }
+            if (token_id !== undefined && price_token !== undefined) {
+                await query('DELETE FROM product_accepted_tokens WHERE product_id = $1', [productId]);
+                await query(
+                    `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary) VALUES ($1, $2, $3, TRUE)`,
+                    [productId, token_id, price_token]
+                );
+            }
 
             if (upFields.length > 0) {
                 upValues.push(productId);
