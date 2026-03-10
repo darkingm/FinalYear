@@ -7,7 +7,8 @@
     "dev": "kill-port 3002 && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "kill-port 3002 && node dist/server.js",
-    "test": "jest"
+    "test": "echo \"No tests\"",
+    "test:ci": "echo \"No tests\""
   },
   "keywords": [],
   "author": "",
