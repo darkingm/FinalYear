@@ -1,4 +1,4 @@
-import { pool, query } from '../config/database';
+import { mainPool as pool, mainQuery as query } from '../config/database';
 import { logger } from '../utils/logger';
 
 /**

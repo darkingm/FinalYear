@@ -9,7 +9,17 @@ import {
 } from './p2p.controller';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image and PDF files are allowed!') as any, false);
+        }
+    }
+});
 
 // ── Public ────────────────────────────────────────────────────────────
 router.get('/offers', listOffers);

@@ -21,6 +21,26 @@ services:
     networks:
       - marketplace-network
 
+  postgres-payment:
+    image: postgres:15-alpine
+    container_name: marketplace-payment-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "@Kien2909"
+      POSTGRES_DB: payment_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - payment_postgres_data:/var/lib/postgresql/data
+      - ../payment_init_database.sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - marketplace-network
+
   redis:
     image: redis:7-alpine
     container_name: marketplace-redis
@@ -106,7 +126,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3002
-      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres:5432/marketplace_db
+      DATABASE_URL: postgresql://postgres:%40Kien2909@postgres-payment:5432/payment_db
       REDIS_URL: redis://:%40Kien2909@redis:6379
       RABBITMQ_URL: amqp://kaitojpla:%40Kien2909@rabbitmq:5672
       PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
@@ -163,6 +183,7 @@ services:
 
 volumes:
   postgres_data:
+  payment_postgres_data:
   redis_data:
   rabbitmq_data:
 

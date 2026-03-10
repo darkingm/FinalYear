@@ -1,9 +1,10 @@
 import paypal from '@paypal/checkout-server-sdk';
-import { query } from '../../config/database';
+import { query, mainQuery } from '../../config/database';
 import { publishEvent } from '../../config/rabbitmq';
 import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
 import 'dotenv/config';
+import axios from 'axios';
 
 export class PayPalService {
   private client: paypal.core.PayPalHttpClient;
@@ -23,7 +24,7 @@ export class PayPalService {
 
   async createOrder(orderId: number) {
     // Get order details
-    const orderResult = await query(
+    const orderResult = await mainQuery(
       'SELECT * FROM orders WHERE order_id = $1',
       [orderId]
     );
@@ -68,7 +69,7 @@ export class PayPalService {
     const paypalOrderId = response.result.id;
 
     // Update order with PayPal order ID
-    await query(
+    await mainQuery(
       `UPDATE orders 
        SET paypal_order_id = $1, status = 'TX_SUBMITTED', payment_method = 'paypal', updated_at = NOW()
        WHERE order_id = $2`,
@@ -100,7 +101,7 @@ export class PayPalService {
     const referenceId = response.result.purchase_units[0].reference_id;
 
     // Get order by internal_order_id
-    const orderResult = await query(
+    const orderResult = await mainQuery(
       'SELECT * FROM orders WHERE internal_order_id = $1',
       [referenceId]
     );
@@ -112,7 +113,7 @@ export class PayPalService {
     const order = orderResult.rows[0];
 
     // Update order
-    await query(
+    await mainQuery(
       `UPDATE orders 
        SET paypal_capture_id = $1, status = 'PAID', updated_at = NOW()
        WHERE order_id = $2`,
@@ -143,10 +144,17 @@ export class PayPalService {
     };
   }
 
-  async handleWebhook(webhookData: any) {
+  async handleWebhook(webhookData: any, headers: any) {
     const eventType = webhookData.event_type;
     
     logger.info('PayPal webhook received', { eventType });
+
+    // Verify webhook signature
+    const isValid = await this.verifyWebhookSignature(webhookData, headers);
+    if (!isValid) {
+      logger.error('Invalid PayPal webhook signature', { eventType });
+      throw new AppError('Invalid webhook signature', 400);
+    }
 
     switch (eventType) {
       case 'PAYMENT.CAPTURE.COMPLETED':
@@ -167,6 +175,62 @@ export class PayPalService {
         
       default:
         logger.info('Unhandled webhook event', { eventType });
+    }
+  }
+
+  private async getAccessToken(): Promise<string> {
+    const clientId = (process.env.PAYPAL_CLIENT_ID ?? '').trim();
+    const clientSecret = (process.env.PAYPAL_SECRET ?? '').trim();
+    const isProd = process.env.PAYPAL_MODE === 'production';
+    const baseUrl = isProd ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+    
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    
+    try {
+      const response = await axios.post(`${baseUrl}/v1/oauth2/token`, 'grant_type=client_credentials', {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      return response.data.access_token;
+    } catch (error) {
+      logger.error('Failed to get PayPal access token', error);
+      throw new AppError('Failed to get PayPal access token', 500);
+    }
+  }
+
+  private async verifyWebhookSignature(webhookData: any, headers: any): Promise<boolean> {
+    const webhookId = (process.env.PAYPAL_WEBHOOK_ID ?? '').trim();
+    if (!webhookId) {
+       logger.warn('PAYPAL_WEBHOOK_ID is not configured, skipping signature verification');
+       return true; // Skip verification if not configured (useful for local dev)
+    }
+
+    const accessToken = await this.getAccessToken();
+    const isProd = process.env.PAYPAL_MODE === 'production';
+    const baseUrl = isProd ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+
+    try {
+      const response = await axios.post(`${baseUrl}/v1/notifications/verify-webhook-signature`, {
+        auth_algo: headers['paypal-auth-algo'],
+        cert_url: headers['paypal-cert-url'],
+        transmission_id: headers['paypal-transmission-id'],
+        transmission_sig: headers['paypal-transmission-sig'],
+        transmission_time: headers['paypal-transmission-time'],
+        webhook_id: webhookId,
+        webhook_event: webhookData
+      }, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      return response.data.verification_status === 'SUCCESS';
+    } catch (error) {
+      logger.error('Failed to verify PayPal webhook signature', error);
+      return false;
     }
   }
 

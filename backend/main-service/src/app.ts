@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/error-handler';
+import { apiLimiter, strictLimiter } from './middleware/rate-limit';
 import { pool } from './config/database';
 import { logger } from './utils/logger';
 
@@ -17,12 +19,24 @@ import walletsRoutes from './modules/wallets/wallets.routes';
 const app = express();
 
 app.use(helmet());
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000').split(',');
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Apply general rate limiting to all requests
+app.use(apiLimiter);
 
 // Basic health – no DB call, always fast
 app.get('/health', (_req, res) => {
@@ -124,7 +138,7 @@ app.get('/metrics', async (_req, res) => {
   }
 });
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', strictLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);

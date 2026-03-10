@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { query } from '../../config/database';
+import { query, mainQuery } from '../../config/database';
 import { publishEvent } from '../../config/rabbitmq';
 import { BinanceService } from '../pricing/binance.service';
 import { logger } from '../../utils/logger';
@@ -30,7 +30,7 @@ export class CryptoPaymentService {
 
   async generateQuote(orderId: number, tokenSymbol: string) {
     // Get order details
-    const orderResult = await query(
+    const orderResult = await mainQuery(
       'SELECT * FROM orders WHERE order_id = $1',
       [orderId]
     );
@@ -46,7 +46,7 @@ export class CryptoPaymentService {
     }
 
     // Get seller's wallet address (payout_wallet from seller_profiles)
-    const sellerResult = await query(
+    const sellerResult = await mainQuery(
       'SELECT payout_wallet FROM seller_profiles WHERE seller_id = $1',
       [order.seller_id]
     );
@@ -143,7 +143,7 @@ export class CryptoPaymentService {
     ]);
 
     // Update order with token info
-    await query(
+    await mainQuery(
       `UPDATE orders 
        SET token_id = $1, amount_token = $2, chain_id = $3, 
            escrow_contract = $4, price_expires_at = NOW() + INTERVAL '10 minutes'
@@ -173,7 +173,7 @@ export class CryptoPaymentService {
     }
 
     // Update order status
-    await query(
+    await mainQuery(
       `UPDATE orders 
        SET tx_hash = $1, status = 'TX_SUBMITTED', updated_at = NOW()
        WHERE order_id = $2`,
@@ -181,7 +181,7 @@ export class CryptoPaymentService {
     );
 
     // Get order details for chain_id
-    const orderResult = await query(
+    const orderResult = await mainQuery(
       'SELECT * FROM orders WHERE order_id = $1',
       [orderId]
     );
@@ -308,7 +308,7 @@ export class CryptoPaymentService {
         [txHash]
       );
 
-      await query(
+      await mainQuery(
         `UPDATE orders SET status = 'TX_FAILED', updated_at = NOW() 
          WHERE order_id = $1`,
         [payment.order_id]
@@ -353,7 +353,7 @@ export class CryptoPaymentService {
 
     if (confirmations >= 12) {
       // Transaction confirmed
-      await query(
+      await mainQuery(
         `UPDATE orders SET status = 'ONCHAIN_CONFIRMED', updated_at = NOW() 
          WHERE order_id = $1`,
         [payment.order_id]
@@ -384,18 +384,30 @@ export class CryptoPaymentService {
   }
 
   async getPaymentStatus(orderId: number) {
-    const result = await query(
-      `SELECT o.*, p.tx_hash, p.status as payment_status, p.confirmations, p.block_number
-       FROM orders o
-       LEFT JOIN payments p ON o.order_id = p.order_id
-       WHERE o.order_id = $1`,
+    const orderResult = await mainQuery(
+      `SELECT * FROM orders WHERE order_id = $1`,
       [orderId]
     );
 
-    if (result.rows.length === 0) {
+    if (orderResult.rows.length === 0) {
       throw new AppError('Order not found', 404);
     }
 
-    return result.rows[0];
+    const order = orderResult.rows[0];
+
+    const paymentResult = await query(
+      `SELECT tx_hash, status as payment_status, confirmations, block_number
+       FROM payments 
+       WHERE order_id = $1 
+       ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    );
+
+    const payment = paymentResult.rows[0] || {};
+
+    return {
+      ...order,
+      ...payment,
+    };
   }
 }

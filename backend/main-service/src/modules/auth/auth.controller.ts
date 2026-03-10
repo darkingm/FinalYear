@@ -5,6 +5,13 @@ import { logger } from '../../utils/logger';
 
 const authService = new AuthService();
 
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict' as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+};
+
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password, username, wallet_address, captcha } = req.body;
@@ -46,11 +53,11 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       wallet_address,
     });
 
+    res.cookie('refreshToken', result.refreshToken, cookieOptions);
     res.status(201).json({
       success: true,
       user: result.user,
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     });
   } catch (error: any) {
     logger.error('Register error:', error);
@@ -64,11 +71,11 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     const result = await authService.login(email, password);
 
+    res.cookie('refreshToken', result.refreshToken, cookieOptions);
     res.json({
       success: true,
       user: result.user,
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     });
   } catch (error: any) {
     logger.error('Login error:', error);
@@ -82,11 +89,11 @@ export async function walletLogin(req: Request, res: Response, next: NextFunctio
 
     const result = await authService.walletLogin(wallet_address, message, signature);
 
+    res.cookie('refreshToken', result.refreshToken, cookieOptions);
     res.json({
       success: true,
       user: result.user,
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     });
   } catch (error: any) {
     logger.error('Wallet login error:', error);
@@ -112,11 +119,11 @@ export async function oauthLogin(req: Request, res: Response, next: NextFunction
       image,
     });
 
+    res.cookie('refreshToken', result.refreshToken, cookieOptions);
     res.json({
       success: true,
       user: result.user,
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     });
   } catch (error: any) {
     logger.error('OAuth login error:', error);
@@ -126,14 +133,18 @@ export async function oauthLogin(req: Request, res: Response, next: NextFunction
 
 export async function refreshToken(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({ success: false, message: 'Refresh token not found' });
+    }
 
     const result = await authService.refreshToken(refreshToken);
 
+    res.cookie('refreshToken', result.refreshToken, cookieOptions);
     res.json({
       success: true,
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     });
   } catch (error: any) {
     logger.error('Refresh token error:', error);
@@ -143,10 +154,13 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
 
 export async function logout(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
-    await authService.logout(refreshToken);
+    if (refreshToken) {
+      await authService.logout(refreshToken);
+    }
 
+    res.clearCookie('refreshToken', cookieOptions);
     res.json({
       success: true,
       message: 'Logged out successfully',

@@ -44,34 +44,62 @@ export function LinkWalletSection() {
   if (profileWallet === undefined) return null;
   if (profileWallet) {
     return (
-      <section className="rounded-2xl border bg-card p-6 mb-8">
-        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-          <Check className="w-5 h-5" />
-          <span className="font-medium">Wallet linked</span>
+      <section className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md relative overflow-hidden h-full flex flex-col justify-center">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-2xl rounded-full pointer-events-none" />
+        <div className="relative z-10 flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+            <Check className="w-5 h-5 text-emerald-400" />
+          </div>
+          <h2 className="text-lg font-bold text-white">Wallet Linked</h2>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          Receiving address: {profileWallet.slice(0, 6)}…{profileWallet.slice(-4)}
+        <p className="text-sm text-gray-400 mt-1 relative z-10">
+          Địa chỉ nhận thanh toán: <span className="font-mono text-gray-300 font-medium bg-black/30 px-2 py-1 rounded select-all">{profileWallet.slice(0, 6)}…{profileWallet.slice(-4)}</span>
         </p>
       </section>
     );
   }
 
   return (
-    <section className="rounded-2xl border bg-card p-6 mb-8">
-      <div className="flex items-center gap-2 mb-2">
-        <Link2 className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-semibold">Link wallet (for sellers)</h2>
-      </div>
-      <p className="text-sm text-muted-foreground mb-4">
-        Sellers need a linked wallet to receive crypto payments. Connect your wallet and sign to link it to your account.
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <ConnectButton />
-        {isConnected && address && (
-          <Button onClick={handleLinkWallet} disabled={linking}>
-            {linking ? 'Linking…' : 'Sign to link wallet'}
-          </Button>
-        )}
+    <section className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md relative overflow-hidden h-full flex flex-col justify-center group">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-[#f0b90b]/10 blur-2xl rounded-full pointer-events-none group-hover:bg-[#f0b90b]/20 transition-all duration-700" />
+      <div className="relative z-10">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center">
+            <Link2 className="w-5 h-5 text-[#f0b90b]" />
+          </div>
+          <h2 className="text-lg font-bold text-white">Link wallet (for sellers)</h2>
+        </div>
+        <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+          Người bán cần liên kết ví để nhận thanh toán bằng Crypto. Kết nối ví của bạn và ký xác nhận.
+        </p>
+        <div className="flex flex-col gap-3">
+          <ConnectButton.Custom>
+            {({ openConnectModal, account, mounted }) => {
+              if (!mounted) return null;
+              if (!account) {
+                return (
+                  <button onClick={openConnectModal} className="w-full py-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-medium rounded-xl border border-blue-500/20 transition-colors">
+                    Kết nối ví Web3
+                  </button>
+                );
+              }
+              return (
+                <div className="flex items-center gap-2">
+                  <ConnectButton />
+                </div>
+              );
+            }}
+          </ConnectButton.Custom>
+          {isConnected && address && (
+            <button 
+              onClick={handleLinkWallet} 
+              disabled={linking}
+              className="w-full py-3 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(240,185,11,0.2)] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {linking ? 'Đang liên kết...' : 'Ký xác nhận liên kết ví'}
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );

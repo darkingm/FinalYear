@@ -158,7 +158,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "init_database.sql/,docs/,docker/docker-compose.prod.yml"
+          source: "init_database.sql/,payment_init_database.sql/,docs/,docker/docker-compose.prod.yml"
           target: "/root/services/FinalYear/"
           overwrite: true
 
@@ -193,15 +193,15 @@ jobs:
             docker pull "$HUB_USER/marketplace-frontend:latest"
             echo "✓ Images pulled"
 
-            # ── Step 2: Ensure infra (postgres, redis, rabbitmq) is running
+            # ── Step 2: Ensure infra (postgres, postgres-payment, redis, rabbitmq) is running
             echo "[2/5] Ensuring infrastructure containers are healthy..."
-            docker compose -f "$COMPOSE_FILE" up -d --no-recreate postgres redis rabbitmq
+            docker compose -f "$COMPOSE_FILE" up -d --no-recreate postgres postgres-payment redis rabbitmq
 
-            # ── Step 3: Wait for postgres
-            echo "[3/5] Waiting for postgres to be healthy..."
+            # ── Step 3: Wait for postgres and postgres-payment
+            echo "[3/5] Waiting for databases to be healthy..."
             for i in $(seq 1 24); do
-              if docker compose -f "$COMPOSE_FILE" ps postgres | grep -q "healthy"; then
-                echo "✓ Postgres is healthy (attempt $i)"
+              if docker compose -f "$COMPOSE_FILE" ps postgres | grep -q "healthy" && docker compose -f "$COMPOSE_FILE" ps postgres-payment | grep -q "healthy"; then
+                echo "✓ Databases are healthy (attempt $i)"
                 break
               fi
               echo "  Waiting... ($i/24)"

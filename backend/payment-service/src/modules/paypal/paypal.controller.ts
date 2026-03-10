@@ -55,8 +55,9 @@ export async function capturePayment(req: Request, res: Response, next: NextFunc
 export async function handleWebhook(req: Request, res: Response, next: NextFunction) {
   try {
     const webhookData = req.body;
+    const headers = req.headers;
     
-    await paypalService.handleWebhook(webhookData);
+    await paypalService.handleWebhook(webhookData, headers);
     
     res.status(200).send('OK');
   } catch (error: any) {

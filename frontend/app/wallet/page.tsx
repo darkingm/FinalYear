@@ -34,17 +34,38 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-[#0c0e14] flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black pt-20">
+      {/* Ambient backgrounds */}
+      <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
       <Header />
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="flex items-center gap-3 mb-8">
-          <Wallet className="w-8 h-8 text-primary" />
-          <h1 className="text-3xl font-bold">Wallet & Balances</h1>
+      <main className="container mx-auto px-4 py-8 max-w-5xl relative z-10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center shadow-[0_0_15px_rgba(240,185,11,0.15)]">
+              <Wallet className="w-6 h-6 text-[#f0b90b]" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white tracking-tight">Web3 Wallet</h1>
+              <p className="text-sm text-gray-400 mt-1">Quản lý ví kết nối và số dư tài sản</p>
+            </div>
+          </div>
         </div>
-        <LinkWalletSection />
-        <BalanceOverview />
-        <section className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Coin balances</h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2">
+            <BalanceOverview />
+          </div>
+          <div className="lg:col-span-1">
+            <LinkWalletSection />
+          </div>
+        </div>
+
+        <section className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-xl">
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <span className="w-1.5 h-5 bg-blue-500 rounded-full" />
+            Tài sản được hỗ trợ (Thị trường)
+          </h2>
           <CoinGrid />
         </section>
       </main>

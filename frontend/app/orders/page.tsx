@@ -62,55 +62,63 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
       transition={{ duration: 0.3, delay: index * 0.04 }}
     >
       <Link href={`/orders/${order.order_id}`}>
-        <div className="bg-card border border-border rounded-2xl p-4 md:p-5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer group">
-          <div className="flex gap-4">
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-5 hover:border-white/20 hover:bg-white/[0.04] transition-all duration-300 cursor-pointer group backdrop-blur-md relative overflow-hidden">
+          {/* Subtle hover glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/0 to-blue-500/0 group-hover:via-blue-500/5 transition-all duration-700 pointer-events-none" />
+
+          <div className="flex flex-col sm:flex-row gap-5 relative z-10">
             {/* Image */}
-            <div className="relative w-18 h-18 md:w-20 md:h-20 rounded-xl overflow-hidden bg-muted flex-shrink-0 border border-border"
-              style={{ width: '76px', height: '76px' }}>
+            <div className="relative w-full sm:w-24 h-40 sm:h-24 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex-shrink-0">
               {imgSrc && !imgError ? (
                 <Image
                   src={imgSrc}
                   alt={order.product_name}
                   fill
-                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="object-cover group-hover:scale-110 transition-transform duration-700"
                   unoptimized
                   onError={() => setImgError(true)}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-7 h-7 text-muted-foreground/40" />
+                  <Package className="w-8 h-8 text-gray-600" />
                 </div>
               )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent sm:hidden pointer-events-none" />
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <h3 className="font-semibold text-foreground line-clamp-1 group-hover:text-primary transition-colors text-sm md:text-base">
+            <div className="flex-1 min-w-0 flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <h3 className="font-bold text-white line-clamp-2 sm:line-clamp-1 group-hover:text-blue-400 transition-colors text-base">
                   {order.product_name}
                 </h3>
                 {/* Status badge */}
-                <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border flex-shrink-0 ${cfg.textColor} ${cfg.bgColor} ${cfg.borderColor}`}>
-                  <StatusIcon className="w-3 h-3" />
-                  <span className="hidden sm:inline">{cfg.label}</span>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border flex-shrink-0 ${cfg.textColor} ${cfg.bgColor.replace('500/10', '500/20')} ${cfg.borderColor}`}>
+                  <StatusIcon className="w-3.5 h-3.5" />
+                  <span>{cfg.label}</span>
                 </span>
               </div>
 
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mb-3">
-                <span className="font-mono">#{order.order_id}</span>
-                <span>x{order.quantity}</span>
-                <span>{new Date(order.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-4 sm:mb-0">
+                <span className="font-mono bg-black/30 px-2 py-0.5 rounded text-gray-400">Order #{order.order_id}</span>
+                <span className="flex items-center gap-1"><Package className="w-3 h-3" /> x{order.quantity}</span>
+                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(order.created_at).toLocaleDateString('vi-VN')}</span>
                 {order.payment_method && (
-                  <span className="text-primary/70">{order.payment_method}</span>
+                  <span className="flex items-center gap-1 text-[#f0b90b] font-medium uppercase tracking-wider">
+                    {order.payment_method}
+                  </span>
                 )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-lg font-bold text-primary">
-                  ${price.toFixed(2)}
-                </span>
-                <span className="text-xs text-muted-foreground group-hover:text-primary flex items-center gap-1 transition-colors opacity-0 group-hover:opacity-100">
-                  Xem chi tiết <ArrowRight className="w-3 h-3" />
+              <div className="flex items-end justify-between mt-auto">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold font-mono text-emerald-400">
+                    ${price.toFixed(2)}
+                  </span>
+                  <span className="text-xs text-gray-500 font-medium">USD</span>
+                </div>
+                <span className="text-xs font-bold text-blue-400 opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all translate-x-2 group-hover:translate-x-0">
+                  Chi tiết <ArrowRight className="w-4 h-4" />
                 </span>
               </div>
             </div>
@@ -118,15 +126,16 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
 
           {/* Progress bar for active orders */}
           {['PAID', 'ONCHAIN_CONFIRMED', 'DELIVERING'].includes(order.status) && (
-            <div className="mt-3 pt-3 border-t border-border">
+            <div className="mt-5 pt-4 border-t border-white/5 relative z-10">
               <div className="flex items-center gap-2">
                 {['Đặt hàng', 'Thanh toán', 'Đang giao', 'Hoàn thành'].map((step, i) => {
                   const stepMap: Record<string, number> = { PAID: 2, ONCHAIN_CONFIRMED: 2, DELIVERING: 3 };
                   const currentStep = stepMap[order.status] || 1;
                   return (
-                    <div key={step} className="flex-1 flex flex-col items-center gap-1">
-                      <div className={`w-full h-0.5 rounded-full ${i < currentStep ? 'bg-primary' : 'bg-border'}`} />
-                      {i === 0 && <span className="text-[9px] text-muted-foreground whitespace-nowrap">{step}</span>}
+                    <div key={step} className="flex-1 flex flex-col items-center gap-2">
+                      <div className={`w-full h-1 rounded-full transition-colors ${i < currentStep ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-white/10'}`} />
+                      {i === currentStep - 1 && <span className="text-[10px] text-blue-400 font-bold whitespace-nowrap uppercase tracking-wider">{step}</span>}
+                      {i !== currentStep - 1 && <span className="text-[10px] text-gray-600 font-medium whitespace-nowrap hidden sm:block">{step}</span>}
                     </div>
                   );
                 })}
@@ -178,31 +187,35 @@ export default function OrdersPage() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-[#0c0e14] flex flex-col relative overflow-hidden selection:bg-blue-500 selection:text-white pb-20">
+      {/* Ambient Backgrounds */}
+      <div className="fixed top-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="fixed bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />
+
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl relative z-10">
         {/* Header row */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between mb-6"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Package className="w-5 h-5 text-primary" />
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+              <Package className="w-6 h-6 text-blue-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Đơn hàng của tôi</h1>
-              <p className="text-xs text-muted-foreground">{orders.length} đơn hàng</p>
+              <h1 className="text-3xl font-bold text-white tracking-tight">Đơn hàng của tôi</h1>
+              <p className="text-sm text-gray-400 mt-1">{orders.length} đơn hàng trong lịch sử</p>
             </div>
           </div>
           <button
             onClick={fetchOrders}
             disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all text-sm"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-white/5 bg-white/5 text-gray-300 hover:text-white hover:border-white/20 hover:bg-white/10 transition-all text-sm font-medium w-full sm:w-auto"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Làm mới</span>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Làm mới</span>
           </button>
         </motion.div>
 
@@ -210,36 +223,38 @@ export default function OrdersPage() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08 }}
-          className="space-y-3 mb-6"
+          transition={{ delay: 0.1 }}
+          className="bg-white/[0.02] border border-white/5 rounded-3xl p-5 mb-8 backdrop-blur-xl"
         >
           {/* Search bar */}
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <div className="relative mb-5">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
             <input
               type="text"
-              placeholder="Tìm theo tên sản phẩm hoặc mã đơn..."
+              placeholder="Tìm theo tên sản phẩm hoặc mã đơn hàng..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-card border border-border rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/40 text-sm text-foreground placeholder:text-muted-foreground transition-all"
+              className="w-full pl-12 pr-4 py-3.5 bg-black/20 border border-white/5 rounded-2xl focus:outline-none focus:border-blue-500/50 focus:bg-black/40 text-sm text-white placeholder:text-gray-600 transition-all font-medium"
             />
           </div>
 
           {/* Filter tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {FILTER_TABS.map(tab => (
               <button
                 key={tab.value}
                 onClick={() => setFilter(tab.value)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all border ${filter === tab.value
-                    ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20'
-                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:text-foreground'
-                  }`}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${
+                  filter === tab.value
+                    ? 'bg-blue-500 text-white border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
+                    : 'bg-white/5 text-gray-400 border-white/5 hover:border-white/20 hover:text-white'
+                }`}
               >
                 {tab.label}
                 {statusCounts[tab.value] > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${filter === tab.value ? 'bg-black/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
-                    }`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono ${
+                    filter === tab.value ? 'bg-white/20 text-white' : 'bg-black/30 text-gray-400'
+                  }`}>
                     {statusCounts[tab.value]}
                   </span>
                 )}
@@ -250,9 +265,9 @@ export default function OrdersPage() {
 
         {/* Loading skeletons */}
         {(loading || isLoading) ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-24 bg-card border border-border rounded-2xl animate-pulse" />
+              <div key={i} className="h-32 bg-white/5 border border-white/5 rounded-3xl animate-pulse" />
             ))}
           </div>
         ) : filteredOrders.length === 0 ? (
@@ -260,22 +275,24 @@ export default function OrdersPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center py-20 bg-card border border-border rounded-2xl"
+            className="text-center py-24 bg-white/[0.02] border border-white/5 rounded-3xl backdrop-blur-md"
           >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
-              <Package className="w-8 h-8 text-muted-foreground/40" />
+            <div className="w-20 h-20 mx-auto mb-5 rounded-3xl bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
+              <Package className="w-10 h-10 text-gray-600" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">
+            <h3 className="text-xl font-bold text-white mb-2">
               {filter !== 'all' || searchQuery ? 'Không tìm thấy đơn hàng' : 'Bạn chưa có đơn hàng nào'}
             </h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              {filter !== 'all' || searchQuery ? 'Thử thay đổi bộ lọc' : 'Hãy mua sắm ngay hôm nay!'}
+            <p className="text-sm text-gray-400 mb-8 max-w-md mx-auto">
+              {filter !== 'all' || searchQuery 
+                ? 'Không có đơn hàng nào phù hợp với bộ lọc hiện tại của bạn. Thử thay đổi để xem thêm.' 
+                : 'Khám phá hàng ngàn sản phẩm đa dạng trên sàn của chúng tôi và bắt đầu mua sắm ngay hôm nay.'}
             </p>
             {filter === 'all' && !searchQuery && (
               <Link href="/products">
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl font-medium text-sm mx-auto hover:opacity-90 transition-opacity">
-                  <ShoppingBag className="w-4 h-4" />
-                  Khám phá sản phẩm
+                <button className="flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 border-none text-white rounded-xl font-bold text-sm mx-auto transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.39)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.23)] hover:-translate-y-0.5">
+                  <ShoppingBag className="w-5 h-5" />
+                  Khám phá gian hàng
                 </button>
               </Link>
             )}

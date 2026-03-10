@@ -38,9 +38,8 @@ export class TxMonitorWorker {
     try {
       // Get all pending payments
       const result = await query(
-        `SELECT p.*, o.order_id 
+        `SELECT p.* 
          FROM payments p
-         JOIN orders o ON p.order_id = o.order_id
          WHERE p.status IN ('pending', 'confirming') 
          AND p.tx_hash IS NOT NULL
          AND p.tx_hash NOT LIKE 'paypal-%'
