@@ -181,6 +181,24 @@ services:
       - marketplace-network
     restart: unless-stopped
 
+  ai-service:
+    build:
+      context: ../backend/ai-service
+      dockerfile: Dockerfile
+    container_name: marketplace-ai
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
+      MAIN_SERVICE_URL: http://main-api:3001
+    ports:
+      - "3005:3005"
+    depends_on:
+      - main-api
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
+
 volumes:
   postgres_data:
   payment_postgres_data:
