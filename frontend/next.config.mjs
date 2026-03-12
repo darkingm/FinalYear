@@ -31,13 +31,6 @@ const nextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
 
-  // Compiler optimizations (disabled for Turbopack compatibility)
-  // compiler: {
-  //   removeConsole: process.env.NODE_ENV === 'production' ? {
-  //     exclude: ['error', 'warn'],
-  //   } : false,
-  // },
-
   // Experimental optimizations
   experimental: {
     optimizePackageImports: [
@@ -71,37 +64,8 @@ const nextConfig = {
       { file: /node_modules\/@metamask\/sdk/ },
     ];
 
-    // Optimize chunks
-    if (!isServer) {
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            default: false,
-            vendors: false,
-            lib: {
-              test: /[\\/]node_modules[\\/]/,
-              name(module) {
-                const packageName = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/)?.[1];
-                return `npm.${packageName?.replace('@', '')}`;
-              },
-              priority: 10,
-              reuseExistingChunk: true,
-            },
-            commons: {
-              minChunks: 2,
-              priority: 5,
-              reuseExistingChunk: true,
-            },
-          },
-        },
-      };
-    }
-
     return config;
   },
 };
 
 export default nextConfig;
-

@@ -1,0 +1,57 @@
+[
+  {
+    "token_id": 1,
+    "symbol": "MATIC",
+    "token_address": "0x0000000000000000000000000000000000001010",
+    "chain_id": 137,
+    "decimals": 18,
+    "oracle_price_feed": null,
+    "is_active": true,
+    "metadata": null,
+    "created_at": "2026-03-07T20:00:39.709Z"
+  },
+  {
+    "token_id": 2,
+    "symbol": "USDT",
+    "token_address": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+    "chain_id": 137,
+    "decimals": 6,
+    "oracle_price_feed": null,
+    "is_active": true,
+    "metadata": null,
+    "created_at": "2026-03-07T20:00:39.709Z"
+  },
+  {
+    "token_id": 3,
+    "symbol": "USDC",
+    "token_address": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+    "chain_id": 137,
+    "decimals": 6,
+    "oracle_price_feed": null,
+    "is_active": true,
+    "metadata": null,
+    "created_at": "2026-03-07T20:00:39.709Z"
+  },
+  {
+    "token_id": 4,
+    "symbol": "ETH",
+    "token_address": "0x0000000000000000000000000000000000000000",
+    "chain_id": 1,
+    "decimals": 18,
+    "oracle_price_feed": null,
+    "is_active": true,
+    "metadata": null,
+    "created_at": "2026-03-07T20:00:39.709Z"
+  },
+  {
+    "token_id": 5,
+    "symbol": "WBTC",
+    "token_address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+    "chain_id": 1,
+    "decimals": 8,
+    "oracle_price_feed": null,
+    "is_active": true,
+    "metadata": null,
+    "created_at": "2026-03-07T20:00:39.709Z"
+  }
+]

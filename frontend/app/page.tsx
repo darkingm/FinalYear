@@ -21,6 +21,7 @@ import { getProductGallery } from '@/lib/utils/product-images';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { LivePriceEstimate } from '@/components/ui/live-price';
 
 /* ─── Types ──────────────────────────────────────── */
 interface Product {
@@ -338,7 +339,14 @@ function FlashSaleCard({ product, index, getProductImage, failedImgs, setFailedI
 
             <div className="flex items-center justify-between mb-2">
               <div>
-                {product.pricing_mode === 'usd' || !product.pricing_mode ? (
+                {product.token_id || product.price_token ? (
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold text-[#f0b90b]">
+                      {Number(product.price_token).toFixed(4)} {product.token_symbol || 'USDT'}
+                    </span>
+                    <LivePriceEstimate tokenAmount={Number(product.price_token)} tokenSymbol={product.token_symbol || 'USDT'} />
+                  </div>
+                ) : (
                   <>
                     <span className="text-lg font-bold text-[#f0b90b]">
                       ${Number(product.base_price_usd).toFixed(2)}
@@ -347,10 +355,6 @@ function FlashSaleCard({ product, index, getProductImage, failedImgs, setFailedI
                       ${originalPrice.toFixed(2)}
                     </span>
                   </>
-                ) : (
-                  <span className="text-lg font-bold text-[#f0b90b]">
-                    {Number(product.price_token).toFixed(4)} {product.token_symbol || 'Crypto'}
-                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1 text-yellow-400">
@@ -456,16 +460,19 @@ function ProductCard({ product, index, getProductImage, failedImgs, setFailedImg
             <p className="text-muted-foreground text-xs mb-3 line-clamp-2 min-h-[32px]">{product.description}</p>
             <div className="mt-auto">
               <div className="flex justify-between items-center mb-3">
-                {product.pricing_mode === 'usd' || !product.pricing_mode ? (
+                {product.token_id || product.price_token ? (
+                  <div className="flex flex-col items-start gap-1 flex-1 min-w-0">
+                    <span className="text-base font-bold text-foreground overflow-hidden text-ellipsis whitespace-nowrap" title={`${Number(product.price_token).toFixed(4)} ${product.token_symbol || 'USDT'}`}>
+                      {Number(product.price_token).toFixed(4)} {product.token_symbol || 'USDT'}
+                    </span>
+                    <LivePriceEstimate tokenAmount={Number(product.price_token)} tokenSymbol={product.token_symbol || 'USDT'} />
+                  </div>
+                ) : (
                   <span className="text-base font-bold text-foreground">
                     ${Number(product.base_price_usd).toFixed(2)}
                   </span>
-                ) : (
-                  <span className="text-base font-bold text-foreground overflow-hidden text-ellipsis whitespace-nowrap" title={`${Number(product.price_token).toFixed(4)} ${product.token_symbol || 'Crypto'}`}>
-                    {Number(product.price_token).toFixed(4)} {product.token_symbol || 'Crypto'}
-                  </span>
                 )}
-                <div className="flex items-center gap-1 text-yellow-500">
+                <div className="flex items-center gap-1 text-yellow-500 flex-shrink-0 self-start mt-1">
                   <Star className="w-3.5 h-3.5 fill-current" />
                   <span className="text-xs text-muted-foreground">4.8</span>
                 </div>

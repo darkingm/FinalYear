@@ -59,6 +59,19 @@ export default function OrderDetailPage() {
     if (isAuthenticated && id) fetchOrder();
   }, [isAuthenticated, authLoading, id]);
 
+  // Auto poll order status if waiting for blockchain confirmation
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (order?.status === 'TX_SUBMITTED') {
+      interval = setInterval(() => {
+        fetchOrder();
+      }, 5000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [order?.status, id]);
+
   useEffect(() => {
     if (!order || !success || !order.paypal_order_id || capturing) return;
     capturePayPal();

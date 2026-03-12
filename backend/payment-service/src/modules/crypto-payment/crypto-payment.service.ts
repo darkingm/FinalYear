@@ -58,9 +58,9 @@ export class CryptoPaymentService {
 
     // Use seller wallet if valid, otherwise fall back to escrow contract as recipient
     const sellerWallet = isValidEthAddress(rawWallet)
-      ? rawWallet
+      ? rawWallet.toLowerCase()
       : isValidEthAddress(process.env.ESCROW_CONTRACT_ADDRESS ?? null)
-        ? process.env.ESCROW_CONTRACT_ADDRESS!
+        ? process.env.ESCROW_CONTRACT_ADDRESS!.toLowerCase()
         : null;
 
     if (!sellerWallet) {
@@ -93,37 +93,34 @@ export class CryptoPaymentService {
     // Calculate token amount needed
     let amountToken: number;
 
-    if (order.pricing_mode === 'crypto' || order.pricing_mode === 'both') {
-      if (order.subtotal_token && order.product_token_id) {
-        // Product was explicitly priced in crypto
-        const prodTokenResult = await query(
-          'SELECT symbol FROM token_whitelist WHERE token_id = $1 LIMIT 1',
-          [order.product_token_id]
-        );
-        if (prodTokenResult.rows.length > 0) {
-          const prodTokenSymbol = prodTokenResult.rows[0].symbol;
-          if (prodTokenSymbol === tokenSymbol) {
-            // Same token, exact amount
-            amountToken = Number(order.subtotal_token);
-          } else {
-            // Different token, swap based on USDT value
-            const prodTokenPrice = await this.binanceService.getPrice(`${prodTokenSymbol}USDT`);
-            const valueUsd = Number(order.subtotal_token) * prodTokenPrice;
-            amountToken = valueUsd / tokenPrice;
-          }
+    if (order.amount_token && order.token_id) {
+      // Product was explicitly priced in crypto
+      const prodTokenResult = await query(
+        'SELECT symbol FROM token_whitelist WHERE token_id = $1 LIMIT 1',
+        [order.token_id]
+      );
+      if (prodTokenResult.rows.length > 0) {
+        const prodTokenSymbol = prodTokenResult.rows[0].symbol;
+        if (prodTokenSymbol === tokenSymbol) {
+          // Same token, exact amount
+          amountToken = Number(order.amount_token);
         } else {
-          // Fallback if token not found
-          const priceUsd = Number(order.price_usd);
-          amountToken = priceUsd / tokenPrice;
+          // Different token, swap based on USDT value
+          let prodTokenPrice = 1;
+          if (prodTokenSymbol !== 'USDT') {
+            prodTokenPrice = await this.binanceService.getPrice(`${prodTokenSymbol}USDT`);
+          }
+          const valueUsd = Number(order.amount_token) * prodTokenPrice;
+          amountToken = valueUsd / tokenPrice;
         }
       } else {
-        // Fallback
-        const priceUsd = Number(order.price_usd);
+        // Fallback if token not found
+        const priceUsd = Number(order.total_amount);
         amountToken = priceUsd / tokenPrice;
       }
     } else {
-      // USD mode
-      const priceUsd = Number(order.price_usd);
+      // USD mode fallback
+      const priceUsd = Number(order.total_amount);
       amountToken = priceUsd / tokenPrice;
     }
 
@@ -137,9 +134,9 @@ export class CryptoPaymentService {
 
     const calldata = escrowContract.interface.encodeFunctionData('deposit', [
       ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id)),
-      token.token_address,
+      (token.token_address as string).toLowerCase(),
       amountWei,
-      sellerWallet,
+      (sellerWallet as string).toLowerCase(),
     ]);
 
     // Update order with token info
@@ -330,6 +327,7 @@ export class CryptoPaymentService {
     // Get confirmation count
     const currentBlock = await provider.getBlockNumber();
     const confirmations = currentBlock - receipt.blockNumber;
+    const requiredConfirmations = payment.chain_id === 31337 ? 0 : 12;
 
     // Get block to retrieve timestamp (TransactionReceipt doesn't have blockTimestamp in ethers v6)
     const block = await provider.getBlock(receipt.blockNumber);
@@ -346,12 +344,12 @@ export class CryptoPaymentService {
         blockTimestamp,
         receipt.gasUsed.toString(),
         confirmations,
-        confirmations >= 12 ? 'confirmed' : 'pending',
+        confirmations >= requiredConfirmations ? 'confirmed' : 'pending',
         txHash,
       ]
     );
 
-    if (confirmations >= 12) {
+    if (confirmations >= requiredConfirmations) {
       // Transaction confirmed
       await mainQuery(
         `UPDATE orders SET status = 'ONCHAIN_CONFIRMED', updated_at = NOW() 
@@ -379,7 +377,7 @@ export class CryptoPaymentService {
       verified: false,
       status: 'confirming',
       confirmations,
-      required_confirmations: 12,
+      required_confirmations: requiredConfirmations,
     };
   }
 

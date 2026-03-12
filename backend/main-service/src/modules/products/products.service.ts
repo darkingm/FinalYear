@@ -4,18 +4,6 @@ import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
 
 export class ProductService {
-  private hasAcceptedTokensTable: boolean | null = null;
-
-  private async supportsProductAcceptedTokens(): Promise<boolean> {
-    if (this.hasAcceptedTokensTable !== null) return this.hasAcceptedTokensTable;
-
-    const result = await query(
-      `SELECT to_regclass('public.product_accepted_tokens') IS NOT NULL AS exists`
-    );
-    this.hasAcceptedTokensTable = Boolean(result.rows[0]?.exists);
-    return this.hasAcceptedTokensTable;
-  }
-
   async getProducts(filters: any) {
     const { page, limit, category, minPrice, maxPrice, search, acceptsCrypto, tokenSymbol } = filters;
     const pageNum = Math.max(1, page || 1);
@@ -43,32 +31,22 @@ export class ProductService {
       params.push(`%${search}%`);
       paramIndex++;
     }
-    const hasAcceptedTokensTable = await this.supportsProductAcceptedTokens();
 
     if (acceptsCrypto) {
-      if (hasAcceptedTokensTable) {
-        whereConditions.push(`EXISTS (SELECT 1 FROM product_accepted_tokens pat WHERE pat.product_id = p.product_id)`);
-      }
+      whereConditions.push(`p.token_id IS NOT NULL`);
     }
     if (tokenSymbol) {
-      if (hasAcceptedTokensTable) {
-        whereConditions.push(`EXISTS (
-          SELECT 1 FROM product_accepted_tokens pat
-          JOIN token_whitelist tw ON pat.token_id = tw.token_id
-          WHERE pat.product_id = p.product_id AND tw.symbol ILIKE $${paramIndex++}
-        )`);
-      } else {
-        // Legacy schema without product_accepted_tokens cannot filter by token symbol.
-        // Keep API stable by ignoring this filter instead of throwing SQL errors.
-      }
-      if (hasAcceptedTokensTable) params.push(tokenSymbol);
+      whereConditions.push(`tw.symbol ILIKE $${paramIndex++}`);
+      params.push(tokenSymbol);
     }
 
     const whereClause = whereConditions.join(' AND ');
 
     // Count total — use same params (no limit/offset yet)
+    // Note: Have to join token_whitelist here too if we're filtering by tokenSymbol
+    const countQueryJoin = tokenSymbol ? 'LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id' : '';
     const countResult = await query(
-      `SELECT COUNT(*) FROM products p WHERE ${whereClause}`,
+      `SELECT COUNT(*) FROM products p ${countQueryJoin} WHERE ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].count);
@@ -78,19 +56,21 @@ export class ProductService {
     const offsetIdx = paramIndex;     // e.g. $6
     params.push(limitNum, offset);
 
-    const acceptedTokensSelect = hasAcceptedTokensTable
-      ? `(SELECT json_agg(json_build_object(
-            'token_id', pat.token_id,
+    const acceptedTokensSelect = `
+      CASE WHEN p.token_id IS NOT NULL THEN
+        json_build_array(
+          json_build_object(
+            'token_id', p.token_id,
             'symbol', tw.symbol,
-            'price_in_token', pat.price_in_token,
-            'is_primary', pat.is_primary,
+            'price_in_token', p.price_in_token,
+            'is_primary', true,
             'chain_id', tw.chain_id,
-            'decimals', tw.decimals
-         ))
-         FROM product_accepted_tokens pat
-         JOIN token_whitelist tw ON pat.token_id = tw.token_id
-         WHERE pat.product_id = p.product_id)`
-      : 'NULL';
+            'decimals', tw.decimals,
+            'token_address', tw.token_address
+          )
+        )
+      ELSE NULL END
+    `;
 
     const result = await query(
       `SELECT
@@ -111,10 +91,11 @@ export class ProductService {
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u            ON sp.user_id = u.user_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
        LEFT JOIN inventory i        ON p.product_id = i.product_id
        WHERE ${whereClause}
        GROUP BY p.product_id, sp.display_name, sp.logo_url, sp.slug, sp.rating_avg,
-                u.avatar_url, u.username
+                u.avatar_url, u.username, tw.symbol, tw.chain_id, tw.decimals, tw.token_address
        ORDER BY p.created_at DESC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
@@ -131,23 +112,23 @@ export class ProductService {
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
-    const hasAcceptedTokensTable = await this.supportsProductAcceptedTokens();
-    const acceptedTokensSelect = hasAcceptedTokensTable
-      ? `(SELECT json_agg(json_build_object(
-            'token_id', pat.token_id,
+    const acceptedTokensSelect = `
+      CASE WHEN p.token_id IS NOT NULL THEN
+        json_build_array(
+          json_build_object(
+            'token_id', p.token_id,
             'symbol', tw.symbol,
             'name', tw.metadata->>'name',
-            'price_in_token', pat.price_in_token,
-            'is_primary', pat.is_primary,
+            'price_in_token', p.price_in_token,
+            'is_primary', true,
             'chain_id', tw.chain_id,
             'chain_name', tw.metadata->>'chain',
             'token_address', tw.token_address,
             'decimals', tw.decimals
-         ))
-         FROM product_accepted_tokens pat
-         JOIN token_whitelist tw ON pat.token_id = tw.token_id
-         WHERE pat.product_id = p.product_id)`
-      : 'NULL';
+          )
+        )
+      ELSE NULL END
+    `;
 
     const result = await query(
       `SELECT
@@ -175,11 +156,12 @@ export class ProductService {
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u            ON sp.user_id = u.user_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
        LEFT JOIN inventory i        ON p.product_id = i.product_id
        WHERE p.product_id = $1
        GROUP BY p.product_id, sp.display_name, sp.logo_url, sp.slug, sp.rating_avg,
                 sp.description, sp.payout_wallet, sp.total_sales,
-                u.avatar_url, u.username, u.created_at`,
+                u.avatar_url, u.username, u.created_at, tw.symbol, tw.metadata, tw.chain_id, tw.token_address, tw.decimals`,
       [productId]
     );
 
@@ -197,8 +179,8 @@ export class ProductService {
       const productResult = await client.query(
         `INSERT INTO products
            (seller_id, name, description, category, base_price_usd,
-            metadata, status, product_type)
-         VALUES ($1,$2,$3,$4,$5,$6,'active',$7)
+            token_id, price_in_token, metadata, status, product_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',$9)
          RETURNING *`,
         [
           sellerId,
@@ -206,29 +188,13 @@ export class ProductService {
           data.description || data.name,
           data.category || 'other',
           data.price || data.base_price_usd || 0,
+          data.token_id || null,
+          data.price_in_token || null,
           JSON.stringify(data.metadata || {}),
           data.product_type || 'physical',
         ]
       );
       const product = productResult.rows[0];
-
-      // Multi-coin: save accepted_tokens
-      const acceptedTokens: Array<{ token_id: number; price_in_token: number; is_primary?: boolean }> =
-        data.accepted_tokens || [];
-      if (acceptedTokens.length === 0 && data.token_id && data.price_in_token) {
-        acceptedTokens.push({ token_id: data.token_id, price_in_token: data.price_in_token, is_primary: true });
-      }
-      if (acceptedTokens.length > 0 && (await this.supportsProductAcceptedTokens())) {
-        for (const [idx, at] of acceptedTokens.entries()) {
-          await client.query(
-            `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
-             VALUES ($1,$2,$3,$4)
-             ON CONFLICT (product_id, token_id) DO UPDATE
-             SET price_in_token = EXCLUDED.price_in_token, is_primary = EXCLUDED.is_primary`,
-            [product.product_id, at.token_id, at.price_in_token, at.is_primary ?? idx === 0]
-          );
-        }
-      }
 
       // Save images from metadata.images[] (already uploaded to Cloudinary)
       const imageUrls: string[] = data.metadata?.images || [];
@@ -284,32 +250,21 @@ export class ProductService {
            base_price_usd = COALESCE($3, base_price_usd),
            category       = COALESCE($4, category),
            metadata       = COALESCE($5::jsonb, metadata),
+           token_id       = COALESCE($6, token_id),
+           price_in_token = COALESCE($7, price_in_token),
            updated_at     = NOW()
-       WHERE product_id = $6 RETURNING *`,
+       WHERE product_id = $8 RETURNING *`,
       [
         updates.name || null,
         updates.description || null,
         updates.price || updates.base_price_usd || null,
         updates.category || null,
         updates.metadata ? JSON.stringify(updates.metadata) : null,
+        updates.token_id || null,
+        updates.price_in_token || null,
         productId,
       ]
     );
-
-    if (Array.isArray(updates.accepted_tokens) && updates.accepted_tokens.length > 0) {
-      if (await this.supportsProductAcceptedTokens()) {
-        await query('DELETE FROM product_accepted_tokens WHERE product_id = $1', [productId]);
-        for (const [idx, at] of updates.accepted_tokens.entries()) {
-          await query(
-            `INSERT INTO product_accepted_tokens (product_id, token_id, price_in_token, is_primary)
-             VALUES ($1,$2,$3,$4)`,
-            [productId, at.token_id, at.price_in_token, at.is_primary ?? idx === 0]
-          );
-        }
-      } else {
-        logger.warn('Skipping accepted_tokens update because product_accepted_tokens table is missing', { productId });
-      }
-    }
 
     await deleteCache(`product:${productId}`);
     return result.rows[0];

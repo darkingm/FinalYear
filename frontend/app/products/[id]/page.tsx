@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -8,9 +8,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingCart, Zap, Star, Clock, Package, Shield,
   ChevronRight, ChevronLeft, Heart, Share2, ExternalLink,
-  Store, Calendar, BadgeCheck, TrendingUp, MessageCircle,
-  Coins, CreditCard, Info, Check, AlertCircle,
+  Store, Calendar, TrendingUp, MessageCircle,
+  CreditCard, Check, AlertCircle,
 } from 'lucide-react';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { ProductReviews } from '@/components/product/ProductReviews';
+import { useCartStore } from '@/store/cart-store';
+import { toast } from 'sonner';
+import { apiClient } from '@/lib/api/client';
+import { LivePriceEstimate } from '@/components/ui/live-price';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://103.20.96.79:3001';
 
@@ -44,6 +51,7 @@ export default function ProductDetailPage() {
   const [liked, setLiked] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [coinPrices, setCoinPrices] = useState<Record<string, number>>({});
+  const addItem = useCartStore((state) => state.addItem);
 
   useEffect(() => {
     fetch(`${API}/api/products/${id}`)
@@ -81,27 +89,52 @@ export default function ProductDetailPage() {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  const handleBuyNow = () => {
+  const handleBuyNow = async () => {
     if (!product) return;
-    const params = new URLSearchParams({
-      product_id: String(product.product_id),
-      qty: String(qty),
-      ...(selectedToken ? { token_id: String(selectedToken.token_id) } : {}),
+    try {
+      const { data } = await apiClient.post('/api/orders', {
+        product_id: product.product_id,
+        quantity: qty,
+        payment_method: selectedToken ? 'crypto' : 'paypal'
+      });
+      if (data?.order?.order_id) {
+        router.push(`/checkout/${data.order.order_id}`);
+      }
+    } catch (err) {
+      toast.error('Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại!');
+    }
+  };
+
+  const handleAddToCart = () => {
+    if (!product) return;
+    addItem({
+      product_id: product.product_id,
+      name: product.name,
+      base_price_usd: Number(product.base_price_usd),
+      metadata: { images: [product.primary_image] },
     });
-    router.push(`/checkout?${params.toString()}`);
+    toast.success('Đã thêm sản phẩm vào giỏ hàng');
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-      <div className="w-12 h-12 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header />
+      <main className="flex-1 flex items-center justify-center">
+        <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </main>
+      <Footer />
     </div>
   );
 
   if (!product) return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center text-white gap-4">
-      <AlertCircle className="w-16 h-16 text-red-400" />
-      <h2 className="text-xl font-semibold">Product not found</h2>
-      <Link href="/products" className="text-violet-400 hover:underline">Browse all products →</Link>
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header />
+      <main className="flex-1 flex flex-col items-center justify-center text-foreground gap-4">
+        <AlertCircle className="w-16 h-16 text-red-500" />
+        <h2 className="text-xl font-semibold">Product not found</h2>
+        <Link href="/products" className="text-primary hover:underline">Browse all products →</Link>
+      </main>
+      <Footer />
     </div>
   );
 
@@ -116,288 +149,318 @@ export default function ProductDetailPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
-      {/* Breadcrumb */}
-      <div className="border-b border-white/5 px-4 py-3 text-sm text-white/40">
-        <div className="max-w-7xl mx-auto flex items-center gap-2">
-          <Link href="/" className="hover:text-white/70 transition-colors">Home</Link>
-          <ChevronRight className="w-3 h-3" />
-          <Link href="/products" className="hover:text-white/70 transition-colors">Products</Link>
-          <ChevronRight className="w-3 h-3" />
-          <span className="text-white/70 truncate max-w-[200px]">{product.name}</span>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
-          {/* Image Gallery */}
-          <div className="space-y-3">
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-white/5 border border-white/10 group">
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={currentImg}
-                  src={images[currentImg]?.url || '/placeholder.png'}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                />
-              </AnimatePresence>
-              {images.length > 1 && (
-                <>
-                  <button
-                    onClick={() => setCurrentImg(p => Math.max(0, p - 1))}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setCurrentImg(p => Math.min(images.length - 1, p + 1))}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </>
-              )}
-              {/* Share / Wishlist */}
-              <div className="absolute top-3 right-3 flex gap-2">
-                <button
-                  onClick={handleShare}
-                  className="w-9 h-9 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-all"
-                  title="Copy link"
-                >
-                  {linkCopied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={() => setLiked(v => !v)}
-                  className="w-9 h-9 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-all"
-                >
-                  <Heart className={`w-4 h-4 transition-colors ${liked ? 'fill-red-500 text-red-500' : ''}`} />
-                </button>
-              </div>
-            </div>
-            {/* Thumbnails */}
-            {images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {images.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentImg(idx)}
-                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all
-                      ${currentImg === idx ? 'border-violet-500' : 'border-white/10 hover:border-white/30'}`}
-                  >
-                    <img src={img.url} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <Header />
+      
+      <main className="flex-1">
+        {/* Breadcrumb */}
+        <div className="border-b border-border bg-card/30 px-4 py-3 text-sm text-muted-foreground">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+            <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+            <ChevronRight className="w-3 h-3" />
+            <Link href="/products" className="hover:text-foreground transition-colors">Products</Link>
+            <ChevronRight className="w-3 h-3" />
+            <span className="text-foreground truncate max-w-[200px]">{product.name}</span>
           </div>
+        </div>
 
-          {/* Product Info */}
-          <div className="space-y-6">
-            {/* Category + Status */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {product.category && (
-                <span className="px-3 py-1 rounded-full text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/20">
-                  {product.category}
-                </span>
-              )}
-              {product.stock > 0
-                ? <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/15 text-green-300 border border-green-500/20 flex items-center gap-1"><Check className="w-3 h-3" />In Stock ({product.stock})</span>
-                : <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/20">Out of Stock</span>
-              }
-            </div>
-
-            <h1 className="text-2xl lg:text-3xl font-bold leading-snug">{product.name}</h1>
-
-            {/* Rating */}
-            {parseFloat(product.rating_avg) > 0 && (
-              <div className="flex items-center gap-2">
-                <div className="flex">
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <Star key={s} className={`w-4 h-4 ${s <= Math.round(parseFloat(product.rating_avg)) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
+            {/* Image Gallery */}
+            <div className="space-y-3">
+              <div className="relative aspect-square rounded-2xl overflow-hidden bg-card border border-border group shadow-sm">
+                <AnimatePresence mode="wait">
+                  <motion.img
+                    key={currentImg}
+                    src={images[currentImg]?.url || '/placeholder.png'}
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  />
+                </AnimatePresence>
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentImg(p => Math.max(0, p - 1))}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-background/80 backdrop-blur border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background text-foreground shadow-sm"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentImg(p => Math.min(images.length - 1, p + 1))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-background/80 backdrop-blur border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background text-foreground shadow-sm"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
+                {/* Share / Wishlist */}
+                <div className="absolute top-3 right-3 flex gap-2">
+                  <button
+                    onClick={handleShare}
+                    className="w-9 h-9 rounded-full bg-background/80 text-foreground border border-border backdrop-blur flex items-center justify-center hover:bg-background transition-all shadow-sm"
+                    title="Copy link"
+                  >
+                    {linkCopied ? <Check className="w-4 h-4 text-green-500" /> : <Share2 className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => setLiked(v => !v)}
+                    className="w-9 h-9 rounded-full bg-background/80 text-foreground border border-border backdrop-blur flex items-center justify-center hover:bg-background transition-all shadow-sm"
+                  >
+                    <Heart className={`w-4 h-4 transition-colors ${liked ? 'fill-red-500 text-red-500' : ''}`} />
+                  </button>
+                </div>
+              </div>
+              {/* Thumbnails */}
+              {images.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  {images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentImg(idx)}
+                      className={`flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border-2 transition-all shadow-sm
+                        ${currentImg === idx ? 'border-primary ring-2 ring-primary/20' : 'border-border opacity-70 hover:opacity-100'}`}
+                    >
+                      <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    </button>
                   ))}
                 </div>
-                <span className="text-sm text-white/60">{parseFloat(product.rating_avg).toFixed(1)} ({product.review_count} reviews)</span>
-              </div>
-            )}
-
-            {/* Price Panel */}
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-4">
-              <div className="flex items-end gap-3">
-                <span className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent">
-                  {displayPrice}
-                </span>
-                {usdEquivalent && (
-                  <span className="text-white/50 text-sm mb-1">≈ ${usdEquivalent} USD</span>
-                )}
-              </div>
-              <p className="text-white/40 text-xs">Base price: ${parseFloat(product.base_price_usd).toFixed(2)} USD</p>
-
-              {/* Token Selector */}
-              {product.accepted_tokens?.length > 0 && (
-                <div>
-                  <p className="text-xs text-white/50 mb-2">Pay with:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {product.accepted_tokens.map(token => (
-                      <button
-                        key={token.token_id}
-                        onClick={() => setSelectedToken(token)}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all
-                          ${selectedToken?.token_id === token.token_id
-                            ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                            : 'bg-white/5 border-white/15 text-white/70 hover:border-white/30'}`}
-                      >
-                        <span className="font-bold">{token.symbol}</span>
-                        <span className="text-xs ml-1 opacity-60">({token.chain_name})</span>
-                        {coinPrices[token.symbol] && (
-                          <span className="ml-2 text-xs text-green-400">${coinPrices[token.symbol].toFixed(2)}</span>
-                        )}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setSelectedToken(null)}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all
-                        ${!selectedToken
-                          ? 'bg-blue-500/20 border-blue-500 text-blue-300'
-                          : 'bg-white/5 border-white/15 text-white/70 hover:border-white/30'}`}
-                    >
-                      <CreditCard className="w-4 h-4 inline mr-1" />PayPal
-                    </button>
-                  </div>
-                </div>
               )}
             </div>
 
-            {/* Quantity */}
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-white/60">Quantity</span>
-              <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-1">
-                <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all font-bold">−</button>
-                <span className="w-10 text-center font-semibold">{qty}</span>
-                <button onClick={() => setQty(q => Math.min(product.stock || 99, q + 1))} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all font-bold">+</button>
+            {/* Product Info */}
+            <div className="space-y-6">
+              {/* Category + Status */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {product.category && (
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                    {product.category}
+                  </span>
+                )}
+                {product.stock > 0
+                  ? <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 flex items-center gap-1"><Check className="w-3 h-3" />In Stock ({product.stock})</span>
+                  : <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">Out of Stock</span>
+                }
               </div>
-            </div>
 
-            {/* CTA Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleBuyNow}
-                disabled={product.stock === 0}
-                className="flex-1 py-4 rounded-xl font-bold text-sm bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20"
-              >
-                <Zap className="w-4 h-4" />
-                Buy Now
-              </button>
-              <button className="px-5 py-4 rounded-xl font-bold text-sm bg-white/5 border border-white/15 hover:bg-white/10 transition-all flex items-center justify-center gap-2">
-                <ShoppingCart className="w-4 h-4" />
-                Cart
-              </button>
-            </div>
+              <h1 className="text-3xl lg:text-4xl font-extrabold leading-snug">{product.name}</h1>
 
-            {/* Trust badges */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { icon: Shield, label: 'Escrow Protected' },
-                { icon: Package, label: 'Fast Shipping' },
-                { icon: MessageCircle, label: 'Live Support' },
-              ].map(({ icon: Icon, label }) => (
-                <div key={label} className="flex flex-col items-center gap-1 p-3 rounded-xl bg-white/3 border border-white/8 text-white/50 text-xs text-center">
-                  <Icon className="w-4 h-4" />
-                  {label}
+              {/* Rating */}
+              {parseFloat(product.rating_avg) > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex">
+                    {[1, 2, 3, 4, 5].map(s => (
+                      <Star key={s} className={`w-4 h-4 ${s <= Math.round(parseFloat(product.rating_avg)) ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground/30'}`} />
+                    ))}
+                  </div>
+                  <span className="text-sm text-muted-foreground">{parseFloat(product.rating_avg).toFixed(1)} ({product.review_count} reviews)</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
+              )}
 
-        {/* Seller Info Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-          <div className="lg:col-span-1">
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-4 sticky top-4">
-              <h3 className="font-semibold text-white/80 flex items-center gap-2">
-                <Store className="w-4 h-4 text-violet-400" />
-                Seller Info
-              </h3>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
-                  {product.seller_user_avatar || product.seller_avatar
-                    ? <img src={product.seller_user_avatar || product.seller_avatar} alt="" className="w-full h-full object-cover" />
-                    : <span className="text-lg font-bold text-violet-300">{product.seller_name?.[0]?.toUpperCase()}</span>
-                  }
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">{product.seller_name}</p>
-                  {product.seller_username && <p className="text-xs text-white/40">@{product.seller_username}</p>}
-                  {parseFloat(product.seller_rating) > 0 && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span className="text-xs text-amber-400">{parseFloat(product.seller_rating).toFixed(1)}</span>
-                    </div>
+              {/* Price Panel */}
+              <div className="p-6 rounded-2xl bg-card border border-border shadow-sm space-y-4">
+                <div className="flex items-end gap-3">
+                  <span className="text-4xl font-black bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+                    {displayPrice}
+                  </span>
+                  {selectedToken && (
+                    <LivePriceEstimate 
+                      tokenAmount={parseFloat(selectedToken.price_in_token)} 
+                      tokenSymbol={selectedToken.symbol}
+                      className="text-muted-foreground text-sm mb-1 font-medium"
+                      showIcon={true}
+                    />
                   )}
                 </div>
+                <p className="text-muted-foreground text-sm">Base price: <span className="font-semibold text-foreground">${parseFloat(product.base_price_usd).toFixed(2)} USD</span></p>
+
+                {/* Token Selector */}
+                {product.accepted_tokens?.length > 0 && (
+                  <div className="pt-2">
+                    <p className="text-sm font-medium text-foreground mb-3">Pay with:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {product.accepted_tokens.map(token => (
+                        <button
+                          key={token.token_id}
+                          onClick={() => setSelectedToken(token)}
+                          className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all flex items-center gap-1.5
+                            ${selectedToken?.token_id === token.token_id
+                              ? 'bg-primary/10 border-primary text-primary shadow-sm shadow-primary/10'
+                              : 'bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'}`}
+                        >
+                          <span className="font-bold">{token.symbol}</span>
+                          <span className="text-xs opacity-70">({token.chain_name})</span>
+                          {coinPrices[token.symbol] && (
+                            <span className="ml-1 text-xs text-green-500 font-mono">${coinPrices[token.symbol].toFixed(2)}</span>
+                          )}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setSelectedToken(null)}
+                        className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all flex items-center gap-1.5
+                          ${!selectedToken
+                            ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                            : 'bg-background border-border text-muted-foreground hover:border-blue-500/50 hover:text-foreground'}`}
+                      >
+                        <CreditCard className="w-4 h-4" /> PayPal
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2 text-sm">
-                {product.seller_total_sales > 0 && (
-                  <div className="flex items-center gap-2 text-white/50">
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                    <span>{product.seller_total_sales} sales</span>
-                  </div>
-                )}
-                {product.seller_joined_at && (
-                  <div className="flex items-center gap-2 text-white/50">
-                    <Calendar className="w-4 h-4" />
-                    <span>Joined {new Date(product.seller_joined_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-white/50">
-                  <Clock className="w-4 h-4" />
-                  <span>Listed {new Date(product.listed_at).toLocaleDateString()}</span>
+              {/* Quantity */}
+              <div className="flex items-center gap-6 py-2">
+                <span className="text-sm font-medium text-foreground">Quantity</span>
+                <div className="flex items-center gap-2 bg-card rounded-xl border border-border p-1 shadow-sm">
+                  <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg hover:bg-muted focus:ring-2 ring-primary/20 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all font-bold text-lg">−</button>
+                  <span className="w-12 text-center font-bold">{qty}</span>
+                  <button onClick={() => setQty(q => Math.min(product.stock || 99, q + 1))} className="w-9 h-9 rounded-lg hover:bg-muted focus:ring-2 ring-primary/20 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all font-bold text-lg">+</button>
                 </div>
               </div>
 
-              {product.seller_description && (
-                <p className="text-xs text-white/40 leading-relaxed border-t border-white/8 pt-3">{product.seller_description}</p>
-              )}
-
-              {product.seller_slug && (
-                <Link
-                  href={`/seller/${product.seller_slug}`}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-white/15 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-all"
+              {/* CTA Buttons */}
+              <div className="flex gap-4 pt-2">
+                <button
+                  onClick={handleBuyNow}
+                  disabled={product.stock === 0}
+                  className="flex-[2] py-4 rounded-xl font-bold text-base bg-primary hover:bg-primary/90 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-xl shadow-primary/20 hover:-translate-y-0.5"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View Store
-                </Link>
-              )}
+                  <Zap className="w-5 h-5" />
+                  Buy Now
+                </button>
+                <button 
+                  onClick={handleAddToCart}
+                  className="flex-1 py-4 rounded-xl font-bold text-base bg-card border border-border hover:bg-muted hover:border-primary/50 text-foreground transition-all flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  Cart
+                </button>
+              </div>
+
+              {/* Trust badges */}
+              <div className="grid grid-cols-3 gap-3 pt-6 border-t border-border">
+                {[
+                  { icon: Shield, label: 'Escrow Protected' },
+                  { icon: Package, label: 'Fast Shipping' },
+                  { icon: MessageCircle, label: 'Live Support' },
+                ].map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-muted/50 border border-border/50 text-muted-foreground text-sm font-medium text-center hover:bg-muted transition-colors">
+                    <Icon className="w-5 h-5 text-primary" />
+                    {label}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Description */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="font-semibold mb-3">Description</h3>
-              <p className="text-white/60 leading-relaxed whitespace-pre-line">{product.description}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+            <div className="lg:col-span-1">
+              <div className="p-6 rounded-2xl bg-card border border-border shadow-sm space-y-5 sticky top-24">
+                <h3 className="font-bold text-foreground flex items-center gap-2 text-lg">
+                  <Store className="w-5 h-5 text-primary" />
+                  Seller Profile
+                </h3>
+                
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full overflow-hidden bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                    {product.seller_user_avatar || product.seller_avatar
+                      ? <img src={product.seller_user_avatar || product.seller_avatar} alt="" className="w-full h-full object-cover" />
+                      : <span className="text-xl font-black text-primary">{product.seller_name?.[0]?.toUpperCase()}</span>
+                    }
+                  </div>
+                  <div>
+                    <p className="font-bold text-foreground text-lg cursor-pointer hover:text-primary transition-colors">{product.seller_name}</p>
+                    {product.seller_username && <p className="text-sm text-muted-foreground mb-1">@{product.seller_username}</p>}
+                    {parseFloat(product.seller_rating) > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                        <span className="text-sm font-semibold text-foreground">{parseFloat(product.seller_rating).toFixed(1)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 text-sm py-4 border-y border-border">
+                  {product.seller_total_sales > 0 && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /> Sales</div>
+                      <span className="font-semibold text-foreground">{product.seller_total_sales} total</span>
+                    </div>
+                  )}
+                  {product.seller_joined_at && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Member since</div>
+                      <span className="font-medium text-foreground">{new Date(product.seller_joined_at).getFullYear()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> Listed on</div>
+                    <span className="font-medium text-foreground">{new Date(product.listed_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                {product.seller_description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed italic border-l-2 border-primary/30 pl-3">"{product.seller_description}"</p>
+                )}
+
+                {product.seller_slug && (
+                  <Link
+                    href={`/seller/${product.seller_slug}`}
+                    className="flex justify-center flex-1 w-full"
+                  >
+                    <button className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-muted text-foreground font-semibold hover:bg-primary hover:text-white transition-all">
+                      <ExternalLink className="w-4 h-4" />
+                      Visit Full Store
+                    </button>
+                  </Link>
+                )}
+              </div>
             </div>
 
-            {/* Direct link */}
-            <div className="p-4 rounded-2xl bg-white/3 border border-white/8 flex items-center justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-white/40 mb-1">Product Link</p>
-                <p className="text-sm text-white/60 truncate font-mono text-xs">{typeof window !== 'undefined' ? window.location.href : ''}</p>
+            {/* Description & Reviews */}
+            <div className="lg:col-span-2 space-y-8">
+              <div className="p-8 rounded-2xl bg-card border border-border shadow-sm">
+                <h3 className="text-xl font-bold mb-6 text-foreground flex items-center gap-2">
+                  <Package className="w-5 h-5 text-primary" />
+                  Product Description
+                </h3>
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <p className="text-muted-foreground leading-relaxed whitespace-pre-line text-base">{product.description}</p>
+                </div>
               </div>
-              <button
-                onClick={handleShare}
-                className="flex-shrink-0 px-4 py-2 rounded-lg bg-violet-500/20 border border-violet-500/30 text-violet-300 text-sm hover:bg-violet-500/30 transition-all flex items-center gap-2"
-              >
-                {linkCopied ? <><Check className="w-3.5 h-3.5" />Copied!</> : <><Share2 className="w-3.5 h-3.5" />Copy</>}
-              </button>
+
+              {/* Direct link */}
+              <div className="p-5 rounded-2xl bg-card border border-border flex items-center justify-between gap-4 shadow-sm">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-foreground mb-1">Share this product</p>
+                  <p className="text-sm text-muted-foreground truncate font-mono bg-background p-2 rounded-lg border border-border">{typeof window !== 'undefined' ? window.location.href : ''}</p>
+                </div>
+                <button
+                  onClick={handleShare}
+                  className="flex-shrink-0 px-5 py-3 rounded-xl bg-muted border border-border font-medium text-foreground hover:bg-primary hover:text-white hover:border-primary transition-all flex items-center gap-2 shadow-sm"
+                >
+                  {linkCopied ? <><Check className="w-4 h-4" />Copied!</> : <><Share2 className="w-4 h-4" />Copy Link</>}
+                </button>
+              </div>
+
+              {/* Comments / Reviews Module */}
+              <div className="bg-card border border-border rounded-2xl p-6 shadow-sm overflow-hidden">
+                 <ProductReviews 
+                   productId={product.product_id}
+                   averageRating={parseFloat(product.rating_avg) || 0}
+                   totalReviews={product.review_count || 0}
+                 />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }

@@ -42,6 +42,7 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     const subtotal = priceUsd;
     const shippingFee = 0; // TODO: calculate from shipping method
     const totalAmount = subtotal + shippingFee;
+    const amountToken = product.price_in_token ? Number(product.price_in_token) * quantity : null;
 
 
     const internalOrderId = uuidv4();
@@ -61,12 +62,14 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       `INSERT INTO orders (
         internal_order_id, buyer_id, seller_id, product_id, quantity,
         price_usd, subtotal, shipping_fee, total_amount,
+        token_id, amount_token,
         payment_method, order_number, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'UNPAID')
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'UNPAID')
       RETURNING *`,
       [
         internalOrderId, buyerId, product.seller_id, product_id, quantity,
         priceUsd, subtotal, shippingFee, totalAmount,
+        product.token_id || null, amountToken,
         payment_method || 'crypto', orderNumber,
       ]
     );

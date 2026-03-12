@@ -19,12 +19,24 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
-  logger.error('Error:', {
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-  });
+  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  
+  if (process.env.NODE_ENV === 'production' && statusCode < 500) {
+    logger.warn('Operational Error:', {
+      message: err.message,
+      path: req.path,
+      method: req.method,
+      statusCode,
+    });
+  } else {
+    logger.error('Error:', {
+      message: err.message,
+      stack: err.stack,
+      path: req.path,
+      method: req.method,
+      statusCode,
+    });
+  }
 
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({

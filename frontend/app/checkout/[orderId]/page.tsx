@@ -27,10 +27,9 @@ interface Order {
   product_metadata: { images?: string[]; category?: string; accepted_tokens?: { crypto?: string[]; fiat?: string[] } };
   quantity: number;
   price_usd: number;
-  pricing_mode?: string;
-  product_token_id?: number | null;
-  price_token?: number | null;
-  subtotal_token?: number | null;
+  token_id?: number | null;
+  amount_token?: number | null;
+  total_amount?: number;
   status: string;
   payment_method: string | null;
   buyer_name: string;
@@ -175,7 +174,7 @@ export default function CheckoutPage() {
   };
 
   if (authLoading || loading) return (
-    <div className="min-h-screen bg-[#0c0e14] flex flex-col items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center relative overflow-hidden">
       {/* Background elements */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#f0b90b]/10 blur-[120px] rounded-full mix-blend-screen pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-blue-500/10 blur-[150px] rounded-full mix-blend-screen pointer-events-none" />
@@ -187,7 +186,7 @@ export default function CheckoutPage() {
             <div className="w-6 h-6 bg-[#f0b90b] rounded-full animate-pulse blur-sm" />
           </div>
         </div>
-        <p className="text-gray-400 font-medium tracking-wide">Đang chuẩn bị phiên thanh toán...</p>
+        <p className="text-muted-foreground font-medium tracking-wide">Đang chuẩn bị phiên thanh toán...</p>
       </div>
     </div>
   );
@@ -195,10 +194,10 @@ export default function CheckoutPage() {
   if (!order || Number.isNaN(orderId)) return (
     <>
       <Header />
-      <div className="min-h-screen bg-[#0c0e14] flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-          <p className="text-gray-400 mb-4">Không tìm thấy đơn hàng.</p>
+          <p className="text-muted-foreground mb-4">Không tìm thấy đơn hàng.</p>
           <Link href="/orders"><Button>Về danh sách đơn hàng</Button></Link>
         </div>
       </div>
@@ -210,7 +209,7 @@ export default function CheckoutPage() {
   const quoteTimeLeft = quote ? Math.max(0, Math.floor((quote.expires_at * 1000 - Date.now()) / 1000)) : 0;
 
   return (
-    <div className="min-h-screen bg-[#0c0e14] flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black">
+    <div className="min-h-screen bg-background text-foreground flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black">
       {/* Ambient backgrounds */}
       <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
@@ -223,22 +222,22 @@ export default function CheckoutPage() {
           <div className="flex-1 space-y-6">
             
             {/* Steps & Title */}
-            <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-xl">
+            <div className="bg-card border border-border/50 rounded-3xl p-6 backdrop-blur-xl">
               <div className="flex items-center gap-4 mb-6">
                 <Link href={`/products/${order.product_id}`}>
-                  <button className="p-2.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all hover:-translate-x-1 group">
+                  <button className="p-2.5 rounded-full bg-background/50 text-foreground border border-border text-muted-foreground hover:text-foreground hover:bg-background/80 text-foreground transition-all hover:-translate-x-1 group">
                     <ArrowLeft className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   </button>
                 </Link>
                 <div>
-                  <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Thanh toán an toàn</h1>
-                  <p className="text-gray-500 font-mono text-xs mt-1">Ref: {order.internal_order_id.split('-')[0].toUpperCase()}</p>
+                  <h1 className="text-2xl font-bold   text-foreground">Thanh toán an toàn</h1>
+                  <p className="text-muted-foreground font-mono text-xs mt-1">Ref: {order.internal_order_id.split('-')[0].toUpperCase()}</p>
                 </div>
               </div>
 
               {/* Progress Steps */}
               <div className="flex items-center justify-between relative mt-8">
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-white/5 rounded-full" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-background/50 text-foreground rounded-full" />
                 <div 
                   className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-[#f0b90b] to-[#f0b90b]/50 rounded-full transition-all duration-500"
                   style={{ width: `\${(step - 1) * 50}%` }}
@@ -255,11 +254,11 @@ export default function CheckoutPage() {
                         ? 'bg-[#f0b90b] shadow-[#f0b90b]/30 text-black scale-100' 
                         : step === s.id
                         ? 'bg-[#2a2d36] border-2 border-[#f0b90b] text-[#f0b90b] shadow-[#f0b90b]/20 scale-110'
-                        : 'bg-[#1a1d26] border border-white/10 text-gray-500 scale-100'
+                        : 'bg-[#1a1d26] border border-border text-muted-foreground scale-100'
                     }`}>
                       {step > s.id ? <CheckCircle className="w-5 h-5" /> : s.id}
                     </div>
-                    <span className={`text-[11px] font-medium tracking-wide uppercase \${step >= s.id ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <span className={`text-[11px] font-medium tracking-wide uppercase \${step >= s.id ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {s.name}
                     </span>
                   </div>
@@ -269,36 +268,36 @@ export default function CheckoutPage() {
 
           {/* Order Summary */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-[#1a1d26] border border-white/10 rounded-2xl p-5 mb-4">
-            <h2 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            className="bg-[#1a1d26] border border-border rounded-2xl p-5 mb-4">
+            <h2 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-[#f0b90b]" />
               Tóm tắt đơn hàng
             </h2>
             <div className="flex gap-4">
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-white/5 flex-shrink-0 border border-white/10">
+              <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-background/50 text-foreground flex-shrink-0 border border-border">
                 {order.product_metadata?.images?.[0] ? (
                   <Image src={order.product_metadata.images[0]} alt={order.product_name} fill className="object-cover" unoptimized />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <Package className="w-6 h-6 text-gray-600" />
+                    <Package className="w-6 h-6 text-muted-foreground" />
                   </div>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-white truncate">{order.product_name}</h3>
-                <p className="text-sm text-gray-500 mt-0.5">Số lượng: {order.quantity}</p>
-                <p className="text-sm text-gray-500">Người bán: {order.seller_name}</p>
+                <h3 className="font-semibold text-foreground truncate">{order.product_name}</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">Số lượng: {order.quantity}</p>
+                <p className="text-sm text-muted-foreground">Người bán: {order.seller_name}</p>
               </div>
               <div className="text-right flex-shrink-0">
-                {order.pricing_mode === 'usd' ? (
+                {!order.amount_token ? (
                   <>
-                    <p className="text-xl font-bold text-[#f0b90b]">${Number(order.price_usd).toFixed(2)}</p>
-                    <p className="text-xs text-gray-600">USD</p>
+                    <p className="text-xl font-bold text-[#f0b90b]">${Number(order.total_amount || order.price_usd).toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">USD</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-xl font-bold text-[#f0b90b]">{Number(order.subtotal_token).toFixed(4)}</p>
-                    <p className="text-xs text-gray-600">Crypto Token</p>
+                    <p className="text-xl font-bold text-[#f0b90b]">{Number(order.amount_token).toFixed(4)}</p>
+                    <p className="text-xs text-muted-foreground">Crypto Token</p>
                   </>
                 )}
               </div>
@@ -306,7 +305,7 @@ export default function CheckoutPage() {
             {/* Escrow badge */}
             <div className="mt-4 flex items-center gap-2 px-3 py-2 bg-emerald-500/8 border border-emerald-500/20 rounded-xl">
               <Shield className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 Thanh toán được bảo vệ bởi <span className="text-emerald-400 font-medium">Smart Contract Escrow</span>
               </p>
             </div>
@@ -314,9 +313,9 @@ export default function CheckoutPage() {
 
           {/* Payment Method */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-xl relative overflow-hidden">
+            className="bg-card border border-border/50 rounded-3xl p-6 backdrop-blur-xl relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl" />
-            <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
+            <h2 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-blue-500 rounded-full" />
               Phương thức thanh toán
             </h2>
@@ -326,7 +325,7 @@ export default function CheckoutPage() {
                 className={`relative p-5 rounded-2xl border-2 transition-all text-left overflow-hidden group \${
                   paymentMethod === 'crypto' 
                     ? 'border-[#f0b90b] bg-[#f0b90b]/5 shadow-[0_0_20px_rgba(240,185,11,0.1)]' 
-                    : 'border-white/10 bg-white/5 hover:border-white/20'
+                    : 'border-border bg-background/50 text-foreground hover:border-primary/50 transition-colors'
                 }`}
               >
                 {paymentMethod === 'crypto' && <div className="absolute inset-0 bg-gradient-to-br from-[#f0b90b]/10 to-transparent pointer-events-none" />}
@@ -334,7 +333,7 @@ export default function CheckoutPage() {
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner \${
                     paymentMethod === 'crypto' ? 'bg-[#f0b90b] shadow-[#f0b90b]/50' : 'bg-[#2a2d36]'
                   }`}>
-                    <Wallet className={`w-5 h-5 \${paymentMethod === 'crypto' ? 'text-black' : 'text-gray-400 group-hover:text-white'}`} />
+                    <Wallet className={`w-5 h-5 \${paymentMethod === 'crypto' ? 'text-black' : 'text-muted-foreground group-hover:text-foreground'}`} />
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center \${
                     paymentMethod === 'crypto' ? 'border-[#f0b90b]' : 'border-gray-600'
@@ -342,8 +341,8 @@ export default function CheckoutPage() {
                     {paymentMethod === 'crypto' && <div className="w-2.5 h-2.5 bg-[#f0b90b] rounded-full" />}
                   </div>
                 </div>
-                <h3 className={`text-lg font-bold relative z-10 \${paymentMethod === 'crypto' ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>Crypto (Web3)</h3>
-                <p className="text-xs text-gray-500 mt-1 relative z-10 leading-relaxed">Hỗ trợ các token: <span className={`font-medium \${paymentMethod === 'crypto' ? 'text-gray-300' : ''}`}>{acceptedCrypto.join(', ')}</span></p>
+                <h3 className={`text-lg font-bold relative z-10 \${paymentMethod === 'crypto' ? 'text-foreground' : 'text-foreground group-hover:text-foreground'}`}>Crypto (Web3)</h3>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10 leading-relaxed">Hỗ trợ các token: <span className={`font-medium \${paymentMethod === 'crypto' ? 'text-foreground' : ''}`}>{acceptedCrypto.join(', ')}</span></p>
               </button>
 
               <button
@@ -354,7 +353,7 @@ export default function CheckoutPage() {
                 } \${
                   paymentMethod === 'paypal' 
                     ? 'border-blue-500 bg-blue-500/5 shadow-[0_0_20px_rgba(59,130,246,0.1)]' 
-                    : 'border-white/10 bg-white/5 hover:border-white/20'
+                    : 'border-border bg-background/50 text-foreground hover:border-primary/50 transition-colors'
                 }`}
               >
                 {paymentMethod === 'paypal' && <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent pointer-events-none" />}
@@ -362,7 +361,7 @@ export default function CheckoutPage() {
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner \${
                     paymentMethod === 'paypal' ? 'bg-[#003087] shadow-blue-500/50' : 'bg-[#2a2d36]'
                   }`}>
-                    <CreditCard className={`w-5 h-5 \${paymentMethod === 'paypal' ? 'text-white' : 'text-gray-400 group-hover:text-white'}`} />
+                    <CreditCard className={`w-5 h-5 \${paymentMethod === 'paypal' ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}`} />
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center \${
                     paymentMethod === 'paypal' ? 'border-blue-500' : 'border-gray-600'
@@ -370,8 +369,8 @@ export default function CheckoutPage() {
                     {paymentMethod === 'paypal' && <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />}
                   </div>
                 </div>
-                <h3 className={`text-lg font-bold relative z-10 \${paymentMethod === 'paypal' ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>PayPal</h3>
-                <p className="text-xs text-gray-500 mt-1 relative z-10 leading-relaxed">{acceptPayPal ? 'Thanh toán bằng thẻ tín dụng hoặc số dư PayPal' : 'Sản phẩm này không hỗ trợ thanh toán qua PayPal'}</p>
+                <h3 className={`text-lg font-bold relative z-10 \${paymentMethod === 'paypal' ? 'text-foreground' : 'text-foreground group-hover:text-foreground'}`}>PayPal</h3>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10 leading-relaxed">{acceptPayPal ? 'Thanh toán bằng thẻ tín dụng hoặc số dư PayPal' : 'Sản phẩm này không hỗ trợ thanh toán qua PayPal'}</p>
               </button>
             </div>
           </motion.div>
@@ -380,10 +379,10 @@ export default function CheckoutPage() {
           <AnimatePresence>
             {paymentMethod === 'crypto' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 mb-4 overflow-hidden backdrop-blur-xl relative">
+                className="bg-card border border-border/50 rounded-3xl p-6 mb-4 overflow-hidden backdrop-blur-xl relative">
                 <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-[#f0b90b]/5 rounded-full blur-3xl pointer-events-none" />
                 
-                <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
+                <h2 className="text-base font-bold text-foreground mb-5 flex items-center gap-2">
                   <span className="w-1.5 h-4 bg-[#f0b90b] rounded-full" />
                   Chi tiết thanh toán Crypto
                 </h2>
@@ -397,19 +396,19 @@ export default function CheckoutPage() {
                       className={`relative flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all overflow-hidden group \${
                         selectedToken === token 
                           ? 'border-[#f0b90b] bg-[#f0b90b]/10 shadow-lg shadow-[#f0b90b]/5' 
-                          : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                          : 'border-border bg-background/50 text-foreground hover:border-primary/50 transition-colors hover:bg-background/80 text-foreground'
                       }`}
                     >
                       {selectedToken === token && <div className="absolute inset-x-0 bottom-0 h-1 bg-[#f0b90b]" />}
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center p-1 bg-white/5 backdrop-blur-sm border \${selectedToken===token?'border-[#f0b90b]/30':'border-white/10'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center p-1 bg-background/50 text-foreground backdrop-blur-sm border \${selectedToken===token?'border-[#f0b90b]/30':'border-border'}`}>
                         <Image src={getCoinLogo(token)} alt={token} width={28} height={28} className="object-contain drop-shadow-md group-hover:scale-110 transition-transform" />
                       </div>
                       <div className="text-center">
-                        <span className={`text-sm font-bold block \${selectedToken === token ? 'text-white' : 'text-gray-400 group-hover:text-gray-300'}`}>{token}</span>
+                        <span className={`text-sm font-bold block \${selectedToken === token ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}`}>{token}</span>
                         {coinPrices[token] ? (
-                          <span className={`text-[11px] font-mono \${selectedToken === token ? 'text-[#f0b90b]' : 'text-gray-500'}`}>\${coinPrices[token].toFixed(2)}</span>
+                          <span className={`text-[11px] font-mono \${selectedToken === token ? 'text-[#f0b90b]' : 'text-muted-foreground'}`}>\${coinPrices[token].toFixed(2)}</span>
                         ) : (
-                          <span className="text-[11px] text-gray-600 block h-4"/> 
+                          <span className="text-[11px] text-muted-foreground block h-4"/> 
                         )}
                       </div>
                     </button>
@@ -420,31 +419,31 @@ export default function CheckoutPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   {/* Swap Estimate */}
                   {coinPrices[selectedToken] && (
-                    <div className="relative p-4 bg-gradient-to-br from-[#1a1d26] to-[#12141a] border border-white/5 rounded-2xl overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -translate-y-16 translate-x-16 group-hover:bg-white/10 transition-colors" />
-                      <p className="text-xs text-gray-500 font-medium mb-1 relative z-10">Dự kiến thanh toán (ước tính)</p>
+                    <div className="relative p-4 bg-card shadow-sm border border-border/50 rounded-2xl overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-background/50 text-foreground rounded-full blur-2xl -translate-y-16 translate-x-16 group-hover:bg-background/80 text-foreground transition-colors" />
+                      <p className="text-xs text-muted-foreground font-medium mb-1 relative z-10">Dự kiến thanh toán (ước tính)</p>
                       <div className="flex items-baseline gap-2 relative z-10">
-                        <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300 font-mono tracking-tight">
-                          {order?.pricing_mode !== 'crypto'
-                            ? (Number(order?.price_usd) / coinPrices[selectedToken]).toFixed(5)
-                            : 'Lấy báo giá'}
+                        <p className="text-2xl font-bold   text-foreground font-mono tracking-tight">
+                          {order?.amount_token && order?.token_id
+                            ? (Number(order.amount_token)).toFixed(5)
+                            : (Number(order?.total_amount || order?.price_usd) / coinPrices[selectedToken]).toFixed(5)}
                         </p>
                         <span className="text-sm font-bold text-[#f0b90b]">{selectedToken}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-2 relative z-10">
-                        <RefreshCw className="w-3 h-3 text-gray-500" />
-                        <span className="text-xs text-gray-500">Tỷ giá thời gian thực từ Binance</span>
+                        <RefreshCw className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Tỷ giá thời gian thực từ Binance</span>
                       </div>
                     </div>
                   )}
 
                   {/* Wallet Connection Status */}
-                  <div className="p-4 bg-gradient-to-br from-[#1a1d26] to-[#12141a] border border-white/5 rounded-2xl flex flex-col justify-center">
+                  <div className="p-4 bg-card shadow-sm border border-border/50 rounded-2xl flex flex-col justify-center">
                     {!isConnected ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <Wallet className="w-4 h-4 text-gray-400" />
-                          <p className="text-xs font-medium text-gray-400">Kết nối ví Web3 để thanh toán 1 chạm</p>
+                          <Wallet className="w-4 h-4 text-muted-foreground" />
+                          <p className="text-xs font-medium text-muted-foreground">Kết nối ví Web3 để thanh toán 1 chạm</p>
                         </div>
                         <ConnectButton.Custom>
                           {({ openConnectModal }) => (
@@ -457,16 +456,16 @@ export default function CheckoutPage() {
                     ) : (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-gray-400">Ví hiện tại</p>
+                          <p className="text-xs font-medium text-muted-foreground">Ví hiện tại</p>
                           <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
                             <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
                             <span className="text-[10px] text-emerald-400 font-bold tracking-wider">ĐÃ KẾT NỐI</span>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                        <div className="flex items-center justify-between p-3 bg-background/50 text-foreground rounded-xl border border-border/50">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500" />
-                            <p className="text-sm font-mono text-gray-300">{address?.slice(0, 6)}...{address?.slice(-4)}</p>
+                            <p className="text-sm font-mono text-foreground">{address?.slice(0, 6)}...{address?.slice(-4)}</p>
                           </div>
                           <ConnectButton.Custom>
                             {({ openAccountModal }) => (
@@ -522,25 +521,25 @@ export default function CheckoutPage() {
                     
                     {/* Body */}
                     <div className="p-5 space-y-5">
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                        <p className="text-gray-400 font-medium">Cần thanh toán</p>
+                      <div className="flex items-center justify-between p-4 bg-background/50 text-foreground rounded-xl border border-border/50">
+                        <p className="text-muted-foreground font-medium">Cần thanh toán</p>
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-white font-mono tracking-tighter">{quote.amount_token.toFixed(6)}</p>
+                          <p className="text-2xl font-bold text-foreground font-mono tracking-tighter">{quote.amount_token.toFixed(6)}</p>
                           <p className="text-sm text-[#f0b90b] font-bold">{selectedToken}</p>
                         </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="p-3 bg-white/5 border border-white/5 rounded-xl">
-                          <p className="text-gray-500 text-xs mb-1">Mạng lưới (Chain)</p>
-                          <p className="font-bold text-white flex items-center gap-1.5">
+                        <div className="p-3 bg-background/50 text-foreground border border-border/50 rounded-xl">
+                          <p className="text-muted-foreground text-xs mb-1">Mạng lưới (Chain)</p>
+                          <p className="font-bold text-foreground flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full bg-blue-400" />
                             {CHAIN_IDS[quote.chain_id] || `Chain \${quote.chain_id}`}
                           </p>
                         </div>
-                        <div className="p-3 bg-white/5 border border-white/5 rounded-xl">
-                          <p className="text-gray-500 text-xs mb-1">Ví người nhận an toàn</p>
-                          <p className="font-mono font-medium text-gray-300 text-xs break-all leading-tight">{quote.escrow_contract}</p>
+                        <div className="p-3 bg-background/50 text-foreground border border-border/50 rounded-xl">
+                          <p className="text-muted-foreground text-xs mb-1">Ví người nhận an toàn</p>
+                          <p className="font-mono font-medium text-foreground text-xs break-all leading-tight">{quote.escrow_contract}</p>
                         </div>
                       </div>
 
@@ -561,16 +560,16 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="relative flex items-center py-2">
-                        <div className="flex-grow border-t border-white/10" />
-                        <span className="flex-shrink-0 mx-4 text-xs text-gray-500 uppercase tracking-wider">Gửi Tx Hash Thủ công</span>
-                        <div className="flex-grow border-t border-white/10" />
+                        <div className="flex-grow border-t border-border" />
+                        <span className="flex-shrink-0 mx-4 text-xs text-muted-foreground uppercase tracking-wider">Gửi Tx Hash Thủ công</span>
+                        <div className="flex-grow border-t border-border" />
                       </div>
 
                       <div className="flex gap-2">
                         <input type="text" placeholder="Nhập Hash Giao Dịch (0x...)" value={txHash} onChange={e => setTxHash(e.target.value)}
-                          className="flex-1 px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#f0b90b]/50 focus:bg-white/5 font-mono transition-colors" />
+                          className="flex-1 px-4 py-3 bg-white/[0.03] border border-border rounded-xl text-sm text-foreground placeholder-gray-600 focus:outline-none focus:border-[#f0b90b]/50 focus:bg-background/50 text-foreground font-mono transition-colors" />
                         <button onClick={handleSubmitTxHash} disabled={submitLoading || !txHash}
-                          className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 hover:border-white/30">
+                          className="px-6 py-3 bg-background/80 text-foreground hover:bg-white/20 text-foreground font-medium rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-border hover:border-white/30">
                           Xác nhận
                         </button>
                       </div>
@@ -584,23 +583,23 @@ export default function CheckoutPage() {
           {/* PayPal */}
           {paymentMethod === 'paypal' && acceptPayPal && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              className="bg-white/[0.02] border border-[#003087]/30 rounded-3xl p-6 mb-4 backdrop-blur-xl relative overflow-hidden">
+              className="bg-card border border-[#003087]/30 rounded-3xl p-6 mb-4 backdrop-blur-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-3xl rounded-full" />
               <div className="text-center mb-6 relative z-10">
                 <div className="w-16 h-16 bg-[#003087]/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#003087]/40 shadow-lg shadow-[#003087]/20 text-[#0070ba]">
                   <CreditCard className="w-8 h-8" />
                 </div>
-                <h3 className="text-lg font-bold text-white">Thanh toán bằng PayPal</h3>
-                <p className="text-gray-400 text-sm mt-1">Đảm bảo an toàn, nhanh chóng và hỗ trợ giải quyết tranh chấp</p>
+                <h3 className="text-lg font-bold text-foreground">Thanh toán bằng PayPal</h3>
+                <p className="text-muted-foreground text-sm mt-1">Đảm bảo an toàn, nhanh chóng và hỗ trợ giải quyết tranh chấp</p>
               </div>
 
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 relative z-10">
+              <div className="bg-background/50 text-foreground border border-border rounded-2xl p-4 mb-6 relative z-10">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-400 text-sm">Tổng cộng</span>
-                  <span className="text-xl font-bold text-white font-mono">\${Number(order.price_usd).toFixed(2)}</span>
+                  <span className="text-muted-foreground text-sm">Tổng cộng</span>
+                  <span className="text-xl font-bold text-foreground font-mono">\${Number(order.price_usd).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-500">Phí giao dịch</span>
+                  <span className="text-muted-foreground">Phí giao dịch</span>
                   <span className="text-emerald-400">Miễn phí</span>
                 </div>
               </div>
@@ -613,9 +612,9 @@ export default function CheckoutPage() {
                     if (url) window.location.href = url;
                   } catch (e: any) { toast.error(e.response?.data?.message || 'Tạo đơn PayPal thất bại'); }
                 }}
-                className="w-full relative overflow-hidden group py-4 bg-gradient-to-r from-[#003087] to-[#0070ba] hover:from-[#002060] hover:to-[#005090] text-white font-bold rounded-2xl text-base transition-all shadow-lg shadow-[#0070ba]/20"
+                className="w-full relative overflow-hidden group py-4 bg-gradient-to-r from-[#003087] to-[#0070ba] hover:from-[#002060] hover:to-[#005090] text-foreground font-bold rounded-2xl text-base transition-all shadow-lg shadow-[#0070ba]/20"
               >
-                <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                <div className="absolute inset-0 bg-background/80 text-foreground translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
                 <span className="relative z-10 block text-center">Đến cổng thanh toán PayPal &rarr;</span>
               </button>
             </motion.div>
@@ -626,13 +625,13 @@ export default function CheckoutPage() {
           {/* Right Column: Order Summary floating card */}
           <div className="w-full lg:w-[360px] flex-shrink-0">
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-              className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-xl sticky top-24">
-              <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              className="bg-card border border-border/50 rounded-3xl p-6 backdrop-blur-xl sticky top-24">
+              <h2 className="text-lg font-bold text-foreground mb-6 flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-emerald-400" />
                 Chi tiết hóa đơn
               </h2>
               
-              <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-white/5 border border-white/10 mb-6 group">
+              <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-background/50 text-foreground border border-border mb-6 group">
                 {order.product_metadata?.images?.[0] ? (
                   <Image src={order.product_metadata.images[0]} alt={order.product_name} fill className="object-cover group-hover:scale-105 transition-transform duration-700" unoptimized />
                 ) : (
@@ -642,24 +641,24 @@ export default function CheckoutPage() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
                 <div className="absolute bottom-4 left-4 right-4">
-                  <h3 className="font-bold text-white text-lg leading-tight line-clamp-2 drop-shadow-md">{order.product_name}</h3>
-                  <p className="text-sm text-gray-300 mt-1 line-clamp-1">Trợ lý / Người bán: {order.seller_name}</p>
+                  <h3 className="font-bold text-foreground text-lg leading-tight line-clamp-2 drop-shadow-md">{order.product_name}</h3>
+                  <p className="text-sm text-foreground mt-1 line-clamp-1">Trợ lý / Người bán: {order.seller_name}</p>
                 </div>
               </div>
 
               <div className="space-y-4 mb-6">
-                <div className="flex justify-between items-center pb-4 border-b border-white/5">
-                  <span className="text-gray-400 text-sm">Số lượng</span>
-                  <span className="text-white font-medium bg-white/10 px-3 py-1 rounded-full text-sm">x{order.quantity}</span>
+                <div className="flex justify-between items-center pb-4 border-b border-border/50">
+                  <span className="text-muted-foreground text-sm">Số lượng</span>
+                  <span className="text-foreground font-medium bg-background/80 text-foreground px-3 py-1 rounded-full text-sm">x{order.quantity}</span>
                 </div>
-                <div className="flex justify-between items-center pb-4 border-b border-white/5">
-                  <span className="text-gray-400 text-sm">Tạm tính USD</span>
-                  <span className="text-white font-mono font-medium">\${Number(order.price_usd).toFixed(2)}</span>
+                <div className="flex justify-between items-center pb-4 border-b border-border/50">
+                  <span className="text-muted-foreground text-sm">Tạm tính USD</span>
+                  <span className="text-foreground font-mono font-medium">\${Number(order.price_usd).toFixed(2)}</span>
                 </div>
-                {order.pricing_mode !== 'usd' && (
-                  <div className="flex justify-between items-center pb-4 border-b border-white/5">
-                    <span className="text-[#f0b90b]/80 text-sm">Báo giá Crypto</span>
-                    <span className="text-[#f0b90b] font-mono font-bold">{Number(order.subtotal_token).toFixed(4)} Token</span>
+                {order.amount_token && (
+                  <div className="flex justify-between items-center pb-4 border-b border-border/50">
+                    <span className="text-[#f0b90b]/80 text-sm">Token</span>
+                    <span className="text-[#f0b90b] font-mono font-bold">{Number(order.amount_token).toFixed(4)} Token</span>
                   </div>
                 )}
               </div>
@@ -676,9 +675,9 @@ export default function CheckoutPage() {
               </div>
 
               {/* Actions */}
-              <div className="mt-8 pt-6 border-t border-white/10 flex flex-col gap-3">
+              <div className="mt-8 pt-6 border-t border-border flex flex-col gap-3">
                 <Link href={`/orders/${order.order_id}`} className="w-full">
-                  <button className="w-full py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-all shadow-sm">
+                  <button className="w-full py-3.5 bg-background/50 text-foreground border border-border hover:bg-background/80 text-foreground text-foreground rounded-xl text-sm font-bold transition-all shadow-sm">
                     Theo dõi đơn hàng
                   </button>
                 </Link>
