@@ -19,36 +19,44 @@ const paypalOptions = {
   intent: 'capture',
 };
 
-/** Only mount Wagmi/RainbowKit on client after mount to avoid "WalletConnect Core is already initialized" (multiple inits from SSR + client + Strict Mode). */
+// Singleton QueryClient — avoids re-creation on re-renders/hot reload
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 30_000,        // 30s — reduce redundant API calls
+      gcTime: 10 * 60 * 1000,  // 10min cache
+    },
+  },
+});
+
+/**
+ * Wallet providers mount only on client to avoid SSR hydration mismatch
+ * and "WalletConnect Core is already initialized" errors.
+ * IMPORTANT: Children are always rendered — we don't block on mount.
+ * Before mount: WagmiProvider/RainbowKit simply not present (wallet features
+ * show "Connect" state). After mount: full Web3 functionality available.
+ */
 function ClientWalletProviders({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const queryClient = useMemo(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 5000, gcTime: 10 * 60 * 1000 },
-        },
-      }),
-    []
-  );
+  const wagmiConfig = useMemo(() => getWagmiConfig(), []);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
+  // Before client mount: render children WITHOUT wallet context
+  // (wallet-dependent components should gracefully handle missing context)
   if (!mounted) {
     return (
       <PayPalScriptProvider options={paypalOptions} deferLoading={true}>
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="animate-pulse text-muted-foreground">Loading…</div>
-        </div>
+        {children}
         <Toaster position="top-right" richColors closeButton />
       </PayPalScriptProvider>
     );
   }
 
   return (
-    <WagmiProvider config={getWagmiConfig()}>
+    <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider modalSize="compact" showRecentTransactions={false}>
           <PayPalScriptProvider options={paypalOptions} deferLoading={true}>

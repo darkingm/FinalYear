@@ -67,6 +67,8 @@ export function Header() {
 
   useEffect(() => {
     const fetchTickers = async () => {
+      // Don't fetch when tab is hidden — saves API calls & battery
+      if (document.hidden) return;
       try {
         const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
         if (!res.ok) return;
@@ -86,9 +88,16 @@ export function Header() {
       } catch { /* silently ignore — ticker is cosmetic */ }
     };
     fetchTickers();
-    const interval = setInterval(fetchTickers, 30000); // 30s — reduce API calls
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchTickers, 60000); // 60s — reduce API calls
+    // Resume fetch when tab becomes visible again
+    const onVisible = () => { if (!document.hidden) fetchTickers(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
+
 
   const handleLogout = () => {
     disconnect();
