@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
 import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import { I18nextProvider } from 'react-i18next';
@@ -25,36 +24,22 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 30_000,        // 30s — reduce redundant API calls
-      gcTime: 10 * 60 * 1000,  // 10min cache
+      staleTime: 30_000,
+      gcTime: 10 * 60 * 1000,
     },
   },
 });
 
+// Module-level singleton — same instance every render
+const wagmiConfig = getWagmiConfig();
+
 /**
- * Wallet providers mount only on client to avoid SSR hydration mismatch
- * and "WalletConnect Core is already initialized" errors.
- * IMPORTANT: Children are always rendered — we don't block on mount.
- * Before mount: WagmiProvider/RainbowKit simply not present (wallet features
- * show "Connect" state). After mount: full Web3 functionality available.
+ * WalletProviders — always renders WagmiProvider (wagmi v2 + ssr: true is SSR-safe).
+ * Previously had a `mounted` guard that caused WagmiProviderNotFoundError during
+ * Next.js static prerendering. Wagmi v2 with ssr: true handles server rendering
+ * gracefully — hooks return empty/undefined defaults until client hydrates.
  */
-function ClientWalletProviders({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  const wagmiConfig = useMemo(() => getWagmiConfig(), []);
-
-  useEffect(() => { setMounted(true); }, []);
-
-  // Before client mount: render children WITHOUT wallet context
-  // (wallet-dependent components should gracefully handle missing context)
-  if (!mounted) {
-    return (
-      <PayPalScriptProvider options={paypalOptions} deferLoading={true}>
-        {children}
-        <Toaster position="top-right" richColors closeButton />
-      </PayPalScriptProvider>
-    );
-  }
-
+function WalletProviders({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
@@ -74,7 +59,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
         <I18nextProvider i18n={i18n}>
-          <ClientWalletProviders>{children}</ClientWalletProviders>
+          <WalletProviders>{children}</WalletProviders>
         </I18nextProvider>
       </ThemeProvider>
     </SessionProvider>
