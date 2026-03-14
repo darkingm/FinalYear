@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { ProductReviews } from '@/components/product/ProductReviews';
+import { ProductReviewSection } from '@/components/product/ProductReviewSection';
+import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
@@ -447,14 +448,15 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              {/* Comments / Reviews Module */}
-              <div className="bg-card border border-border rounded-2xl p-6 shadow-sm overflow-hidden">
-                 <ProductReviews 
-                   productId={product.product_id}
-                   averageRating={parseFloat(product.rating_avg) || 0}
-                   totalReviews={product.review_count || 0}
-                 />
-              </div>
+              {/* NFT Ownership */}
+              <NFTOwnershipCard
+                productId={product.product_id}
+                productName={product.name}
+                variant="compact"
+              />
+
+              {/* Reviews Section — full featured */}
+              <ProductReviewSection productId={product.product_id} />
             </div>
           </div>
         </div>

@@ -16,6 +16,8 @@ import adminRoutes from './modules/admin/admin.routes';
 import p2pRoutes from './modules/p2p/p2p.routes';
 import walletsRoutes from './modules/wallets/wallets.routes';
 import { nftRouter } from './modules/nft/nft.routes';
+import { reviewsRouter } from './modules/reviews/reviews.routes';
+import { sellerRouter } from './modules/seller/seller.routes';
 
 const app = express();
 
@@ -148,6 +150,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/p2p', p2pRoutes);
 app.use('/api/wallets', walletsRoutes);
 app.use('/api/nft', nftRouter);
+app.use('/api/reviews', reviewsRouter);
+app.use('/api/seller', sellerRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });

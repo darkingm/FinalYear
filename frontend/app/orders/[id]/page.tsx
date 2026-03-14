@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Package, ArrowLeft, CheckCircle, XCircle, Loader2, Truck, Check, AlertTriangle } from 'lucide-react';
+import { Package, ArrowLeft, CheckCircle, XCircle, Loader2, Truck, Check, AlertTriangle, Star } from 'lucide-react';
 import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/order/OrderStepper';
+import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 
 interface Order {
   order_id: number;
@@ -187,7 +188,7 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0c0e14] flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black text-gray-300">
+    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black text-foreground">
       {/* Ambient Backgrounds */}
       <div className="fixed top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
@@ -386,6 +387,32 @@ export default function OrderDetailPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* NFT Ownership for this product */}
+          <NFTOwnershipCard
+            productId={order.product_id}
+            productName={order.product_name}
+            variant="compact"
+            className="mt-6"
+          />
+
+          {/* Review CTA for completed buyer orders */}
+          {isBuyer && order.status === 'COMPLETED' && (
+            <Link href={`/products/${order.product_id}#reviews`}>
+              <div className="mt-4 p-5 bg-gradient-to-r from-[#f0b90b]/10 to-transparent border border-[#f0b90b]/20 rounded-2xl flex items-center justify-between group hover:border-[#f0b90b]/40 transition-all cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#f0b90b]/20 flex items-center justify-center flex-shrink-0">
+                    <Star className="w-5 h-5 text-[#f0b90b]" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-foreground text-sm">Đánh giá sản phẩm này</p>
+                    <p className="text-xs text-muted-foreground">Chia sẻ trải nghiệm · Nhận +3 Credit Score nếu đánh giá 5★</p>
+                  </div>
+                </div>
+                <ArrowLeft className="w-5 h-5 text-[#f0b90b] rotate-180 group-hover:translate-x-1 transition-transform flex-shrink-0" />
+              </div>
+            </Link>
           )}
         </div>
       </main>

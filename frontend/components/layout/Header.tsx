@@ -9,7 +9,7 @@ import { useDisconnect } from 'wagmi';
 import {
   Menu, X, ShoppingBag, Wallet, Package,
   LogOut, User, Shield, Heart, Search,
-  TrendingUp, Bell, ChevronDown, Zap, Clock
+  TrendingUp, Bell, ChevronDown, Zap, Clock, BarChart3
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -270,6 +270,9 @@ export function Header() {
                         { href: '/profile', icon: User, label: t('nav.profile') },
                         { href: '/orders', icon: Package, label: t('nav.orders') },
                         { href: '/wallet', icon: Wallet, label: t('nav.wallet') },
+                        { href: '/profile/credit', icon: Shield, label: 'Credit Score' },
+                        { href: '/profile/nfts', icon: Zap, label: 'NFT Portfolio' },
+                        { href: '/seller/dashboard', icon: BarChart3, label: 'Seller Dashboard' },
                         ...(isAdmin ? [{ href: '/admin', icon: Shield, label: t('nav.admin') }] : []),
                       ].map((item) => (
                         <Link key={item.href} href={item.href} onClick={() => setProfileOpen(false)}>
