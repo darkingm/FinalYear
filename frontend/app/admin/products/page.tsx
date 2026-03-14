@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle, Zap } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
-import { apiClient } from '@/lib/api-client';
+import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
