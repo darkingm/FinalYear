@@ -166,112 +166,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Copy docker-compose and ONLY the 2 consolidated SQL files
-      - name: Copy compose & SQL files to VPS
+      # Copy deploy script + SQL migration files to VPS
+      - name: Copy files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "init_database.sql/schema.sql,init_database.sql/seed.sql,init_database.sql/migrate.sh,scripts/vps-debug.sh,payment_init_database.sql/,docker/docker-compose.prod.yml"
+          source: "scripts/deploy_manual.sh,init_database.sql/schema.sql,init_database.sql/seed.sql,init_database.sql/migrate.sh"
           target: "/root/services/FinalYear/"
           overwrite: true
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           GIT_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          envs: HUB_USER,GIT_SHA
-          command_timeout: 10m
+          envs: GIT_SHA
+          command_timeout: 12m
           script: |
             set -e
-            COMPOSE_DIR="/root/services/FinalYear/docker"
-            COMPOSE_FILE="$COMPOSE_DIR/docker-compose.prod.yml"
-            SQL_DIR="/root/services/FinalYear/init_database.sql"
-
             echo "======================================"
             echo "  DEPLOYING commit: ${GIT_SHA:0:7}"
-            echo "  DOCKERHUB: $HUB_USER"
             echo "======================================"
 
-            cd "$COMPOSE_DIR"
-
-            # ── Step 1: Pull latest images
-            echo "[1/6] Pulling latest Docker images..."
-            docker pull "$HUB_USER/marketplace-main-api:latest"
-            docker pull "$HUB_USER/marketplace-payment-api:latest"
-            docker pull "$HUB_USER/marketplace-frontend:latest"
-            echo "✓ Images pulled"
-
-            # ── Step 2: Ensure infra containers are running
-            echo "[2/6] Ensuring infrastructure is healthy..."
-            docker compose -f "$COMPOSE_FILE" up -d --no-recreate postgres postgres-payment redis rabbitmq
-
-            # ── Step 3: Wait for databases
-            echo "[3/6] Waiting for databases..."
-            for i in $(seq 1 30); do
-              MAIN_OK=$(docker compose -f "$COMPOSE_FILE" ps postgres 2>&1 | grep -c "healthy" || true)
-              PAY_OK=$(docker compose -f "$COMPOSE_FILE" ps postgres-payment 2>&1 | grep -c "healthy" || true)
-              if [ "$MAIN_OK" -gt 0 ] && [ "$PAY_OK" -gt 0 ]; then
-                echo "✓ Both databases healthy (attempt $i)"
-                break
-              fi
-              echo "  Waiting... ($i/30)"
-              sleep 3
-            done
-
-            # ── Step 4: AUTO DB MIGRATION — dùng migrate.sh (idempotent, safe)
-            echo "[4/6] Running DB migration..."
-            chmod +x /root/services/FinalYear/init_database.sql/migrate.sh
-            bash /root/services/FinalYear/init_database.sql/migrate.sh && echo "✓ DB migration OK" || echo "⚠ Migration warnings (check if tables already exist)"
-
-            # ── Step 5: Restart app containers with new images
-            echo "[5/6] Restarting app containers..."
-            docker compose -f "$COMPOSE_FILE" up -d \
-              --force-recreate \
-              --no-deps \
-              --remove-orphans \
-              main-api payment-api frontend
-            echo "✓ Containers restarted"
-
-            # ── Step 6: Health checks
-            echo "[6/6] Running health checks..."
-            sleep 20
-
-            if curl -sf http://127.0.0.1:3001/api/health > /dev/null; then
-              echo "✓ main-api: HEALTHY"
+            # ── Step 1: DB Migration (idempotent, safe to re-run)
+            echo "[1/3] Running DB migration..."
+            MIGRATE=/root/services/FinalYear/init_database.sql/migrate.sh
+            if [ -f "$MIGRATE" ]; then
+              chmod +x "$MIGRATE"
+              bash "$MIGRATE" && echo "✓ DB migration OK" || echo "⚠ Migration warning (tables may already exist)"
             else
-              echo "⚠ main-api health check failed, checking logs..."
-              docker compose -f "$COMPOSE_FILE" logs --tail=30 main-api
-              # Don't exit — sometimes health endpoint starts slower
+              echo "⚠ migrate.sh not found, skipping"
             fi
 
-            if curl -sf http://127.0.0.1:3002/api/health > /dev/null; then
-              echo "✓ payment-api: HEALTHY"
-            else
-              echo "⚠ payment-api health check failed (non-fatal)"
-            fi
+            # ── Step 2: Pull new images in parallel (built on GitHub Actions, NOT on VPS)
+            echo "[2/3] Pulling new Docker images (parallel)..."
+            docker pull kiendzpro/marketplace-main-api:latest &
+            PULL_MAIN=$!
+            docker pull kiendzpro/marketplace-payment-api:latest &
+            PULL_PAY=$!
+            docker pull kiendzpro/marketplace-frontend:latest &
+            PULL_FE=$!
+            wait $PULL_MAIN && echo "✓ main-api pulled" || echo "✗ main-api pull failed"
+            wait $PULL_PAY && echo "✓ payment-api pulled" || echo "✗ payment-api pull failed"
+            wait $PULL_FE && echo "✓ frontend pulled" || echo "✗ frontend pull failed"
 
-            FRONTEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000 || echo "000")
-            if [ "$FRONTEND_CODE" = "200" ] || [ "$FRONTEND_CODE" = "307" ]; then
-              echo "✓ frontend: HTTP $FRONTEND_CODE"
-            else
-              echo "✗ frontend: HTTP $FRONTEND_CODE"
-              docker compose -f "$COMPOSE_FILE" logs --tail=30 frontend
-              exit 1
-            fi
+            # ── Step 3: Restart containers using deploy script
+            echo "[3/3] Restarting containers..."
+            DEPLOY=/root/services/FinalYear/scripts/deploy_manual.sh
+            chmod +x "$DEPLOY"
+            # Run WITHOUT 'pull' arg since we already pulled above
+            bash "$DEPLOY"
 
-            # ── Verify products API works post-deploy
-            PRODUCT_COUNT=$(curl -s http://127.0.0.1:3001/api/products?limit=1 | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pagination',{}).get('total',0))" 2>/dev/null || echo "?")
-            echo "✓ Products API: $PRODUCT_COUNT products available"
-
+            # ── Cleanup old images (keep disk usage low on small VPS)
+            echo "Cleaning up old images..."
             docker image prune -f --filter "until=24h" || true
 
             echo ""
@@ -280,16 +234,12 @@ jobs:
             echo "  Commit: ${GIT_SHA:0:7}"
             echo "  Site: https://kienai.id.vn"
             echo "======================================"
-            docker compose -f "$COMPOSE_FILE" ps
 
       - name: Notify deployment status
         if: always()
         run: |
-          STATUS="${{ job.status }}"
-          SHA_SHORT="${{ github.sha }}"
-          SHA_SHORT="${SHA_SHORT:0:7}"
-          if [ "$STATUS" = "success" ]; then
-            echo "✅ Deploy OK — commit $SHA_SHORT is live on kienai.id.vn"
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Deploy OK — commit ${GITHUB_SHA:0:7} is live on kienai.id.vn"
           else
-            echo "❌ Deploy FAILED — commit $SHA_SHORT — check logs above"
+            echo "❌ Deploy FAILED — commit ${GITHUB_SHA:0:7} — check logs above"
           fi
