@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -19,8 +21,6 @@ import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
 import { LivePriceEstimate } from '@/components/ui/live-price';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://103.20.96.79:3001';
 
 interface AcceptedToken {
   token_id: number; symbol: string; name: string;
@@ -55,16 +55,17 @@ export default function ProductDetailPage() {
   const addItem = useCartStore((state) => state.addItem);
 
   useEffect(() => {
-    fetch(`${API}/api/products/${id}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
+    apiClient.get(`/api/products/${id}`)
+      .then(res => {
+        const d = res.data;
+        if (d.success && d.data) {
           setProduct(d.data);
           if (d.data.accepted_tokens?.length > 0) {
             setSelectedToken(d.data.accepted_tokens.find((t: AcceptedToken) => t.is_primary) || d.data.accepted_tokens[0]);
           }
         }
       })
+      .catch(() => toast.error('Không tìm thấy sản phẩm'))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -108,13 +109,18 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = () => {
     if (!product) return;
+    const primaryToken = selectedToken || product.accepted_tokens?.[0];
     addItem({
       product_id: product.product_id,
       name: product.name,
       base_price_usd: Number(product.base_price_usd),
-      metadata: { images: [product.primary_image] },
+      price_in_token: primaryToken ? Number(primaryToken.price_in_token) : undefined,
+      token_symbol: primaryToken?.symbol,
+      image_url: product.primary_image || product.images?.[0]?.url,
+      seller_id: undefined, // populated via accepted_tokens seller context
+      metadata: { images: product.images?.map(i => i.url) || [product.primary_image] },
     });
-    toast.success('Đã thêm sản phẩm vào giỏ hàng');
+    toast.success('Đã thêm vào giỏ hàng 🛒');
   };
 
   if (loading) return (

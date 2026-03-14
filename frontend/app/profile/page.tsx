@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
@@ -9,6 +11,8 @@ import { toast } from 'sonner';
 import { User, Mail, Wallet, Shield, Phone, MapPin, Camera, CreditCard, Save, X, Calendar, Activity, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
 
 interface UserProfile {
   user_id: number;
@@ -112,14 +116,16 @@ export default function ProfilePage() {
   if (isLoading || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
+        <Header />
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#f0b90b]"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground py-10 px-4 sm:px-6 lg:px-8">
-      <div className="container mx-auto max-w-5xl">
+    <div className="min-h-screen bg-background text-foreground">
+      <Header />
+      <div className="container mx-auto max-w-5xl py-10 px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -367,6 +373,7 @@ export default function ProfilePage() {
           </div>
         </motion.div>
       </div>
+      <Footer />
     </div>
   );
 }

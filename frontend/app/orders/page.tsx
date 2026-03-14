@@ -19,6 +19,7 @@ import Image from 'next/image';
 
 interface Order {
   order_id: number;
+  internal_order_id?: string;
   order_number?: string;
   product_name: string;
   product_metadata?: { images?: string[]; primaryImage?: string };
@@ -78,7 +79,7 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.04 }}
     >
-      <Link href={`/orders/${order.order_id}`}>
+      <Link href={`/orders/${order.internal_order_id || order.order_id}`}>
         <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-5 hover:border-white/20 hover:bg-white/[0.04] transition-all duration-300 cursor-pointer group backdrop-blur-md relative overflow-hidden">
           {/* Subtle hover glow */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/0 to-blue-500/0 group-hover:via-blue-500/5 transition-all duration-700 pointer-events-none" />
