@@ -205,7 +205,7 @@ export default function OrdersPage() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-[#0c0e14] flex flex-col relative overflow-hidden selection:bg-blue-500 selection:text-white pb-20">
+    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden selection:bg-blue-500 selection:text-white pb-20">
       {/* Ambient Backgrounds */}
       <div className="fixed top-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />

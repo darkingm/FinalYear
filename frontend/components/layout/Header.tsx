@@ -106,11 +106,11 @@ export function Header() {
   };
 
   const navLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/products', label: 'Products' },
-    { href: '/trading/BTCUSDT', label: 'Trading', icon: TrendingUp },
-    { href: '/orders', label: 'Orders', icon: ShoppingBag, hasBadge: true },
-    { href: '/wallet', label: 'Wallet' },
+    { href: '/', label: t('nav.home') },
+    { href: '/products', label: t('nav.products') },
+    { href: '/trading/BTCUSDT', label: t('nav.trading'), icon: TrendingUp },
+    { href: '/orders', label: t('nav.orders'), icon: ShoppingBag, hasBadge: true },
+    { href: '/wallet', label: t('nav.wallet') },
   ];
 
   const isActive = (href: string) =>
@@ -267,10 +267,10 @@ export function Header() {
                       </div>
 
                       {[
-                        { href: '/profile', icon: User, label: 'Profile' },
-                        { href: '/orders', icon: Package, label: 'Orders' },
-                        { href: '/wallet', icon: Wallet, label: 'Wallet' },
-                        ...(isAdmin ? [{ href: '/admin', icon: Shield, label: 'Admin Panel' }] : []),
+                        { href: '/profile', icon: User, label: t('nav.profile') },
+                        { href: '/orders', icon: Package, label: t('nav.orders') },
+                        { href: '/wallet', icon: Wallet, label: t('nav.wallet') },
+                        ...(isAdmin ? [{ href: '/admin', icon: Shield, label: t('nav.admin') }] : []),
                       ].map((item) => (
                         <Link key={item.href} href={item.href} onClick={() => setProfileOpen(false)}>
                           <div className="px-4 py-2.5 hover:bg-accent/10 flex items-center gap-2.5 cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -297,13 +297,13 @@ export function Header() {
                   <Link href="/login">
                     <Button variant="ghost" size="sm"
                       className="text-muted-foreground hover:text-foreground hover:bg-accent/10 border border-border">
-                      Login
+                      {t('auth.login')}
                     </Button>
                   </Link>
                   <Link href="/register">
                     <Button size="sm"
                       className="bg-[#f0b90b] hover:bg-[#e6a800] text-black font-semibold shadow-lg shadow-yellow-500/20">
-                      Register
+                      {t('auth.register')}
                     </Button>
                   </Link>
                 </div>
@@ -389,7 +389,7 @@ export function Header() {
                   className="w-full mt-4 pt-4 border-t border-border flex items-center gap-2.5 text-destructive text-sm px-3 py-2"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
+                  <span>{t('nav.logout')}</span>
                 </button>
               )}
             </div>

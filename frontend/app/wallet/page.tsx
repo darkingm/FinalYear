@@ -9,7 +9,9 @@ import { BalanceOverview } from '@/components/wallet/BalanceOverview';
 import { LinkWalletSection } from '@/components/wallet/LinkWalletSection';
 import { CoinGrid } from '@/components/home/CoinGrid';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Wallet } from 'lucide-react';
+import { CreditScoreBadge } from '@/components/web3/CreditScoreBadge';
+import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
+import { Wallet, Shield } from 'lucide-react';
 
 export default function WalletPage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -34,7 +36,7 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0c0e14] flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black pt-20">
+    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black pt-20">
       {/* Ambient backgrounds */}
       <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
@@ -56,8 +58,9 @@ export default function WalletPage() {
           <div className="lg:col-span-2">
             <BalanceOverview />
           </div>
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
             <LinkWalletSection />
+            <CreditScoreBadge variant="compact" />
           </div>
         </div>
 

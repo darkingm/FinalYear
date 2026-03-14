@@ -274,7 +274,7 @@
 
 /* ── Skeleton ── */
 .skeleton {
-  @apply bg-gray-100 rounded-lg animate-pulse;
+  @apply bg-muted rounded-lg animate-pulse;
 }
 
 /* ── Stagger delays ── */
@@ -308,7 +308,7 @@
 
 /* ── Product image fallback ── */
 .product-image-container {
-  @apply relative bg-gradient-to-br from-blue-50 to-white overflow-hidden;
+  @apply relative bg-muted overflow-hidden;
 }
 
 /* ── Marquee ticker ── */
@@ -328,7 +328,7 @@
 
 /* ── Dark card styles ── */
 .dark-card {
-  @apply bg-[#1a1d26] border border-white/10 rounded-xl;
+  @apply bg-card border border-border rounded-xl;
 }
 
 /* ── Yellow glow ── */
