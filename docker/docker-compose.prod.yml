@@ -175,6 +175,8 @@ services:
       # Internal Docker network URL for server-side calls (NextAuth, SSR)
       # This avoids routing through internet/nginx for server-to-server calls
       INTERNAL_API_URL: http://main-api:3001
+      AI_SERVICE_URL: http://marketplace-ai:8000
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
       NEXT_PUBLIC_PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
@@ -199,16 +201,14 @@ services:
     restart: unless-stopped
 
   ai-service:
-    build:
-      context: ../backend/ai-service
-      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest
     container_name: marketplace-ai
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
       MAIN_SERVICE_URL: http://main-api:3001
     ports:
-      - "127.0.0.1:3005:3005"
+      - "127.0.0.1:8000:8000"
     depends_on:
       - main-api
     networks:

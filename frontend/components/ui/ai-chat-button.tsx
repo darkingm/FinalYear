@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { apiClient } from '@/lib/api/client';
 
 interface Message {
   id: string;
@@ -55,8 +54,14 @@ export function AIChatButton() {
     setMessages(prev => [...prev, userMsg]);
 
     try {
-      const res = await apiClient.post('/api/ai/chat', { message: text });
-      const reply = res.data?.reply || res.data?.message || 'Xin lỗi, tôi không hiểu câu hỏi này.';
+      // Call Next.js API route (proxies to AI service)
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      const reply = data.reply || data.message || 'Xin lỗi, tôi không hiểu câu hỏi này.';
       const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: reply, timestamp: new Date() };
       setMessages(prev => [...prev, botMsg]);
       if (!open) setUnread(u => u + 1);
@@ -72,6 +77,7 @@ export function AIChatButton() {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
+
 
   return (
     <div className="fixed bottom-6 right-6 z-[9999]">
@@ -179,15 +185,17 @@ export function AIChatButton() {
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder={isAuthenticated ? 'Hỏi tôi điều gì đó...' : 'Đăng nhập để hỏi AI...'}
-                disabled={loading || !isAuthenticated}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                placeholder="Hỏi tôi điều gì đó..."
+                disabled={loading}
                 className="flex-1 text-sm bg-muted border border-border rounded-xl px-3 py-2 focus:outline-none focus:border-[#f0b90b]/50 text-foreground placeholder:text-muted-foreground disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={loading || !input.trim() || !isAuthenticated}
+                disabled={loading || !input.trim()}
                 className="p-2.5 bg-[#f0b90b] hover:bg-[#e6a800] disabled:opacity-40 text-black rounded-xl transition-all shadow shadow-yellow-500/20"
               >
+
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
             </form>

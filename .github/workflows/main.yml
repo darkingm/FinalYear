@@ -152,6 +152,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build & Push ai-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/ai-service
+          file: ./backend/ai-service/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-ai-service:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-ai-service:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ============================================================
   # JOB 3 — Deploy to VPS with automatic DB migration
   # ============================================================
