@@ -69,6 +69,7 @@ export function Header() {
     const fetchTickers = async () => {
       try {
         const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+        if (!res.ok) return;
         const data = await res.json();
         const topSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
         const filtered = topSymbols.map(s => {
@@ -82,12 +83,10 @@ export function Header() {
           };
         }).filter(Boolean);
         setTickers(filtered);
-      } catch (error) {
-        console.error('Failed to fetch tickers', error);
-      }
+      } catch { /* silently ignore — ticker is cosmetic */ }
     };
     fetchTickers();
-    const interval = setInterval(fetchTickers, 10000);
+    const interval = setInterval(fetchTickers, 30000); // 30s — reduce API calls
     return () => clearInterval(interval);
   }, []);
 
@@ -105,13 +104,14 @@ export function Header() {
     }
   };
 
+  // Auth-gated nav links — only show Orders/Wallet to logged-in users
   const navLinks = [
-    { href: '/', label: t('nav.home') },
-    { href: '/products', label: t('nav.products') },
-    { href: '/trading/BTCUSDT', label: t('nav.trading'), icon: TrendingUp },
-    { href: '/orders', label: t('nav.orders'), icon: ShoppingBag, hasBadge: true },
-    { href: '/wallet', label: t('nav.wallet') },
-  ];
+    { href: '/', label: t('nav.home'), authRequired: false },
+    { href: '/products', label: t('nav.products'), authRequired: false },
+    { href: '/trading/BTCUSDT', label: t('nav.trading'), icon: TrendingUp, authRequired: false },
+    { href: '/orders', label: t('nav.orders'), icon: ShoppingBag, hasBadge: true, authRequired: true },
+    { href: '/wallet', label: t('nav.wallet'), authRequired: true },
+  ].filter(link => !link.authRequired || isAuthenticated);
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname?.startsWith(href);
@@ -167,14 +167,14 @@ export function Header() {
             <nav className="hidden lg:flex items-center gap-0.5">
               {navLinks.map((link) => (
                 <Link key={link.href} href={link.href}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
+                  className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
                     ? 'text-[#f0b90b] bg-[#f0b90b]/10'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
                     }`}>
                   {link.icon && <link.icon className="w-3.5 h-3.5" />}
                   {link.label}
                   {link.hasBadge && cartItemCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow border-2 border-background">
+                    <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow border-2 border-background">
                       {cartItemCount}
                     </span>
                   )}

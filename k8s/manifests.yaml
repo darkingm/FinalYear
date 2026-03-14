@@ -1,0 +1,294 @@
+# ============================================================
+# Web3Market — Kubernetes Manifests
+# VPS: 103.20.96.79 (single-node, use hostPath or local-path)
+# Apply: kubectl apply -k k8s/
+# ============================================================
+
+---
+# ── Namespace ────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: web3market
+  labels:
+    app: web3market
+
+---
+# ── PostgreSQL PersistentVolume ───────────────────────────────
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+  namespace: web3market
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /data/postgres
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: web3market
+spec:
+  storageClassName: manual
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# ── Secrets (base64 your values: echo -n 'value' | base64) ───
+apiVersion: v1
+kind: Secret
+metadata:
+  name: web3market-secrets
+  namespace: web3market
+type: Opaque
+stringData:
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "your_db_password"
+  POSTGRES_DB: "marketplace_db"
+  JWT_SECRET: "your_jwt_secret"
+  NEXTAUTH_SECRET: "your_nextauth_secret"
+  DOCKERHUB_USERNAME: "darkingm"
+
+---
+# ── ConfigMap (non-secret config) ────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web3market-config
+  namespace: web3market
+data:
+  NODE_ENV: "production"
+  NEXT_PUBLIC_API_URL: "http://103.20.96.79:3001"
+  NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: "cea17a07a0cb8c74b022c41e21294643"
+  NEXT_PUBLIC_POLYGON_RPC: "https://polygon.drpc.org"
+  NEXTAUTH_URL: "https://kienai.id.vn"
+  PORT: "3001"
+
+---
+# ══════════════════════════════════════════════════════════════
+# PostgreSQL
+# ══════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: web3market
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        envFrom:
+        - secretRef:
+            name: web3market-secrets
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: schema-sql
+          mountPath: /docker-entrypoint-initdb.d/01_schema.sql
+          subPath: schema.sql
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: schema-sql
+        configMap:
+          name: schema-sql-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-svc
+  namespace: web3market
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+
+---
+# ══════════════════════════════════════════════════════════════
+# Backend API
+# ══════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: web3market
+  labels:
+    app: backend
+  annotations:
+    # Image tag updated by CI/CD on each push
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        # CI/CD replaces TAG with git SHA
+        image: darkingm/web3market-backend:latest
+        imagePullPolicy: Always
+        envFrom:
+        - secretRef:
+            name: web3market-secrets
+        - configMapRef:
+            name: web3market-config
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-svc:5432/$(POSTGRES_DB)"
+        ports:
+        - containerPort: 3001
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-svc
+  namespace: web3market
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 3001
+    targetPort: 3001
+    nodePort: 30001
+  type: NodePort
+
+---
+# ══════════════════════════════════════════════════════════════
+# Frontend (Next.js)
+# ══════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: web3market
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: darkingm/web3market-frontend:latest
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: web3market-config
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-svc
+  namespace: web3market
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30000
+  type: NodePort
