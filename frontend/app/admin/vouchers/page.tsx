@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Tag, Plus, Copy, Trash2, ToggleLeft, ToggleRight, Calendar, Percent, DollarSign, Users, X } from 'lucide-react';

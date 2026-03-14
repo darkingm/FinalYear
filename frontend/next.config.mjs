@@ -31,21 +31,21 @@ const nextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
 
-  // Experimental optimizations
   experimental: {
     optimizePackageImports: [
       'lucide-react',
       '@rainbow-me/rainbowkit',
       'framer-motion',
     ],
+    // Suppress CSR-bailout errors for pages using Web3/Wagmi hooks
+    // These pages are always client-rendered (auth-gated) so SSR fallback is expected
+    missingSuspenseWithCSRBailout: false,
   },
 
   // Webpack optimizations
   webpack: (config, { isServer }) => {
-    // Externalize heavy packages
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
 
-    // Fix MetaMask SDK issues
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -58,7 +58,6 @@ const nextConfig = {
       };
     }
 
-    // Ignore MetaMask SDK warnings
     config.ignoreWarnings = [
       { module: /node_modules\/@metamask\/sdk/ },
       { file: /node_modules\/@metamask\/sdk/ },
@@ -69,3 +68,4 @@ const nextConfig = {
 };
 
 export default nextConfig;
+

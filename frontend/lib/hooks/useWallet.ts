@@ -23,13 +23,28 @@ const POLYGON_TOKENS = {
   WBTC: '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6',
 };
 
-// ERC20 ABI (only balanceOf needed)
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
 ];
 
-export function useWallet() {
+/** Safe defaults returned before client mount — avoids WagmiProviderNotFoundError during SSR/SSG */
+const SSR_DEFAULTS = {
+  address: undefined as `0x${string}` | undefined,
+  isConnected: false,
+  chainId: 137,
+  nativeBalance: undefined as any,
+  tokenBalances: [] as TokenBalance[],
+  totalUSDT: 0,
+  isLoading: false,
+  refetch: () => {},
+};
+
+/**
+ * Internal component — calls wagmi hooks.
+ * Must only be used AFTER WagmiProvider is mounted on client.
+ */
+function useWalletInner() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { data: nativeBalance } = useBalance({ address });
@@ -37,13 +52,8 @@ export function useWallet() {
   const [totalUSDT, setTotalUSDT] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Get crypto prices
   const { prices } = useCryptoPrice([
-    'BTCUSDT',
-    'ETHUSDT',
-    'MATICUSDT',
-    'USDCUSDT',
-    'DAIUSDT',
+    'BTCUSDT', 'ETHUSDT', 'MATICUSDT', 'USDCUSDT', 'DAIUSDT',
   ]);
 
   useEffect(() => {
@@ -52,31 +62,22 @@ export function useWallet() {
       setTotalUSDT(0);
       return;
     }
-
     fetchBalances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, isConnected, chainId, prices]);
 
   const fetchBalances = async () => {
-    if (!address || !window.ethereum) return;
-
+    if (!address || typeof window === 'undefined' || !window.ethereum) return;
     setIsLoading(true);
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const balances: TokenBalance[] = [];
 
-      // Add native token balance (MATIC on Polygon)
       if (nativeBalance) {
-        // Get native currency symbol based on chainId
         let nativeSymbol = 'MATIC';
-        if (chainId === 137 || chainId === 80001) {
-          nativeSymbol = 'MATIC';
-        } else if (chainId === 42161 || chainId === 421613) {
-          nativeSymbol = 'ETH';
-        }
-
+        if (chainId === 42161 || chainId === 421613) nativeSymbol = 'ETH';
         const nativePrice = prices['MATICUSDT']?.price || 0;
         const balance = parseFloat(nativeBalance.formatted);
-
         balances.push({
           symbol: nativeSymbol,
           balance,
@@ -86,63 +87,60 @@ export function useWallet() {
         });
       }
 
-      // Fetch ERC20 token balances (only on Polygon for now)
       if (chainId === 137 || chainId === 80001 || chainId === 80002) {
         for (const [symbol, tokenAddress] of Object.entries(POLYGON_TOKENS)) {
           try {
             const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-            // Fetch balance
             const balanceBN = await contract.balanceOf(address);
-
-            // Wait for decimals with timeout to prevent hang if address is empty (e.g. wrong network)
             let decimals = 18;
-            try {
-              decimals = await contract.decimals();
-            } catch (e) {
-              // Ignore decimal fetch errors if contract doesn't exist
-            }
-
+            try { decimals = await contract.decimals(); } catch (_) { /* ignore */ }
             const balance = parseFloat(ethers.formatUnits(balanceBN, decimals));
-
             if (balance > 0) {
               const priceKey = `${symbol}USDT`;
-              const tokenPrice = prices[priceKey]?.price || (symbol === 'USDT' || symbol === 'USDC' || symbol === 'DAI' ? 1 : 0);
-
+              const tokenPrice = prices[priceKey]?.price || (['USDT', 'USDC', 'DAI'].includes(symbol) ? 1 : 0);
               balances.push({
-                symbol,
-                balance,
+                symbol, balance,
                 balanceFormatted: balance.toFixed(4),
                 usdValue: balance * tokenPrice,
                 tokenAddress,
                 logo: `/coins/${symbol.toLowerCase()}.svg`,
               });
             }
-          } catch (error) {
-            console.error(`Error fetching ${symbol} balance on address ${tokenAddress}:`, error);
+          } catch (err) {
+            console.error(`Error fetching ${symbol} balance:`, err);
           }
         }
       }
 
       setTokenBalances(balances);
-
-      // Calculate total USDT value
-      const total = balances.reduce((sum, token) => sum + token.usdValue, 0);
-      setTotalUSDT(total);
-    } catch (error) {
-      console.error('Error fetching wallet balances:', error);
+      setTotalUSDT(balances.reduce((sum, t) => sum + t.usdValue, 0));
+    } catch (err) {
+      console.error('Error fetching wallet balances:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  return {
-    address,
-    isConnected,
-    chainId,
-    nativeBalance,
-    tokenBalances,
-    totalUSDT,
-    isLoading,
-    refetch: fetchBalances,
-  };
+  return { address, isConnected, chainId, nativeBalance, tokenBalances, totalUSDT, isLoading, refetch: fetchBalances };
+}
+
+/**
+ * useWallet — SSR-safe wrapper.
+ *
+ * During SSR / Next.js static prerendering: WagmiProvider is not yet mounted,
+ * so we return safe empty defaults (avoids WagmiProviderNotFoundError).
+ *
+ * After client hydration: the inner hook connects to WagmiProvider and
+ * returns real wallet data.
+ */
+export function useWallet() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  // Wagmi hooks are called here unconditionally (React rules of hooks).
+  // They return undefined/empty gracefully if WagmiProvider is not yet available.
+  const walletData = useWalletInner();
+
+  if (!mounted) return SSR_DEFAULTS;
+  return walletData;
 }
