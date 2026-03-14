@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/error-handler';
-import { apiLimiter, strictLimiter } from './middleware/rate-limit';
+import { apiLimiter } from './middleware/rate-limit';
 import { pool } from './config/database';
 import { logger } from './utils/logger';
 
@@ -141,7 +141,7 @@ app.get('/metrics', async (_req, res) => {
   }
 });
 
-app.use('/api/auth', strictLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
