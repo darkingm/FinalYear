@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
     Copy, Check, QrCode, ExternalLink, Clock, CheckCircle,
-    AlertCircle, ChevronDown, Info, Wallet, RefreshCw, Shield,
+    AlertCircle, Info, Wallet, RefreshCw, Shield,
 } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://103.20.96.79:3001';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { apiClient } from '@/lib/api/client';
 
 interface Chain {
     chain_id: number; name: string; type: string; symbol: string;
@@ -44,6 +46,7 @@ const CHAIN_GRADIENTS: Record<string, string> = {
 
 export default function WalletDepositPage() {
     const router = useRouter();
+    const { isAuthenticated, isLoading: authLoading } = useAuth();
     const [chains, setChains] = useState<Chain[]>([]);
     const [tokens, setTokens] = useState<Token[]>([]);
     const [history, setHistory] = useState<Deposit[]>([]);
@@ -53,37 +56,41 @@ export default function WalletDepositPage() {
     const [copied, setCopied] = useState(false);
     const [loadingTokens, setLoadingTokens] = useState(false);
 
+    // Auth guard — wait for session to resolve before redirecting
     useEffect(() => {
-        const token = localStorage.getItem('auth_token');
-        if (!token) { router.push('/login'); return; }
+        if (!authLoading && !isAuthenticated) router.push('/login');
+    }, [authLoading, isAuthenticated, router]);
 
+    useEffect(() => {
+        if (!isAuthenticated) return;
         Promise.all([
-            fetch(`${API}/api/wallets/deposit-addresses`).then(r => r.json()),
-            fetch(`${API}/api/wallets/deposits`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-        ]).then(([chainsData, historyData]) => {
+            apiClient.get('/api/wallets/deposit-addresses'),
+            apiClient.get('/api/wallets/deposits'),
+        ]).then(([chainsRes, historyRes]) => {
+            const chainsData = chainsRes.data;
+            const historyData = historyRes.data;
             if (chainsData.success) {
                 const validChains = chainsData.data.filter((c: Chain) => !!c.deposit_address);
                 setChains(chainsData.data);
                 if (validChains.length > 0) setSelectedChain(validChains[0]);
             }
             if (historyData.success) setHistory(historyData.data);
-        }).finally(() => setLoading(false));
-    }, [router]);
+        }).catch(() => {}).finally(() => setLoading(false));
+    }, [isAuthenticated]);
 
     useEffect(() => {
         if (!selectedChain) return;
         setLoadingTokens(true);
         setSelectedToken(null);
-        fetch(`${API}/api/wallets/chains/${selectedChain.chain_id}/tokens`)
-            .then(r => r.json())
-            .then(d => {
+        apiClient.get(`/api/wallets/chains/${selectedChain.chain_id}/tokens`)
+            .then(r => {
+                const d = r.data;
                 if (d.success) {
                     setTokens(d.data);
-                    // Auto-select USDT if available
                     const usdt = d.data.find((t: Token) => t.symbol === 'USDT');
                     setSelectedToken(usdt || d.data[0] || null);
                 }
-            }).finally(() => setLoadingTokens(false));
+            }).catch(() => {}).finally(() => setLoadingTokens(false));
     }, [selectedChain]);
 
     const copyAddress = async () => {
@@ -102,45 +109,48 @@ export default function WalletDepositPage() {
 
     const truncate = (s: string, n = 10) => s ? `${s.slice(0, n)}...${s.slice(-6)}` : '—';
 
-    if (loading) return (
-        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-            <div className="w-10 h-10 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+    if (authLoading || loading) return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+            <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-[#0a0a0f] text-white">
-            <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="min-h-screen bg-background flex flex-col">
+            <Header />
+            <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-2xl font-bold flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
                         <Wallet className="w-7 h-7 text-violet-400" />
-                        Deposit Crypto
+                        Nạp tiền Crypto
                     </h1>
-                    <p className="text-white/50 mt-1 text-sm">Choose a network and send crypto to the platform deposit address below.</p>
+                    <p className="text-muted-foreground mt-1 text-sm">Chọn mạng và gửi crypto đến địa chỉ nạp tiền bên dưới.</p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     {/* Left: Network + Token selector */}
                     <div className="lg:col-span-2 space-y-4">
-                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider">Select Network</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Chọn mạng</h3>
                         <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                             {chains.map(chain => (
                                 <button
                                     key={chain.chain_id}
                                     onClick={() => setSelectedChain(chain)}
+                                    disabled={!chain.deposit_address}
                                     className={`w-full flex items-center gap-3 p-3.5 rounded-xl border transition-all text-left
                     ${selectedChain?.chain_id === chain.chain_id
                                             ? `bg-gradient-to-r ${CHAIN_GRADIENTS[chain.name] || 'from-violet-600/20 to-violet-600/5 border-violet-500/20'} border-violet-500/30`
-                                            : 'bg-white/3 border-white/8 hover:bg-white/6 hover:border-white/15'}`}
+                                            : 'bg-card border-border hover:bg-muted'}
+                    ${!chain.deposit_address ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
                                     <span className="text-2xl flex-shrink-0">{CHAIN_ICONS[chain.name] || '⛓️'}</span>
                                     <div className="min-w-0 flex-1">
-                                        <p className="font-medium text-sm">{chain.name}</p>
-                                        <p className="text-xs text-white/40">{chain.symbol}</p>
+                                        <p className="font-medium text-sm text-foreground">{chain.name}</p>
+                                        <p className="text-xs text-muted-foreground">{chain.symbol}</p>
                                     </div>
                                     {!chain.deposit_address && (
-                                        <span className="text-xs text-white/25 flex-shrink-0">Coming soon</span>
+                                        <span className="text-xs text-muted-foreground flex-shrink-0">Sắp ra mắt</span>
                                     )}
                                     {selectedChain?.chain_id === chain.chain_id && (
                                         <div className="w-2 h-2 rounded-full bg-violet-400 flex-shrink-0" />
@@ -157,7 +167,7 @@ export default function WalletDepositPage() {
                                 {/* Token selector */}
                                 {tokens.length > 0 && (
                                     <div>
-                                        <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">Select Token</h3>
+                                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Chọn Token</h3>
                                         <div className="flex flex-wrap gap-2">
                                             {tokens.map(tk => (
                                                 <button
@@ -165,8 +175,8 @@ export default function WalletDepositPage() {
                                                     onClick={() => setSelectedToken(tk)}
                                                     className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all
                             ${selectedToken?.token_id === tk.token_id
-                                                            ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                                                            : 'bg-white/5 border-white/10 text-white/60 hover:border-white/25'}`}
+                                                            ? 'bg-violet-500/20 border-violet-500 text-violet-400'
+                                                            : 'bg-card border-border text-muted-foreground hover:border-border/70 hover:text-foreground'}`}
                                                 >
                                                     {tk.symbol}
                                                 </button>
@@ -203,16 +213,16 @@ export default function WalletDepositPage() {
                                         {/* Address */}
                                         <div className="space-y-2">
                                             <p className="text-xs text-white/40">Deposit Address</p>
-                                            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-black/30 border border-white/10">
-                                                <span className="font-mono text-sm text-white/80 flex-1 break-all leading-relaxed">
+                                            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-muted border border-border">
+                                                <span className="font-mono text-sm text-foreground flex-1 break-all leading-relaxed">
                                                     {selectedChain.deposit_address}
                                                 </span>
                                                 <button
                                                     onClick={copyAddress}
-                                                    className="flex-shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                                    className="flex-shrink-0 p-2 rounded-lg hover:bg-muted-foreground/10 transition-colors"
                                                     title="Copy address"
                                                 >
-                                                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-white/50" />}
+                                                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
                                                 </button>
                                             </div>
                                             {copied && (
@@ -244,9 +254,9 @@ export default function WalletDepositPage() {
                                 )}
                             </>
                         ) : (
-                            <div className="p-10 rounded-2xl bg-white/3 border border-white/8 text-center text-white/30">
+                            <div className="p-10 rounded-2xl bg-card border border-border text-center text-muted-foreground">
                                 <Info className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                                <p>Select a network on the left to see deposit address.</p>
+                                <p>Chọn mạng bên trái để xem địa chỉ nạp tiền.</p>
                             </div>
                         )}
                     </div>
@@ -254,41 +264,41 @@ export default function WalletDepositPage() {
 
                 {/* Deposit History */}
                 <div className="mt-10 space-y-4">
-                    <h3 className="font-semibold text-white/80 flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-violet-400" />Deposit History
+                    <h3 className="font-semibold text-foreground flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-violet-400" />Lịch sử nạp tiền
                     </h3>
 
                     {history.length === 0 ? (
-                        <div className="p-8 rounded-2xl bg-white/3 border border-white/8 text-center text-white/30">
+                        <div className="p-8 rounded-2xl bg-card border border-border text-center text-muted-foreground">
                             <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                            <p>No deposits yet.</p>
+                            <p>Chưa có giao dịch nạp tiền nào.</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-2xl border border-white/8">
+                        <div className="overflow-x-auto rounded-2xl border border-border">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="border-b border-white/8 text-xs text-white/40 uppercase tracking-wider">
-                                        {['Time', 'Token', 'Amount', 'Network', 'Tx Hash', 'Status'].map(h => (
+                                    <tr className="border-b border-border text-xs text-muted-foreground uppercase tracking-wider bg-muted/50">
+                                        {['Thời gian', 'Token', 'Số lượng', 'Mạng', 'Tx Hash', 'Trạng thái'].map(h => (
                                             <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5">
+                                <tbody className="divide-y divide-border">
                                     {history.map(dep => {
-                                        const meta = STATUS_META[dep.status] || { color: 'text-white/40', label: dep.status, icon: Clock };
+                                        const meta = STATUS_META[dep.status] || { color: 'text-muted-foreground', label: dep.status, icon: Clock };
                                         const Icon = meta.icon;
                                         return (
-                                            <tr key={dep.deposit_id} className="hover:bg-white/3 transition-colors">
-                                                <td className="px-4 py-3 text-sm text-white/50 whitespace-nowrap">
+                                            <tr key={dep.deposit_id} className="hover:bg-muted/30 transition-colors">
+                                                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                                                     {new Date(dep.created_at).toLocaleDateString()} {new Date(dep.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </td>
-                                                <td className="px-4 py-3 text-sm font-semibold">{dep.symbol}</td>
-                                                <td className="px-4 py-3 text-sm font-mono text-green-300">+{parseFloat(dep.amount).toFixed(6)}</td>
-                                                <td className="px-4 py-3 text-sm text-white/60">{dep.chain_name || dep.chain_id}</td>
+                                                <td className="px-4 py-3 text-sm font-semibold text-foreground">{dep.symbol}</td>
+                                                <td className="px-4 py-3 text-sm font-mono text-green-400">+{parseFloat(dep.amount).toFixed(6)}</td>
+                                                <td className="px-4 py-3 text-sm text-muted-foreground">{dep.chain_name || dep.chain_id}</td>
                                                 <td className="px-4 py-3">
                                                     {dep.tx_hash ? (
-                                                        <span className="font-mono text-xs text-white/50">{truncate(dep.tx_hash, 8)}</span>
-                                                    ) : <span className="text-white/25 text-xs">—</span>}
+                                                        <span className="font-mono text-xs text-muted-foreground">{truncate(dep.tx_hash, 8)}</span>
+                                                    ) : <span className="text-muted-foreground/40 text-xs">—</span>}
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <span className={`flex items-center gap-1.5 text-xs font-medium ${meta.color}`}>
@@ -303,7 +313,8 @@ export default function WalletDepositPage() {
                         </div>
                     )}
                 </div>
-            </div>
+            </main>
+            <Footer />
         </div>
     );
 }
