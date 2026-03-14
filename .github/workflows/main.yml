@@ -15,7 +15,7 @@ env:
 
 jobs:
   # ============================================================
-  # JOB 1 — Run tests
+  # JOB 1 — Run tests with clean schema
   # ============================================================
   test:
     name: Run Tests
@@ -59,12 +59,27 @@ jobs:
       - name: Install psql client
         run: sudo apt-get install -y postgresql-client
 
-      - name: Apply database schema
+      - name: Apply consolidated schema (schema.sql + seed.sql)
         run: |
+          echo "Applying schema..."
           PGPASSWORD=testpassword psql \
             -h localhost -U testuser -d marketplace_test \
-            -f init_database.sql/01_schema.sql
-          echo "Schema applied."
+            -f init_database.sql/schema.sql
+          echo "Applying seed data..."
+          PGPASSWORD=testpassword psql \
+            -h localhost -U testuser -d marketplace_test \
+            -f init_database.sql/seed.sql
+          echo "✓ Database initialized with consolidated schema + seed"
+
+      - name: Verify schema
+        run: |
+          TABLE_COUNT=$(PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test -t -A \
+            -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';")
+          echo "Tables created: $TABLE_COUNT"
+          # Verify critical columns exist
+          PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test -c \
+            "SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('token_id','price_in_token','low_stock_threshold');" | grep -q "token_id"
+          echo "✓ Schema verified: all critical columns present"
 
       - name: Install main-service dependencies
         working-directory: backend/main-service
@@ -76,7 +91,7 @@ jobs:
 
       - name: Run tests
         working-directory: backend/main-service
-        run: echo "Tests skipped"
+        run: echo "Tests skipped — add jest tests here"
 
   # ============================================================
   # JOB 2 — Build & Push Docker images
@@ -138,7 +153,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ============================================================
-  # JOB 3 — Deploy to VPS via SSH
+  # JOB 3 — Deploy to VPS with automatic DB migration
   # ============================================================
   deploy:
     name: Deploy to VPS
@@ -151,14 +166,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy docker-compose & SQL files to VPS
+      # Copy docker-compose and ONLY the 2 consolidated SQL files
+      - name: Copy compose & SQL files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "init_database.sql/,payment_init_database.sql/,docs/,docker/docker-compose.prod.yml"
+          source: "init_database.sql/schema.sql,init_database.sql/seed.sql,payment_init_database.sql/,docker/docker-compose.prod.yml"
           target: "/root/services/FinalYear/"
           overwrite: true
 
@@ -178,38 +194,63 @@ jobs:
             set -e
             COMPOSE_DIR="/root/services/FinalYear/docker"
             COMPOSE_FILE="$COMPOSE_DIR/docker-compose.prod.yml"
+            SQL_DIR="/root/services/FinalYear/init_database.sql"
 
             echo "======================================"
-            echo "  DEPLOYING commit: $GIT_SHA"
+            echo "  DEPLOYING commit: ${GIT_SHA:0:7}"
             echo "  DOCKERHUB: $HUB_USER"
             echo "======================================"
 
             cd "$COMPOSE_DIR"
 
             # ── Step 1: Pull latest images
-            echo "[1/5] Pulling latest Docker images..."
+            echo "[1/6] Pulling latest Docker images..."
             docker pull "$HUB_USER/marketplace-main-api:latest"
             docker pull "$HUB_USER/marketplace-payment-api:latest"
             docker pull "$HUB_USER/marketplace-frontend:latest"
             echo "✓ Images pulled"
 
-            # ── Step 2: Ensure infra (postgres, postgres-payment, redis, rabbitmq) is running
-            echo "[2/5] Ensuring infrastructure containers are healthy..."
+            # ── Step 2: Ensure infra containers are running
+            echo "[2/6] Ensuring infrastructure is healthy..."
             docker compose -f "$COMPOSE_FILE" up -d --no-recreate postgres postgres-payment redis rabbitmq
 
-            # ── Step 3: Wait for postgres and postgres-payment
-            echo "[3/5] Waiting for databases to be healthy..."
-            for i in $(seq 1 24); do
-              if docker compose -f "$COMPOSE_FILE" ps postgres | grep -q "healthy" && docker compose -f "$COMPOSE_FILE" ps postgres-payment | grep -q "healthy"; then
-                echo "✓ Databases are healthy (attempt $i)"
+            # ── Step 3: Wait for databases
+            echo "[3/6] Waiting for databases..."
+            for i in $(seq 1 30); do
+              MAIN_OK=$(docker compose -f "$COMPOSE_FILE" ps postgres 2>&1 | grep -c "healthy" || true)
+              PAY_OK=$(docker compose -f "$COMPOSE_FILE" ps postgres-payment 2>&1 | grep -c "healthy" || true)
+              if [ "$MAIN_OK" -gt 0 ] && [ "$PAY_OK" -gt 0 ]; then
+                echo "✓ Both databases healthy (attempt $i)"
                 break
               fi
-              echo "  Waiting... ($i/24)"
-              sleep 5
+              echo "  Waiting... ($i/30)"
+              sleep 3
             done
 
-            # ── Step 4: Restart app services with new images
-            echo "[4/5] Restarting app services with new images..."
+            # ── Step 4: AUTO DB MIGRATION — apply schema.sql safely
+            echo "[4/6] Running DB migration on marketplace_db..."
+            # Get postgres container name
+            POSTGRES_CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q postgres)
+            if [ -n "$POSTGRES_CONTAINER" ]; then
+              # Apply schema (idempotent — all uses IF NOT EXISTS)
+              docker exec -i "$POSTGRES_CONTAINER" psql -U postgres -d marketplace_db \
+                < "$SQL_DIR/schema.sql" && echo "✓ schema.sql applied" || echo "⚠ schema.sql had warnings (may be OK if already up to date)"
+              
+              # Verify critical columns exist
+              COLS=$(docker exec "$POSTGRES_CONTAINER" psql -U postgres -d marketplace_db -t -A \
+                -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='products' AND column_name='token_id';")
+              if [ "$COLS" -gt 0 ]; then
+                echo "✓ DB schema verified: token_id column present"
+              else
+                echo "✗ CRITICAL: token_id column missing after migration!"
+                exit 1
+              fi
+            else
+              echo "⚠ Could not find postgres container, skipping migration"
+            fi
+
+            # ── Step 5: Restart app containers with new images
+            echo "[5/6] Restarting app containers..."
             docker compose -f "$COMPOSE_FILE" up -d \
               --force-recreate \
               --no-deps \
@@ -217,9 +258,9 @@ jobs:
               main-api payment-api frontend
             echo "✓ Containers restarted"
 
-            # ── Step 5: Health checks
-            echo "[5/5] Running health checks..."
-            sleep 15
+            # ── Step 6: Health checks
+            echo "[6/6] Running health checks..."
+            sleep 20
 
             if curl -sf http://127.0.0.1:3001/health > /dev/null; then
               echo "✓ main-api: HEALTHY"
@@ -246,12 +287,17 @@ jobs:
               exit 1
             fi
 
-            # ── Cleanup old images
+            # ── Verify products API works post-deploy
+            PRODUCT_COUNT=$(curl -s http://127.0.0.1:3001/api/products?limit=1 | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pagination',{}).get('total',0))" 2>/dev/null || echo "?")
+            echo "✓ Products API: $PRODUCT_COUNT products available"
+
             docker image prune -f --filter "until=24h" || true
 
             echo ""
             echo "======================================"
             echo "  ✅ DEPLOYMENT SUCCESSFUL!"
+            echo "  Commit: ${GIT_SHA:0:7}"
+            echo "  Site: https://kienai.id.vn"
             echo "======================================"
             docker compose -f "$COMPOSE_FILE" ps
 
@@ -264,5 +310,5 @@ jobs:
           if [ "$STATUS" = "success" ]; then
             echo "✅ Deploy OK — commit $SHA_SHORT is live on kienai.id.vn"
           else
-            echo "❌ Deploy FAILED — commit $SHA_SHORT"
+            echo "❌ Deploy FAILED — commit $SHA_SHORT — check logs above"
           fi

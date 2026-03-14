@@ -18,17 +18,32 @@ interface ISwapRouter {
     ) external returns (uint[] memory amounts);
 }
 
+/// @dev Minimal interface to CreditScoreSBT for dynamic fee & privilege queries
+interface ICreditScoreSBT {
+    function getPlatformFee(address wallet) external view returns (uint256);
+    function recordCompletedOrder(address wallet, bool onTime, string calldata reason) external;
+    function recordDispute(address wallet, string calldata reason) external;
+    function getTier(address wallet) external view returns (uint8);
+}
+
 /**
  * @title EscrowCore
- * @dev Multi-token escrow contract with Native coin and DEX Swap support
- * Optimized with bytes32 orderIds.
+ * @dev Multi-token escrow contract with:
+ *   - Native coin and ERC20 DEX Swap support
+ *   - Dynamic platform fee via CreditScoreSBT (Silver/Gold buyers pay less)
+ *   - Event-driven credit score updates on delivery confirmation
+ *   - buyerConfirmDelivery for trustless release without backend
  */
 contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
     using SafeERC20 for IERC20;
 
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant ADMIN_ROLE    = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-    
+
+    /// @dev Optional - set to zero address to disable SBT features
+    ICreditScoreSBT public sbtContract;
+
+
     struct Order {
         address buyer;
         address seller;
@@ -51,7 +66,7 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
     
     mapping(bytes32 => Order) public orders;
     address public feeVault;
-    uint256 public platformFeePercent = 250; // 2.5% (basis points)
+    uint256 public platformFeePercent = 250; // 2.5% default (overridden by SBT tier)
     uint256 public constant MAX_FEE_PERCENT = 1000; // 10%
     uint256 public constant ORDER_TIMEOUT = 30 days;
     
@@ -69,7 +84,10 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
     event OrderExpired(bytes32 indexed orderId);
     event FeeUpdated(uint256 newFee);
     event FeeVaultUpdated(address newVault);
-    
+    /// @dev Emitted when buyer confirms delivery - backend listens to update CreditScoreSBT
+    event DeliveryConfirmed(bytes32 indexed orderId, address indexed buyer, address indexed seller, bool onTime);
+    event SBTContractUpdated(address newSBT);
+
     constructor(address _feeVault) {
         require(_feeVault != address(0), "Invalid fee vault");
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -77,7 +95,22 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
         _grantRole(OPERATOR_ROLE, msg.sender);
         feeVault = _feeVault;
     }
-    
+
+    /// @dev Connect the CreditScoreSBT contract for dynamic fees
+    function setSBTContract(address _sbt) external onlyRole(ADMIN_ROLE) {
+        sbtContract = ICreditScoreSBT(_sbt);
+        emit SBTContractUpdated(_sbt);
+    }
+
+    /// @dev Get the effective fee for a buyer (SBT-adjusted or default)
+    function getEffectiveFee(address buyer) public view returns (uint256) {
+        if (address(sbtContract) != address(0)) {
+            return sbtContract.getPlatformFee(buyer);
+        }
+        return platformFeePercent;
+    }
+
+
     /**
      * @dev Deposit ERC20 tokens into escrow
      */
@@ -93,7 +126,8 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
         require(amount > 0, "Invalid amount");
         require(token != address(0), "Use depositNative for ETH/MATIC");
         
-        uint256 fee = (amount * platformFeePercent) / 10000;
+        uint256 feeBps = getEffectiveFee(msg.sender); // SBT-adjusted fee
+        uint256 fee = (amount * feeBps) / 10000;
         uint256 sellerAmount = amount - fee;
         
         // Transfer tokens to escrow
@@ -125,7 +159,8 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
         require(seller != address(0), "Invalid seller");
         require(msg.value > 0, "Invalid value");
         
-        uint256 fee = (msg.value * platformFeePercent) / 10000;
+        uint256 feeBps = getEffectiveFee(msg.sender);
+        uint256 fee = (msg.value * feeBps) / 10000;
         uint256 sellerAmount = msg.value - fee;
         
         orders[orderId] = Order({
@@ -290,7 +325,39 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
         emit OrderDisputed(orderId);
     }
     
+    /**
+     * @dev Buyer confirms delivery and releases payment to seller directly.
+     *      Emits DeliveryConfirmed - backend listens to update CreditScoreSBT.
+     *      onTime = true if buyer confirms within 24h of order creation.
+     */
+    function buyerConfirmDelivery(bytes32 orderId) external nonReentrant {
+        Order storage order = orders[orderId];
+        require(msg.sender == order.buyer, "Not the buyer");
+        require(order.status == OrderStatus.Paid, "Invalid status");
+        require(block.timestamp < order.expiresAt, "Order expired");
+
+        order.status = OrderStatus.Completed;
+
+        if (order.token == address(0)) {
+            (bool ok1, ) = order.seller.call{value: order.amount}("");
+            require(ok1, "Seller transfer failed");
+            (bool ok2, ) = feeVault.call{value: order.fee}("");
+            require(ok2, "Fee transfer failed");
+        } else {
+            IERC20(order.token).safeTransfer(order.seller, order.amount);
+            IERC20(order.token).safeTransfer(feeVault, order.fee);
+        }
+
+        // Determine if payment was on-time (within 24 hours of order creation)
+        bool onTime = block.timestamp <= order.createdAt + 1 days;
+
+        emit OrderCompleted(orderId);
+        // Backend listens to DeliveryConfirmed to update CreditScoreSBT off-chain or via relayer
+        emit DeliveryConfirmed(orderId, order.buyer, order.seller, onTime);
+    }
+
     // Admin functions...
+
     function updatePlatformFee(uint256 newFeePercent) external onlyRole(ADMIN_ROLE) {
         require(newFeePercent <= MAX_FEE_PERCENT, "Fee too high");
         platformFeePercent = newFeePercent;

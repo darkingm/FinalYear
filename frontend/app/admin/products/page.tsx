@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle } from 'lucide-react';
+import { Package, Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle, Zap } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
+import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
@@ -43,6 +44,17 @@ export default function AdminProductsPage() {
             fetchProducts();
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to update');
+        }
+    };
+
+    const handleMintNFT = async (productId: number) => {
+        try {
+            toast.loading('Minting NFT to Polygon Network...', { id: `mint-${productId}` });
+            const res = await apiClient.post(`/api/nft/mint/${productId}`);
+            toast.success(`NFT Minted Successfully! Tx ID: ${res.data.data?.txHash?.slice(0, 10)}...`, { id: `mint-${productId}` });
+            fetchProducts();
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Failed to mint NFT', { id: `mint-${productId}` });
         }
     };
 
@@ -115,15 +127,23 @@ export default function AdminProductsPage() {
                                         <span className={`text-xs font-medium px-2 py-1 rounded-full ${statusColors[product.status] || 'text-gray-400 bg-gray-400/10'}`}>{product.status}</span>
                                     </td>
                                     <td className="px-5 py-4">
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-2">
                                             {product.status === 'active' ? (
-                                                <button onClick={() => handleStatusUpdate(product.product_id, 'inactive')} className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-400 hover:text-red-400 transition-colors" title="Deactivate">
+                                                <button onClick={() => handleStatusUpdate(product.product_id, 'inactive')} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Deactivate">
                                                     <Ban className="w-4 h-4" />
                                                 </button>
                                             ) : (
-                                                <button onClick={() => handleStatusUpdate(product.product_id, 'active')} className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-400 hover:text-green-400 transition-colors" title="Activate">
+                                                <button onClick={() => handleStatusUpdate(product.product_id, 'active')} className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-500 transition-colors" title="Activate">
                                                     <CheckCircle className="w-4 h-4" />
                                                 </button>
+                                            )}
+                                            {product.status === 'active' && !product.has_nft && (
+                                                <button onClick={() => handleMintNFT(product.product_id)} className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 hover:bg-indigo-500 hover:text-white transition-colors" title="Mint NFT as RWA">
+                                                    <Zap className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            {product.has_nft && (
+                                                <span className="text-[10px] font-bold text-white bg-indigo-500 px-2 py-0.5 rounded-md" title="RWA NFT Minted">NFT</span>
                                             )}
                                         </div>
                                     </td>

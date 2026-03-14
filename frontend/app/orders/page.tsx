@@ -17,11 +17,16 @@ import Image from 'next/image';
 
 interface Order {
   order_id: number;
+  order_number?: string;
   product_name: string;
-  product_metadata?: { images?: string[] };
+  product_metadata?: { images?: string[]; primaryImage?: string };
+  primary_image?: string | null;
   quantity: number;
   price_usd: number;
-  total_price_usd?: number;
+  price_in_token?: number | null;
+  token_symbol?: string | null;
+  amount_token?: number | null;
+  total_amount?: number;
   status: string;
   payment_method?: string;
   created_at: string;
@@ -50,10 +55,20 @@ const FILTER_TABS = [
 
 function OrderCard({ order, index }: { order: Order; index: number }) {
   const [imgError, setImgError] = useState(false);
-  const imgSrc = order.product_metadata?.images?.[0];
+  // Image: prefer direct primary_image → metadata.images[0] → null
+  const imgSrc = order.primary_image
+    || order.product_metadata?.primaryImage
+    || order.product_metadata?.images?.[0]
+    || null;
   const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.UNPAID;
   const StatusIcon = cfg.icon;
-  const price = Number(order.price_usd ?? order.total_price_usd ?? 0);
+
+  // Price display: prefer token amount if available
+  const tokenAmount = order.amount_token ?? (order.price_in_token ? Number(order.price_in_token) * order.quantity : null);
+  const priceLabel = tokenAmount && order.token_symbol
+    ? `${Number(tokenAmount).toFixed(['ETH','WBTC','BTC'].includes(order.token_symbol) ? 6 : 4)} ${order.token_symbol}`
+    : `$${Number(order.price_usd ?? order.total_amount ?? 0).toFixed(2)}`;
+  const priceIsToken = !!(tokenAmount && order.token_symbol);
 
   return (
     <motion.div
@@ -112,10 +127,10 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
 
               <div className="flex items-end justify-between mt-auto">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold font-mono text-emerald-400">
-                    ${price.toFixed(2)}
+                  <span className={`text-2xl font-bold font-mono ${priceIsToken ? 'text-[#f0b90b]' : 'text-emerald-400'}`}>
+                    {priceLabel}
                   </span>
-                  <span className="text-xs text-gray-500 font-medium">USD</span>
+                  {!priceIsToken && <span className="text-xs text-gray-500 font-medium">USD</span>}
                 </div>
                 <span className="text-xs font-bold text-blue-400 opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all translate-x-2 group-hover:translate-x-0">
                   Chi tiết <ArrowRight className="w-4 h-4" />
@@ -164,10 +179,13 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/api/orders');
-      setOrders(res.data.orders || []);
-    } catch { toast.error('Không thể tải đơn hàng'); }
-    finally { setLoading(false); }
+      const res = await apiClient.get('/api/orders?limit=50');
+      // Support both response shapes: { orders: [] } and { data: { orders: [] } }
+      const data = res.data;
+      setOrders(data.orders ?? data.data?.orders ?? []);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Không thể tải đơn hàng');
+    } finally { setLoading(false); }
   };
 
   const filteredOrders = orders.filter(order => {

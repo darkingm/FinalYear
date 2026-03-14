@@ -18,10 +18,8 @@ services:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../init_database.sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ../init_database.sql/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
-      - ../init_database.sql/03_nft_credit_migration.sql:/docker-entrypoint-initdb.d/03_nft_credit_migration.sql
-      - ../init_database.sql/04_missing_columns_hotfix.sql:/docker-entrypoint-initdb.d/04_missing_columns_hotfix.sql
+      - ../init_database.sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ../init_database.sql/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-marketplace_db}" ]
       interval: 10s

@@ -64,10 +64,12 @@ export interface EscrowCoreInterface extends Interface {
       | "MAX_FEE_PERCENT"
       | "OPERATOR_ROLE"
       | "ORDER_TIMEOUT"
+      | "buyerConfirmDelivery"
       | "deposit"
       | "depositNative"
       | "depositWithSwap"
       | "feeVault"
+      | "getEffectiveFee"
       | "getOrder"
       | "getRoleAdmin"
       | "grantRole"
@@ -82,6 +84,8 @@ export interface EscrowCoreInterface extends Interface {
       | "releasePayment"
       | "renounceRole"
       | "revokeRole"
+      | "sbtContract"
+      | "setSBTContract"
       | "supportsInterface"
       | "unpause"
       | "updateFeeVault"
@@ -90,6 +94,7 @@ export interface EscrowCoreInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "DeliveryConfirmed"
       | "FeeUpdated"
       | "FeeVaultUpdated"
       | "OrderCompleted"
@@ -101,6 +106,7 @@ export interface EscrowCoreInterface extends Interface {
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
+      | "SBTContractUpdated"
       | "Unpaused"
   ): EventFragment;
 
@@ -125,6 +131,10 @@ export interface EscrowCoreInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "buyerConfirmDelivery",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "deposit",
     values: [BytesLike, AddressLike, BigNumberish, AddressLike]
   ): string;
@@ -145,6 +155,10 @@ export interface EscrowCoreInterface extends Interface {
     ]
   ): string;
   encodeFunctionData(functionFragment: "feeVault", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "getEffectiveFee",
+    values: [AddressLike]
+  ): string;
   encodeFunctionData(functionFragment: "getOrder", values: [BytesLike]): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
@@ -187,6 +201,14 @@ export interface EscrowCoreInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "sbtContract",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setSBTContract",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
   ): string;
@@ -217,6 +239,10 @@ export interface EscrowCoreInterface extends Interface {
     functionFragment: "ORDER_TIMEOUT",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "buyerConfirmDelivery",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "deposit", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "depositNative",
@@ -227,6 +253,10 @@ export interface EscrowCoreInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "feeVault", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "getEffectiveFee",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "getOrder", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getRoleAdmin",
@@ -260,6 +290,14 @@ export interface EscrowCoreInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "sbtContract",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setSBTContract",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
@@ -272,6 +310,31 @@ export interface EscrowCoreInterface extends Interface {
     functionFragment: "updatePlatformFee",
     data: BytesLike
   ): Result;
+}
+
+export namespace DeliveryConfirmedEvent {
+  export type InputTuple = [
+    orderId: BytesLike,
+    buyer: AddressLike,
+    seller: AddressLike,
+    onTime: boolean
+  ];
+  export type OutputTuple = [
+    orderId: string,
+    buyer: string,
+    seller: string,
+    onTime: boolean
+  ];
+  export interface OutputObject {
+    orderId: string;
+    buyer: string;
+    seller: string;
+    onTime: boolean;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace FeeUpdatedEvent {
@@ -447,6 +510,18 @@ export namespace RoleRevokedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace SBTContractUpdatedEvent {
+  export type InputTuple = [newSBT: AddressLike];
+  export type OutputTuple = [newSBT: string];
+  export interface OutputObject {
+    newSBT: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace UnpausedEvent {
   export type InputTuple = [account: AddressLike];
   export type OutputTuple = [account: string];
@@ -512,6 +587,12 @@ export interface EscrowCore extends BaseContract {
 
   ORDER_TIMEOUT: TypedContractMethod<[], [bigint], "view">;
 
+  buyerConfirmDelivery: TypedContractMethod<
+    [orderId: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
   deposit: TypedContractMethod<
     [
       orderId: BytesLike,
@@ -544,6 +625,8 @@ export interface EscrowCore extends BaseContract {
   >;
 
   feeVault: TypedContractMethod<[], [string], "view">;
+
+  getEffectiveFee: TypedContractMethod<[buyer: AddressLike], [bigint], "view">;
 
   getOrder: TypedContractMethod<
     [orderId: BytesLike],
@@ -616,6 +699,14 @@ export interface EscrowCore extends BaseContract {
     "nonpayable"
   >;
 
+  sbtContract: TypedContractMethod<[], [string], "view">;
+
+  setSBTContract: TypedContractMethod<
+    [_sbt: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
     [boolean],
@@ -656,6 +747,9 @@ export interface EscrowCore extends BaseContract {
     nameOrSignature: "ORDER_TIMEOUT"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "buyerConfirmDelivery"
+  ): TypedContractMethod<[orderId: BytesLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "deposit"
   ): TypedContractMethod<
     [
@@ -692,6 +786,9 @@ export interface EscrowCore extends BaseContract {
   getFunction(
     nameOrSignature: "feeVault"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "getEffectiveFee"
+  ): TypedContractMethod<[buyer: AddressLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "getOrder"
   ): TypedContractMethod<
@@ -770,6 +867,12 @@ export interface EscrowCore extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "sbtContract"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "setSBTContract"
+  ): TypedContractMethod<[_sbt: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
@@ -782,6 +885,13 @@ export interface EscrowCore extends BaseContract {
     nameOrSignature: "updatePlatformFee"
   ): TypedContractMethod<[newFeePercent: BigNumberish], [void], "nonpayable">;
 
+  getEvent(
+    key: "DeliveryConfirmed"
+  ): TypedContractEvent<
+    DeliveryConfirmedEvent.InputTuple,
+    DeliveryConfirmedEvent.OutputTuple,
+    DeliveryConfirmedEvent.OutputObject
+  >;
   getEvent(
     key: "FeeUpdated"
   ): TypedContractEvent<
@@ -860,6 +970,13 @@ export interface EscrowCore extends BaseContract {
     RoleRevokedEvent.OutputObject
   >;
   getEvent(
+    key: "SBTContractUpdated"
+  ): TypedContractEvent<
+    SBTContractUpdatedEvent.InputTuple,
+    SBTContractUpdatedEvent.OutputTuple,
+    SBTContractUpdatedEvent.OutputObject
+  >;
+  getEvent(
     key: "Unpaused"
   ): TypedContractEvent<
     UnpausedEvent.InputTuple,
@@ -868,6 +985,17 @@ export interface EscrowCore extends BaseContract {
   >;
 
   filters: {
+    "DeliveryConfirmed(bytes32,address,address,bool)": TypedContractEvent<
+      DeliveryConfirmedEvent.InputTuple,
+      DeliveryConfirmedEvent.OutputTuple,
+      DeliveryConfirmedEvent.OutputObject
+    >;
+    DeliveryConfirmed: TypedContractEvent<
+      DeliveryConfirmedEvent.InputTuple,
+      DeliveryConfirmedEvent.OutputTuple,
+      DeliveryConfirmedEvent.OutputObject
+    >;
+
     "FeeUpdated(uint256)": TypedContractEvent<
       FeeUpdatedEvent.InputTuple,
       FeeUpdatedEvent.OutputTuple,
@@ -987,6 +1115,17 @@ export interface EscrowCore extends BaseContract {
       RoleRevokedEvent.InputTuple,
       RoleRevokedEvent.OutputTuple,
       RoleRevokedEvent.OutputObject
+    >;
+
+    "SBTContractUpdated(address)": TypedContractEvent<
+      SBTContractUpdatedEvent.InputTuple,
+      SBTContractUpdatedEvent.OutputTuple,
+      SBTContractUpdatedEvent.OutputObject
+    >;
+    SBTContractUpdated: TypedContractEvent<
+      SBTContractUpdatedEvent.InputTuple,
+      SBTContractUpdatedEvent.OutputTuple,
+      SBTContractUpdatedEvent.OutputObject
     >;
 
     "Unpaused(address)": TypedContractEvent<

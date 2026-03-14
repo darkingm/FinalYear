@@ -58,11 +58,19 @@ export function BalanceOverview() {
 
         {/* Action Buttons */}
         <div className="flex gap-3 mb-8">
-          <button className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.2)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.3)] hover:-translate-y-0.5">
-            Gửi Token (Nạp)
-          </button>
-          <button className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold rounded-xl text-sm transition-all hover:border-white/20">
-            Rút Tiền
+          <a
+            href="/wallet/deposit"
+            className="flex-1 py-3 text-center bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.2)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.3)] hover:-translate-y-0.5"
+          >
+            💸 Nạp Token
+          </a>
+          <button
+            onClick={() => {
+              import('sonner').then(({ toast }) => toast.info('Chức năng rút tiền sắp ra mắt!'));
+            }}
+            className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold rounded-xl text-sm transition-all hover:border-white/20"
+          >
+            📤 Rút Tiền
           </button>
         </div>
 

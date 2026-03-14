@@ -2,4 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export { EscrowCore__factory } from "./EscrowCore__factory";
+export { ICreditScoreSBT__factory } from "./ICreditScoreSBT__factory";
 export { ISwapRouter__factory } from "./ISwapRouter__factory";

@@ -199,21 +199,6 @@ services:
       - marketplace-network
     restart: unless-stopped
 
-  ai-service:
-    image: {username}/marketplace-ai:latest
-    container_name: marketplace-ai
-    environment:
-      GROQ_API_KEY: {groq_key}
-      GROQ_MODEL: llama-3.1-8b-instant
-      MAIN_SERVICE_URL: http://main-api:3001
-    ports:
-      - '127.0.0.1:3005:3005'
-    depends_on:
-      - main-api
-    networks:
-      - marketplace-network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
   payment_postgres_data:

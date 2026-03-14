@@ -3,3 +3,5 @@
 /* eslint-disable */
 import type * as escrowCoreSol from "./EscrowCore.sol";
 export type { escrowCoreSol };
+export type { CreditScoreSBT } from "./CreditScoreSBT";
+export type { ProductNFT } from "./ProductNFT";

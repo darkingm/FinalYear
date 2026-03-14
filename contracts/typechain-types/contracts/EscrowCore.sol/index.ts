@@ -2,4 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { EscrowCore } from "./EscrowCore";
+export type { ICreditScoreSBT } from "./ICreditScoreSBT";
 export type { ISwapRouter } from "./ISwapRouter";

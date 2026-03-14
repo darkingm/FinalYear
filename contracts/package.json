@@ -7,6 +7,9 @@
     "test": "hardhat test",
     "deploy:mumbai": "hardhat run scripts/deploy.ts --network polygonMumbai",
     "deploy:polygon": "hardhat run scripts/deploy.ts --network polygon",
+    "deploy:rwa:testnet": "hardhat run scripts/deploy-rwa.ts --network polygonMumbai",
+    "deploy:rwa:mainnet": "hardhat run scripts/deploy-rwa.ts --network polygon",
+    "deploy:rwa:local": "hardhat run scripts/deploy-rwa.ts --network localhost",
     "verify": "hardhat verify --network polygonMumbai"
   },
   "keywords": [],

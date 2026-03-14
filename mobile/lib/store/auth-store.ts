@@ -31,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await SecureStore.getItemAsync('jwt_token');
       const userStr = await SecureStore.getItemAsync('user_data');
       if (token && userStr) {
+        global.__jwt_token = token; // expose for AI service
         set({ token, user: JSON.parse(userStr), isAuthenticated: true, isLoading: false });
       } else {
         set({ isLoading: false });
@@ -45,12 +46,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { token, user } = res.data;
     await SecureStore.setItemAsync('jwt_token', token);
     await SecureStore.setItemAsync('user_data', JSON.stringify(user));
+    global.__jwt_token = token; // expose for AI service
     set({ token, user, isAuthenticated: true });
   },
 
   logout: async () => {
     await SecureStore.deleteItemAsync('jwt_token');
     await SecureStore.deleteItemAsync('user_data');
+    global.__jwt_token = undefined;
     set({ token: null, user: null, isAuthenticated: false });
   },
 }));
+

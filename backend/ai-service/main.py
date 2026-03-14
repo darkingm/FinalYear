@@ -5,6 +5,10 @@ from typing import List, Optional
 import httpx
 import os
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 app = FastAPI(title="CryptoMarket AI Service")
 

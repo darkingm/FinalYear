@@ -29,7 +29,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CryptoMarket cần truy cập thư viện ảnh để đăng ảnh sản phẩm"
+        }
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

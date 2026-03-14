@@ -30,10 +30,18 @@ start "Frontend" cmd /k "cd /d %~dp0frontend && npm install && npm run dev"
 timeout /t 2 /nobreak >nul
 
 start "Contract - Hardhat Node" cmd /k "cd /d %~dp0contracts && npm install && npx hardhat node"
+timeout /t 2 /nobreak >nul
+
+start "AI Service - Groq Chat" cmd /k "cd /d %~dp0backend\ai-service && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 3005 --reload"
+timeout /t 2 /nobreak >nul
+
+start "Mobile App - Expo" cmd /k "cd /d %~dp0mobile && npx expo start"
 
 echo.
 echo ================================================
-echo    Da mo 4 cua so: Main API, Payment API, FE, Hardhat node
-echo    Sau khi chay xong, mo: http://localhost:3000
+echo    Da mo 6 cua so: Main API, Payment API, FE, Hardhat, AI Service, Mobile
+echo    Web:    http://localhost:3000
+echo    AI:     http://localhost:3005
+echo    Mobile: Scan QR bang Expo Go app
 echo ================================================
 exit /b 0

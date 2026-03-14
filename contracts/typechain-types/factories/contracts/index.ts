@@ -2,3 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as escrowCoreSol from "./EscrowCore.sol";
+export { CreditScoreSBT__factory } from "./CreditScoreSBT__factory";
+export { ProductNFT__factory } from "./ProductNFT__factory";

@@ -231,6 +231,26 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Web3 Credit Score Link */}
+              <div className="bg-gradient-to-br from-[#131722] to-black border border-yellow-500/20 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-yellow-500/50 transition">
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                  <Shield className="w-24 h-24" />
+                </div>
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-2 text-yellow-500">
+                    <Shield className="w-6 h-6" />
+                    <h3 className="font-bold text-lg">Web3 Credit Score</h3>
+                  </div>
+                  <p className="text-sm text-gray-400 mb-6">Xếp hạng uy tín, kiểm tra phân cấp rủi ro & đặc quyền ví của bạn.</p>
+                  <Button 
+                    onClick={() => router.push('/profile/credit-score')} 
+                    className="w-full bg-yellow-500/10 hover:bg-yellow-500 hover:text-black text-yellow-500 border border-yellow-500/50 transition font-bold"
+                  >
+                    Xem Điểm SBT Ngay
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Main Content Area */}
