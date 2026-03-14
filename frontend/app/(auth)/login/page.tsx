@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,22 +9,42 @@ import * as z from 'zod';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Eye, EyeOff, Mail, Lock, Zap, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Zap, Loader2, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 
 export default function LoginPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [facebookLoading, setFacebookLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
   const [showPw, setShowPw] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || '';
 
+  // Map NextAuth error codes to user-friendly messages
+  const ERROR_MESSAGES: Record<string, string> = {
+    INVALID_CREDENTIALS: 'Email/mật khẩu không đúng',
+    TOO_MANY_REQUESTS: 'Quá nhiều lần thử. Vui lòng thử lại sau 5 phút',
+    ACCOUNT_SUSPENDED: 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ',
+    INVALID_SIGNATURE: 'Chữ ký ví không hợp lệ',
+    OAuthAccountNotLinked: 'Email đã được đăng ký bằng phương thức khác',
+    OAuthSignin: 'Đăng nhập OAuth thất bại. Vui lòng thử lại',
+    Callback: 'Lỗi xác thực. Vui lòng thử lại',
+  };
+
   useEffect(() => { setMounted(true); }, []);
+
+  // Read NextAuth error from URL (e.g. ?error=INVALID_CREDENTIALS)
+  useEffect(() => {
+    const err = searchParams?.get('error');
+    if (err) {
+      setAuthError(ERROR_MESSAGES[err] || 'Đăng nhập thất bại. Vui lòng thử lại');
+    }
+  }, [searchParams]);
 
   const loginSchema = z.object({
     emailOrUsername: z.string().min(1, t('auth.emailOrUsername', 'Email or Username') + ' is required'),
@@ -42,6 +62,7 @@ export default function LoginPage() {
       return;
     }
     setIsLoading(true);
+    setAuthError(null);
     try {
       const result = await signIn('credentials', {
         email: data.emailOrUsername,
@@ -49,36 +70,30 @@ export default function LoginPage() {
         redirect: false,
       });
       if (result?.error) {
-        toast.error(t('auth.emailPasswordIncorrect', 'Email/password incorrect'));
-      } else {
-        toast.success(t('auth.loginSuccess', 'Login successful!'));
-        router.push('/');
+        const msg = ERROR_MESSAGES[result.error] || 'Đăng nhập thất bại. Vui lòng thử lại';
+        setAuthError(msg);
+        toast.error(msg);
+      } else if (result?.ok) {
+        toast.success('Đăng nhập thành công!');
+        const callbackUrl = searchParams?.get('callbackUrl') || '/';
+        router.push(callbackUrl);
         router.refresh();
       }
     } catch {
-      toast.error(t('auth.loginFailed', 'Login failed'));
+      setAuthError('Đăng nhập thất bại. Vui lòng thử lại');
+      toast.error('Đăng nhập thất bại. Vui lòng thử lại');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
+  const handleSocialSignIn = async (provider: 'google' | 'facebook') => {
+    setSocialLoading(provider);
     try {
-      await signIn('google', { callbackUrl: '/' });
+      await signIn(provider, { callbackUrl: '/' });
     } catch {
-      toast.error(t('auth.loginFailed', 'Login failed'));
-      setGoogleLoading(false);
-    }
-  };
-
-  const handleFacebookSignIn = async () => {
-    setFacebookLoading(true);
-    try {
-      await signIn('facebook', { callbackUrl: '/' });
-    } catch {
-      toast.error(t('auth.loginFailed', 'Login failed'));
-      setFacebookLoading(false);
+      toast.error('Đăng nhập thất bại. Vui lòng thử lại');
+      setSocialLoading(null);
     }
   };
 
@@ -120,11 +135,11 @@ export default function LoginPage() {
         {/* Social Login */}
         <div className="space-y-3 mb-6">
           <button
-            onClick={handleGoogleSignIn}
-            disabled={googleLoading}
+            onClick={() => handleSocialSignIn('google')}
+            disabled={!!socialLoading}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-card border border-border rounded-xl text-foreground hover:bg-secondary/50 hover:border-border/80 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm disabled:opacity-60 shadow-sm"
           >
-            {googleLoading ? (
+            {socialLoading === 'google' ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -134,22 +149,22 @@ export default function LoginPage() {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
             )}
-            {t('auth.loginWithGoogle', 'Continue with Google')}
+            Tiếp tục với Google
           </button>
 
           <button
-            onClick={handleFacebookSignIn}
-            disabled={facebookLoading}
+            onClick={() => handleSocialSignIn('facebook')}
+            disabled={!!socialLoading}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#1877F2]/10 border border-[#1877F2]/20 rounded-xl text-foreground hover:bg-[#1877F2]/20 hover:border-[#1877F2]/40 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm disabled:opacity-60 shadow-sm"
           >
-            {facebookLoading ? (
+            {socialLoading === 'facebook' ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <svg className="w-5 h-5" fill="#1877F2" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
               </svg>
             )}
-            {t('auth.loginWithFacebook', 'Continue with Facebook')}
+            Tiếp tục với Facebook
           </button>
         </div>
 
@@ -223,6 +238,14 @@ export default function LoginPage() {
                 onExpire={() => setCaptchaToken(null)}
                 theme="dark"
               />
+            </div>
+          )}
+
+          {/* Inline error banner */}
+          {authError && (
+            <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{authError}</span>
             </div>
           )}
 

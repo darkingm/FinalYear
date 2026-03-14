@@ -2,7 +2,22 @@ import NextAuth, { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import FacebookProvider from 'next-auth/providers/facebook';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { apiClient } from '@/lib/api/client';
+import axios from 'axios';
+
+// ─── SSR-safe API client ─────────────────────────────────────────────────────
+// On server (NextAuth runs server-side), use the internal API URL.
+// NEXT_PUBLIC_* env vars are available on both server and client in Next.js.
+const SERVER_API_URL =
+  process.env.INTERNAL_API_URL ||          // Docker internal network
+  process.env.NEXT_PUBLIC_API_URL ||        // Fallback to public URL
+  'http://localhost:3001';
+
+const serverApi = axios.create({
+  baseURL: SERVER_API_URL,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 10000,
+  withCredentials: false,                   // Server-to-server — no cookies needed
+});
 
 export const authOptions: NextAuthOptions = {
   useSecureCookies: process.env.NODE_ENV === 'production',
@@ -51,30 +66,37 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'Email and Password',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        email: { label: 'Email or Username', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
         try {
-          const response = await apiClient.post('/api/auth/login', {
-            email: credentials?.email,
-            password: credentials?.password,
+          const response = await serverApi.post('/api/auth/login', {
+            email: credentials.email,
+            password: credentials.password,
           });
 
-          if (response.data && response.data.user) {
+          const data = response.data;
+          if (data?.user) {
             return {
-              id: response.data.user.user_id,
-              email: response.data.user.email,
-              name: response.data.user.username,
-              image: response.data.user.avatar_url,
-              role: response.data.user.role,
-              accessToken: response.data.accessToken,
+              id: String(data.user.user_id),
+              email: data.user.email,
+              name: data.user.username || data.user.email,
+              image: data.user.avatar_url,
+              role: data.user.role,
+              accessToken: data.accessToken,
             };
           }
           return null;
-        } catch (error) {
-          console.error('Login error:', error);
-          return null;
+        } catch (error: any) {
+          const msg = error.response?.data?.message || 'Login failed';
+          const status = error.response?.status;
+          // Propagate specific errors to login page via NextAuth error query param
+          if (status === 429) throw new Error('TOO_MANY_REQUESTS');
+          if (status === 401) throw new Error('INVALID_CREDENTIALS');
+          if (status === 403) throw new Error('ACCOUNT_SUSPENDED');
+          throw new Error(msg);
         }
       },
     }),
@@ -87,52 +109,54 @@ export const authOptions: NextAuthOptions = {
         signature: { label: 'Signature', type: 'text' },
       },
       async authorize(credentials) {
+        if (!credentials?.address || !credentials?.message || !credentials?.signature) return null;
         try {
-          const response = await apiClient.post('/api/auth/wallet-login', {
-            wallet_address: credentials?.address,
-            message: credentials?.message,
-            signature: credentials?.signature,
+          const response = await serverApi.post('/api/auth/wallet-login', {
+            wallet_address: credentials.address,
+            message: credentials.message,
+            signature: credentials.signature,
           });
 
-          if (response.data && response.data.user) {
+          const data = response.data;
+          if (data?.user) {
             return {
-              id: response.data.user.user_id,
-              email: response.data.user.email,
-              name: response.data.user.username || credentials?.address,
-              role: response.data.user.role,
-              walletAddress: credentials?.address,
-              accessToken: response.data.accessToken,
+              id: String(data.user.user_id),
+              email: data.user.email,
+              name: data.user.username || credentials.address,
+              role: data.user.role,
+              walletAddress: credentials.address,
+              accessToken: data.accessToken,
             };
           }
           return null;
-        } catch (error) {
-          console.error('Wallet login error:', error);
-          return null;
+        } catch (error: any) {
+          const status = error.response?.status;
+          if (status === 401) throw new Error('INVALID_SIGNATURE');
+          throw new Error(error.response?.data?.message || 'Wallet login failed');
         }
       },
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === 'google' || account?.provider === 'facebook') {
         try {
-          // Build plain JSON payload (avoid undefined/circular refs that break JSON)
           const body = {
-            provider: account.provider ?? '',
+            provider: account.provider,
             providerId: account.providerAccountId ?? '',
             email: user.email ?? '',
             name: user.name ?? null,
             image: user.image ?? null,
           };
-          const response = await apiClient.post('/api/auth/oauth', body);
+          const response = await serverApi.post('/api/auth/oauth', body);
 
-          if (response.data && response.data.accessToken) {
+          if (response.data?.accessToken) {
             user.accessToken = response.data.accessToken;
-            user.id = response.data.user.user_id;
+            user.id = String(response.data.user.user_id);
             user.role = response.data.user.role;
           }
-        } catch (error) {
-          console.error('OAuth error:', error);
+        } catch (error: any) {
+          console.error('OAuth signIn error:', error.response?.data || error.message);
           return false;
         }
       }

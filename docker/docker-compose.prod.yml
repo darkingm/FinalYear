@@ -169,8 +169,12 @@ services:
     container_name: marketplace-frontend
     environment:
       NODE_ENV: production
+      # Public URL (browser-side fetch)
       NEXT_PUBLIC_API_URL: https://kienai.id.vn
       NEXT_PUBLIC_PAYMENT_API_URL: https://kienai.id.vn/payment
+      # Internal Docker network URL for server-side calls (NextAuth, SSR)
+      # This avoids routing through internet/nginx for server-to-server calls
+      INTERNAL_API_URL: http://main-api:3001
       NEXT_PUBLIC_BINANCE_WS: wss://stream.binance.com:9443/ws
       NEXT_PUBLIC_HCAPTCHA_SITEKEY: fd6eea20-ea7a-42f0-8eb4-878285a04eea
       NEXT_PUBLIC_PAYPAL_CLIENT_ID: AYxcD1jBUgx2LMY2eoXyM
@@ -184,6 +188,7 @@ services:
       FACEBOOK_CLIENT_ID: 1497732641781702
       FACEBOOK_CLIENT_SECRET: 7bbce842d85baa3c21fca3101b42c832
       PAYPAL_SECRET: EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN
+
     ports:
       - "127.0.0.1:3000:3000" # Chỉ localhost — nginx proxy vào
     depends_on:
