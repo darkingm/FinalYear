@@ -10,7 +10,7 @@ import Image from 'next/image';
 import {
   ShoppingBag, Shield, Zap, ArrowRight, Star, TrendingUp,
   Users, Package, Timer, Flame, Tag, ChevronRight, Eye,
-  BarChart3, Wallet, RefreshCw, Activity, Search, ShoppingCart,
+  BarChart3, Wallet, RefreshCw, Activity, Search,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { productService } from '@/services';
@@ -21,20 +21,14 @@ import { getProductGallery } from '@/lib/utils/product-images';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { LivePriceEstimate } from '@/components/ui/live-price';
+import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
+import { AIChatButton } from '@/components/ui/ai-chat-button';
 
 /* ─── Types ──────────────────────────────────────── */
-interface Product {
-  product_id: number;
-  name: string;
-  description: string;
-  base_price_usd: number;
+type Product = ProductCardData & {
   pricing_mode?: string;
-  price_token?: string;
-  token_symbol?: string;
-  metadata?: { images?: string[]; category?: string };
-  stock?: number;
-}
+  price_token?: string;  // legacy field alias
+};
 
 interface TickerData {
   symbol: string;
@@ -297,228 +291,17 @@ function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boo
   );
 }
 
-/* ─── Flash Sale Card ────────────────────────────── */
-function FlashSaleCard({ product, index, getProductImage, failedImgs, setFailedImgs }: any) {
-  const discount = Math.floor(Math.random() * 40) + 10;
-  const originalPrice = product.base_price_usd * (1 + discount / 100);
-  const stockLeft = Math.floor(Math.random() * 80) + 10;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.06 }}
-    >
-      <Link href={`/products/${product.product_id}`}>
-        <div className="bg-card border border-border rounded-2xl overflow-hidden group hover:border-[#f0b90b]/40 hover:shadow-lg hover:shadow-[#f0b90b]/8 transition-all duration-300">
-          <div className="relative h-48 bg-gradient-to-br from-[#0f1117] to-[#1a1d26] overflow-hidden">
-            <Image
-              src={getProductImage(product, index)}
-              alt={product.name}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-              unoptimized
-              onError={() => setFailedImgs((prev: Set<number>) => new Set(prev).add(product.product_id))}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f1117]/60 to-transparent" />
-            <span className="absolute top-3 left-3 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg shadow-lg">
-              -{discount}%
-            </span>
-            {product.metadata?.category && (
-              <span className="absolute top-3 right-3 px-2 py-1 bg-card/80 backdrop-blur-sm text-foreground text-xs rounded-lg border border-border">
-                {product.metadata.category}
-              </span>
-            )}
-          </div>
-          <div className="p-4">
-            <h3 className="font-semibold text-sm text-foreground mb-1 line-clamp-1 group-hover:text-[#f0b90b] transition-colors">
-              {product.name}
-            </h3>
-            <p className="text-muted-foreground text-xs mb-3 line-clamp-2">{product.description}</p>
-
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                {product.token_id || product.price_token ? (
-                  <div className="flex flex-col">
-                    <span className="text-lg font-bold text-[#f0b90b]">
-                      {Number(product.price_token).toFixed(4)} {product.token_symbol || 'USDT'}
-                    </span>
-                    <LivePriceEstimate tokenAmount={Number(product.price_token)} tokenSymbol={product.token_symbol || 'USDT'} />
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-lg font-bold text-[#f0b90b]">
-                      ${Number(product.base_price_usd).toFixed(2)}
-                    </span>
-                    <span className="text-xs text-muted-foreground line-through ml-2">
-                      ${originalPrice.toFixed(2)}
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-1 text-yellow-400">
-                <Star className="w-3 h-3 fill-current" />
-                <span className="text-xs text-muted-foreground">4.8</span>
-              </div>
-            </div>
-
-            {/* Stock bar */}
-            <div className="mb-3">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-muted-foreground">Đã bán {100 - stockLeft}%</span>
-                <span className="text-red-600 dark:text-red-400 font-medium">Còn {stockLeft} sản phẩm</span>
-              </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full"
-                  style={{ width: `${100 - stockLeft}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-2">
-              <Button
-                onClick={(e) => {
-                  e.preventDefault();
-                  useCartStore.getState().addItem({
-                    product_id: product.product_id,
-                    name: product.name,
-                    base_price_usd: Number(product.base_price_usd),
-                    metadata: product.metadata,
-                  });
-                  toast.success('Đã thêm vào giỏ hàng');
-                }}
-                variant="outline"
-                className="flex-1 bg-background/5 border-border hover:bg-black/5 dark:hover:bg-white/10 text-foreground transition-all h-8 text-xs font-medium px-2"
-              >
-                <ShoppingCart className="w-3 h-3 mr-1" /> Cart
-              </Button>
-              <Button
-                onClick={(e) => { e.preventDefault(); window.location.href = `/products/${product.product_id}`; }}
-                className="flex-1 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-semibold h-8 text-xs px-2 shadow shadow-yellow-500/20"
-              >
-                Mua ngay
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-  );
-}
-
-/* ─── Product Card ───────────────────────────────── */
-function ProductCard({ product, index, getProductImage, failedImgs, setFailedImgs }: any) {
-  const addItem = useCartStore((state) => state.addItem);
-  const { t } = useTranslation();
-
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    addItem({
-      product_id: product.product_id,
-      name: product.name,
-      base_price_usd: Number(product.base_price_usd),
-      metadata: product.metadata,
-    });
-    toast.success('Đã thêm vào giỏ hàng');
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.05 }}
-      className="h-full"
-    >
-      <Link href={`/products/${product.product_id}`} className="block h-full">
-        <div className="bg-card h-full flex flex-col border border-border rounded-2xl overflow-hidden group hover:border-white/20 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer">
-          <div className="relative h-44 bg-gradient-to-br from-[#0f1117] to-[#1a1d26] overflow-hidden flex-shrink-0">
-            <Image
-              src={getProductImage(product, index)}
-              alt={product.name}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-              unoptimized
-              onError={() => setFailedImgs((prev: Set<number>) => new Set(prev).add(product.product_id))}
-            />
-            {product.metadata?.category && (
-              <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-sm text-xs text-gray-300 border border-border">
-                {product.metadata.category}
-              </span>
-            )}
-            <button className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400">
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="p-4 flex flex-col flex-grow">
-            <h3 className="font-semibold text-sm text-foreground mb-1 line-clamp-1 group-hover:text-primary transition-colors">
-              {product.name}
-            </h3>
-            <p className="text-muted-foreground text-xs mb-3 line-clamp-2 min-h-[32px]">{product.description}</p>
-            <div className="mt-auto">
-              <div className="flex justify-between items-center mb-3">
-                {product.token_id || product.price_token ? (
-                  <div className="flex flex-col items-start gap-1 flex-1 min-w-0">
-                    <span className="text-base font-bold text-foreground overflow-hidden text-ellipsis whitespace-nowrap" title={`${Number(product.price_token).toFixed(4)} ${product.token_symbol || 'USDT'}`}>
-                      {Number(product.price_token).toFixed(4)} {product.token_symbol || 'USDT'}
-                    </span>
-                    <LivePriceEstimate tokenAmount={Number(product.price_token)} tokenSymbol={product.token_symbol || 'USDT'} />
-                  </div>
-                ) : (
-                  <span className="text-base font-bold text-foreground">
-                    ${Number(product.base_price_usd).toFixed(2)}
-                  </span>
-                )}
-                <div className="flex items-center gap-1 text-yellow-500 flex-shrink-0 self-start mt-1">
-                  <Star className="w-3.5 h-3.5 fill-current" />
-                  <span className="text-xs text-muted-foreground">4.8</span>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={(e) => { e.preventDefault(); handleAddToCart(e); }}
-                  variant="outline"
-                  className="flex-1 bg-background border-border hover:bg-primary/10 hover:border-primary/50 text-foreground transition-all h-8 text-xs font-medium px-2"
-                >
-                  <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
-                  Cart
-                </Button>
-                <Button
-                  onClick={(e) => { e.preventDefault(); window.location.href = `/products/${product.product_id}`; }}
-                  className="flex-1 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-semibold h-8 text-xs px-2 shadow shadow-yellow-500/20"
-                >
-                  Mua ngay
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-  );
-}
-
 /* ─── Main Page ──────────────────────────────────── */
 export default function HomePage() {
   const { t } = useTranslation();
   const { isAuthenticated, isLoading } = useAuth();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductCardData[]>([]);
   const [prodLoading, setProdLoading] = useState(true);
-  const [failedImgs, setFailedImgs] = useState<Set<number>>(new Set());
   const [tickers, setTickers] = useState<TickerData[]>([]);
   const [tickerLoading, setTickerLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
   const [coinSearch, setCoinSearch] = useState('');
   const flashTimer = useFlashSaleTimer();
-
-  const getProductImage = useCallback((product: Product, index: number) => {
-    if (failedImgs.has(product.product_id)) return PRODUCT_IMAGES[index % PRODUCT_IMAGES.length];
-    const gallery = getProductGallery(product.name, product.metadata?.category, product.metadata?.images);
-    return gallery[0] || PRODUCT_IMAGES[index % PRODUCT_IMAGES.length];
-  }, [failedImgs]);
 
   useEffect(() => {
     (async () => {
@@ -551,23 +334,25 @@ export default function HomePage() {
     t.symbol.toLowerCase().includes(coinSearch.toLowerCase())
   );
 
+  const flashProducts  = products.slice(0, 6);
+  const featuredProducts = products.slice(6, 14);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-12 h-12 rounded-full border-2 border-[#f0b90b] border-t-transparent animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Đang tải...</p>
+          <p className="text-muted-foreground text-sm">Đang tải...</p>
         </div>
       </div>
     );
   }
 
-  const flashProducts = products.length > 0 ? products.slice(0, 6) : [];
-  const featuredProducts = products.length > 6 ? products.slice(6, 14) : products;
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      {/* Floating AI Chat Button */}
+      <AIChatButton />
 
       <main>
         {/* ── Hero Section ── */}
@@ -910,28 +695,35 @@ export default function HomePage() {
 
             {prodLoading ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {[1, 2, 3, 4, 5, 6].map(i => (
+                {[1,2,3,4,5,6].map(i => (
                   <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border animate-pulse">
-                    <div className="h-48 bg-white/5" />
+                    <div className="h-48 bg-muted" />
                     <div className="p-4 space-y-2">
-                      <div className="h-3 bg-white/5 rounded w-3/4" />
-                      <div className="h-4 bg-white/5 rounded w-1/2" />
+                      <div className="h-3 bg-muted rounded w-3/4" />
+                      <div className="h-4 bg-muted rounded w-1/2" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {flashProducts.map((product, i) => (
-                  <FlashSaleCard
-                    key={product.product_id}
-                    product={product}
-                    index={i}
-                    getProductImage={getProductImage}
-                    failedImgs={failedImgs}
-                    setFailedImgs={setFailedImgs}
-                  />
-                ))}
+                {flashProducts.map((product, i) => {
+                  const discount = 10 + (i * 7 % 35);
+                  const stockLeft = 15 + (product.product_id % 70);
+                  return (
+                    <ProductCard
+                      key={product.product_id}
+                      product={{
+                        ...product,
+                        // inject flash-sale discount as metadata
+                        metadata: { ...product.metadata, flash_discount: discount, stock_left: stockLeft }
+                      }}
+                      index={i}
+                      variant="grid"
+                      showAddToCart
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1004,9 +796,8 @@ export default function HomePage() {
                     key={product.product_id}
                     product={product}
                     index={i}
-                    getProductImage={getProductImage}
-                    failedImgs={failedImgs}
-                    setFailedImgs={setFailedImgs}
+                    variant="grid"
+                    showAddToCart
                   />
                 ))}
               </div>
