@@ -7,19 +7,24 @@ import 'dotenv/config';
 import axios from 'axios';
 
 export class PayPalService {
-  private client: paypal.core.PayPalHttpClient;
+  private _client: paypal.core.PayPalHttpClient | null = null;
 
-  constructor() {
+  /** Lazy-init PayPal client — only throws when actually used, not on startup */
+  private get client(): paypal.core.PayPalHttpClient {
+    if (this._client) return this._client;
+
     const clientId = (process.env.PAYPAL_CLIENT_ID ?? '').trim();
     const clientSecret = (process.env.PAYPAL_SECRET ?? '').trim();
     if (!clientId || !clientSecret) {
-      throw new Error('PAYPAL_CLIENT_ID and PAYPAL_SECRET must be set in environment');
+      throw new AppError('PayPal is not configured (PAYPAL_CLIENT_ID / PAYPAL_SECRET missing)', 503);
     }
     const environment = process.env.PAYPAL_MODE === 'production'
       ? new paypal.core.LiveEnvironment(clientId, clientSecret)
       : new paypal.core.SandboxEnvironment(clientId, clientSecret);
-    
-    this.client = new paypal.core.PayPalHttpClient(environment);
+
+    this._client = new paypal.core.PayPalHttpClient(environment);
+    logger.info('PayPal client initialized successfully');
+    return this._client;
   }
 
   async createOrder(orderId: number) {
@@ -181,6 +186,10 @@ export class PayPalService {
   private async getAccessToken(): Promise<string> {
     const clientId = (process.env.PAYPAL_CLIENT_ID ?? '').trim();
     const clientSecret = (process.env.PAYPAL_SECRET ?? '').trim();
+    if (!clientId || !clientSecret) {
+      throw new AppError('PayPal credentials not configured', 503);
+    }
+
     const isProd = process.env.PAYPAL_MODE === 'production';
     const baseUrl = isProd ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
     
