@@ -1,8 +1,10 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useParams } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import { getCoinDetail, CoinDetailData } from '@/lib/api/binance-detail';
 import {
   TrendingUp, TrendingDown, Activity, BarChart3, Clock, ArrowLeft,
@@ -23,7 +25,7 @@ import { ShoppingCart } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // Lazy load chart
-const CoinChart = dynamic(
+const CoinChart = nextDynamic(
   () => import('@/components/charts/CoinChart').then((mod) => mod.CoinChart),
   {
     loading: () => <div className="w-full h-full bg-card animate-pulse rounded-lg flex items-center justify-center">

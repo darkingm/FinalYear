@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -48,50 +50,50 @@ export default function WishlistPage() {
     }
   };
 
-  if (authLoading || !isAuthenticated) {
+  if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
+  if (!isAuthenticated) return null;
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="fixed top-0 right-0 w-[40%] h-[40%] bg-rose-500/3 blur-[120px] rounded-full pointer-events-none" />
       <Header />
 
       <main className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              <Heart className="w-8 h-8 text-destructive fill-destructive" />
-              My Wishlist
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              {items.length} {items.length === 1 ? 'item' : 'items'}
-            </p>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+              <Heart className="w-5 h-5 text-rose-400 fill-rose-400" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black text-foreground">Danh sách yêu thích</h1>
+              <p className="text-muted-foreground text-sm">
+                {items.length} sản phẩm
+              </p>
+            </div>
           </div>
-        </div>
 
         {/* Empty */}
         {items.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center py-16"
+            className="text-center py-20 bg-card border border-border rounded-3xl"
           >
-            <Heart className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">Your wishlist is empty</h2>
+            <Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2 text-foreground">Danh sách yêu thích trống</h2>
             <p className="text-muted-foreground mb-6">
-              Browse products and add your favorites here
+              Lưu sản phẩm yêu thích để mua sau
             </p>
             <Link href="/products">
-              <Button>Browse Products</Button>
+              <button className="px-6 py-2.5 bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20 rounded-xl text-sm font-bold hover:bg-[#f0b90b]/20 transition-colors">
+                Khám phá sản phẩm →
+              </button>
             </Link>
           </motion.div>
         )}

@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -10,8 +12,7 @@ import {
     AlertTriangle, CheckCircle, XCircle, ExternalLink,
     User, Coins, DollarSign, Zap, RefreshCw, Info,
 } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://103.20.96.79:3001';
+import { apiClient } from '@/lib/api/client';
 
 interface P2POffer {
     offer_id: number; offer_type: 'BUY' | 'SELL'; creator_id: number;
@@ -67,46 +68,43 @@ export default function P2PPage() {
         if (amount) params.set('amount', amount);
 
         try {
-            const res = await fetch(`${API}/api/p2p/offers?${params}`);
-            const d = await res.json();
+            const res = await apiClient.get(`/api/p2p/offers?${params}`);
+            const d = res.data;
             if (d.success) { setOffers(d.data); setTotal(d.pagination?.total || 0); }
-        } finally { setLoading(false); }
+        } catch { /* no offers */ }
+        finally { setLoading(false); }
     }, [tab, page, selectedToken, fiat, payment, amount]);
 
     useEffect(() => { fetchOffers(); }, [fetchOffers]);
 
     useEffect(() => {
-        fetch(`${API}/api/products/tokens`)
-            .then(r => r.json())
-            .then(d => { if (d.success) setTokens(d.data); });
+        apiClient.get('/api/products/tokens')
+            .then(res => { if (res.data?.success) setTokens(res.data.data); })
+            .catch(() => {});
     }, []);
 
     const handlePlaceOrder = async () => {
         if (!orderOffer) return;
-        const token = localStorage.getItem('auth_token');
-        if (!token) { router.push('/login'); return; }
-        if (!orderAmount || parseFloat(orderAmount) <= 0) { setOrderError('Enter a valid amount'); return; }
-        if (!orderPayment) { setOrderError('Select a payment method'); return; }
+        if (!orderAmount || parseFloat(orderAmount) <= 0) { setOrderError('Nhập số tiền hợp lệ'); return; }
+        if (!orderPayment) { setOrderError('Chọn phương thức thanh toán'); return; }
 
         setOrdering(true);
         setOrderError('');
         try {
-            const res = await fetch(`${API}/api/p2p/orders`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                    offer_id: orderOffer.offer_id,
-                    fiat_amount: parseFloat(orderAmount),
-                    payment_method: orderPayment,
-                }),
+            const res = await apiClient.post('/api/p2p/orders', {
+                offer_id: orderOffer.offer_id,
+                fiat_amount: parseFloat(orderAmount),
+                payment_method: orderPayment,
             });
-            const d = await res.json();
+            const d = res.data;
             if (d.success) {
                 setOrderOffer(null);
                 router.push(`/p2p/orders/${d.data.p2p_order_id}`);
             } else {
-                setOrderError(d.message || 'Failed to place order');
+                setOrderError(d.message || 'Đặt lệnh thất bại');
             }
+        } catch (err: any) {
+            setOrderError(err.response?.data?.message || 'Đặt lệnh thất bại');
         } finally { setOrdering(false); }
     };
 
