@@ -4,41 +4,48 @@ import {
   polygon,
   polygonMumbai,
   arbitrum,
-  arbitrumGoerli,
   polygonAmoy as baseAmoy,
   baseSepolia,
   bscTestnet,
-  optimismSepolia,
-  arbitrumSepolia
+  arbitrumSepolia,
+  mainnet,
 } from 'wagmi/chains';
 import { defineChain } from 'viem';
 
-// Polygon Amoy testnet
+// ─── TESTNET MODE ENV FLAG ─────────────────────────────────────────────────
+// Set NEXT_PUBLIC_TESTNET_MODE=true in .env / docker-compose to enforce testnet
+export const TESTNET_MODE = process.env.NEXT_PUBLIC_TESTNET_MODE === 'true';
+export const DEFAULT_CHAIN_ID = parseInt(
+  process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || '80002', // Polygon Amoy by default
+  10
+);
+
+// ─── Polygon Amoy testnet (multiple RPC fallbacks) ────────────────────────
 export const polygonAmoy = defineChain({
   ...baseAmoy,
   rpcUrls: {
     ...baseAmoy.rpcUrls,
     default: {
       http: [
+        'https://rpc-amoy.polygon.technology',
         'https://polygon-amoy.drpc.org',
         'https://polygon-amoy.blockpi.network/v1/rpc/public',
-        'https://rpc-amoy.polygon.technology'
-      ]
+      ],
     },
     public: {
       http: [
+        'https://rpc-amoy.polygon.technology',
         'https://polygon-amoy.drpc.org',
         'https://polygon-amoy.blockpi.network/v1/rpc/public',
-        'https://rpc-amoy.polygon.technology'
-      ]
+      ],
     },
   },
   blockExplorers: {
-    default: { name: 'OKLink', url: 'https://www.oklink.com/amoy' },
+    default: { name: 'PolygonScan Amoy', url: 'https://amoy.polygonscan.com' },
   },
 });
 
-// Hardhat / Anvil local node (chainId 31337)
+// ─── Hardhat / Anvil local node ────────────────────────────────────────────
 export const localhost = defineChain({
   id: 31337,
   name: 'Localhost',
@@ -48,36 +55,31 @@ export const localhost = defineChain({
   },
 });
 
-const allChains = [
-  polygonMumbai,
-  polygonAmoy,
-  polygon,
-  localhost,
-  arbitrum,
-  arbitrumGoerli,
-  baseSepolia,
-  bscTestnet,
-  optimismSepolia,
-  arbitrumSepolia
+// ─── Chain ordering: TESTNET FIRST, then mainnet ──────────────────────────
+// RainbowKit will show the first chain as "default" in UI
+const testnets = [
+  polygonAmoy,    // 80002  ← DEFAULT for testing
+  bscTestnet,     // 97
+  arbitrumSepolia,// 421614
+  baseSepolia,    // 84532
+  localhost,      // 31337
 ] as const;
 
-/**
- * Wagmi v2 config with SSR support.
- * 
- * IMPORTANT: Use a module-level singleton so the config is created ONCE
- * per process (server) or once per page load (browser).
- * This prevents "WalletConnect Core is already initialized" errors.
- * 
- * The `ssr: true` flag tells wagmi to:
- * - Serialize state to cookies for hydration
- * - NOT require browser APIs during initial render
- * - Allow hooks to be called during SSR without throwing
- */
+const mainnets = [
+  polygon,        // 137
+  arbitrum,       // 42161
+  mainnet,        // 1
+] as const;
+
+// Testnets go first so MetaMask defaults to Amoy
+const allChains = [...testnets, ...mainnets] as const;
+
+// ─── Wagmi v2 config ────────────────────────────────────────────────────────
 const wagmiConfig: Config = getDefaultConfig({
   appName: 'Web3Market',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'cea17a07a0cb8c74b022c41e21294643',
-  chains: allChains as unknown as readonly [typeof localhost, ...typeof allChains],
-  ssr: true, // Critical: enables SSR-safe wagmi hooks
+  chains: allChains as unknown as readonly [typeof polygonAmoy, ...typeof allChains],
+  ssr: true,
 }) as unknown as Config;
 
 export function getWagmiConfig(): Config {
@@ -86,16 +88,22 @@ export function getWagmiConfig(): Config {
 
 export { allChains as chains };
 
-// Contract addresses by chain
+// ─── Escrow contract addresses per chain ──────────────────────────────────
 export const ESCROW_CONTRACTS: Record<number, string> = {
-  31337: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_LOCALHOST || '0x0000000000000000000000000000000000000000',
-  137: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON || '0x0000000000000000000000000000000000000000',
-  42161: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARBITRUM || '0x0000000000000000000000000000000000000000',
-  80001: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON || '0x0000000000000000000000000000000000000000',
-  80002: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY || process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
-  421613: '0x0000000000000000000000000000000000000000',
-  84532: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BASE_SEPOLIA || '0x0000000000000000000000000000000000000000',
-  97: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BSC_TESTNET || '0x0000000000000000000000000000000000000000',
-  11155420: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_OP_SEPOLIA || '0x0000000000000000000000000000000000000000',
-  421614: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARB_SEPOLIA || '0x0000000000000000000000000000000000000000',
+  // Testnets (active for development)
+  80002:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
+  31337:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_LOCALHOST    || '0x0000000000000000000000000000000000000000',
+  97:     process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BSC_TESTNET  || '0x0000000000000000000000000000000000000000',
+  421614: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARB_SEPOLIA  || '0x0000000000000000000000000000000000000000',
+  84532:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BASE_SEPOLIA || '0x0000000000000000000000000000000000000000',
+  // Mainnets (NOT active yet — zero address means not deployed)
+  137:    process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON      || '0x0000000000000000000000000000000000000000',
+  42161:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARBITRUM     || '0x0000000000000000000000000000000000000000',
+  1:      process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ETH          || '0x0000000000000000000000000000000000000000',
 };
+
+// Helper: check if a chain has an active escrow contract
+export function hasEscrow(chainId: number): boolean {
+  const addr = ESCROW_CONTRACTS[chainId];
+  return !!addr && addr !== '0x0000000000000000000000000000000000000000';
+}

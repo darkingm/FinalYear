@@ -24,7 +24,8 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseUnits, formatUnits, erc20Abi, type Address } from 'viem';
 import { getCoinLogo } from '@/lib/utils/coin-logos';
-import { ESCROW_CONTRACTS } from '@/lib/web3/config';
+import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
+
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface Order {
@@ -47,17 +48,22 @@ interface CryptoQuote {
 const DEFAULT_TOKENS = ['USDT', 'USDC', 'MATIC', 'ETH', 'BNB'];
 
 /* Supported networks for payment — testnet first for dev convenience */
-export const SUPPORTED_NETWORKS: { chainId: number; name: string; color: string; icon: string; nativeSym: string; testnet: boolean }[] = [
-  { chainId: 80002,  name: 'Polygon Amoy (Testnet)', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: true  },
-  { chainId: 31337,  name: 'Localhost (Hardhat)',    color: '#22c55e', icon: '🖥️', nativeSym: 'ETH',  testnet: true  },
+export const ALL_PAYMENT_NETWORKS: { chainId: number; name: string; color: string; icon: string; nativeSym: string; testnet: boolean }[] = [
+  { chainId: 80002,  name: 'Polygon Amoy',         color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: true  },
+  { chainId: 31337,  name: 'Localhost (Hardhat)',   color: '#22c55e', icon: '🖥️', nativeSym: 'ETH',  testnet: true  },
   { chainId: 97,     name: 'BNB Testnet',           color: '#f0b90b', icon: '🟡', nativeSym: 'tBNB', testnet: true  },
   { chainId: 421614, name: 'Arbitrum Sepolia',      color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: true  },
   { chainId: 84532,  name: 'Base Sepolia',          color: '#0052ff', icon: '🔵', nativeSym: 'ETH',  testnet: true  },
-  { chainId: 137,    name: 'Polygon Mainnet',       color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: false },
-  { chainId: 42161,  name: 'Arbitrum One',         color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: false },
-  { chainId: 56,     name: 'BNB Chain',            color: '#f0b90b', icon: '🟡', nativeSym: 'BNB',  testnet: false },
-  { chainId: 1,      name: 'Ethereum',             color: '#627eea', icon: '💎', nativeSym: 'ETH',  testnet: false },
+  { chainId: 137,    name: 'Polygon ⚠️ Mainnet',    color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: false },
+  { chainId: 42161,  name: 'Arbitrum One ⚠️',        color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: false },
+  { chainId: 56,     name: 'BNB Chain ⚠️',           color: '#f0b90b', icon: '🟡', nativeSym: 'BNB',  testnet: false },
+  { chainId: 1,      name: 'Ethereum ⚠️',            color: '#627eea', icon: '💎', nativeSym: 'ETH',  testnet: false },
 ];
+
+// When TESTNET_MODE=true, hide mainnet options to avoid confusion / accidental real payments
+export const SUPPORTED_NETWORKS = TESTNET_MODE
+  ? ALL_PAYMENT_NETWORKS.filter(n => n.testnet)
+  : ALL_PAYMENT_NETWORKS;
 
 const CHAIN_META: Record<number, { name: string; color: string; icon: string; nativeSym: string }> =
   Object.fromEntries(SUPPORTED_NETWORKS.map(n => [n.chainId, { name: n.name, color: n.color, icon: n.icon, nativeSym: n.nativeSym }]));
@@ -167,16 +173,26 @@ export default function CheckoutPage() {
   const acceptPayPal = order?.product_metadata?.accepted_tokens?.fiat?.includes('paypal') ?? true;
   const coinPrices = useCoinPrices(acceptedCrypto);
 
-  // Auto-set preferred network to current MetaMask chain when connected
+  // Auto-set preferred network:
+  // 1. If MetaMask is on a supported network → use it
+  // 2. If MetaMask is on mainnet but TESTNET_MODE → override to DEFAULT_CHAIN_ID (Amoy)
+  // 3. Fallback to DEFAULT_CHAIN_ID
   useEffect(() => {
     if (chainId && !preferredChainId) {
       const supported = SUPPORTED_NETWORKS.find(n => n.chainId === chainId);
-      setPreferredChainId(supported ? chainId : 80002); // fallback to Amoy if unsupported
+      if (supported) {
+        setPreferredChainId(chainId);
+      } else {
+        // MetaMask is on a chain not in our supported list (e.g. mainnet in testnet mode)
+        setPreferredChainId(DEFAULT_CHAIN_ID);
+      }
+    } else if (!preferredChainId) {
+      setPreferredChainId(DEFAULT_CHAIN_ID);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chainId]);
 
-  const effectiveChainId = preferredChainId || chainId || 80002;
+  const effectiveChainId = preferredChainId || DEFAULT_CHAIN_ID;
   const preferredNet = SUPPORTED_NETWORKS.find(n => n.chainId === effectiveChainId);
 
   // Is current chain correct for the quote?
