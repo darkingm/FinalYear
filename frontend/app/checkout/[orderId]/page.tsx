@@ -74,6 +74,8 @@ const APPROVE_ABI = [
 /* ─── Coin Price Hook ────────────────────────────────────────── */
 function useCoinPrices(tokens: string[]) {
   const [prices, setPrices] = useState<Record<string, number>>({});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tokenKey = tokens.join(',');
   useEffect(() => {
     if (!tokens.length) return;
     const fetchPrices = async () => {
@@ -93,7 +95,8 @@ function useCoinPrices(tokens: string[]) {
     fetchPrices();
     const iv = setInterval(fetchPrices, 30000);
     return () => clearInterval(iv);
-  }, [tokens.join(',')]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenKey]);
   return prices;
 }
 
@@ -182,6 +185,7 @@ export default function CheckoutPage() {
     if (!authLoading && !isAuthenticated) { router.push('/login'); return; }
     if (isAuthenticated && orderId && !Number.isNaN(orderId)) fetchOrder();
     else if (!authLoading) setLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, orderId]);
 
   const fetchOrder = async () => {

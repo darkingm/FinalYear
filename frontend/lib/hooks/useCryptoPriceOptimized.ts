@@ -64,6 +64,7 @@ export function useCryptoPriceOptimized(symbols: string[]) {
     return () => {
       ws.close();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbols.join(',')]);
 
   return { prices, isConnected };

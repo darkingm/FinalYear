@@ -25,6 +25,20 @@ import { LivePriceEstimate } from '@/components/ui/live-price';
 
 const PLACEHOLDER = '/images/placeholder-product.png';
 
+// ── Thumbnail component — hooks must be in a real component, not in .map() ──
+function ThumbnailBtn({ url, active, onClick }: { url: string; active: boolean; onClick: () => void }) {
+  const [src, setSrc] = useState(url || PLACEHOLDER);
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border-2 transition-all shadow-sm
+        ${active ? 'border-primary ring-2 ring-primary/20' : 'border-border opacity-70 hover:opacity-100'}`}
+    >
+      <img src={src} alt="" className="w-full h-full object-cover" onError={() => setSrc(PLACEHOLDER)} />
+    </button>
+  );
+}
+
 interface AcceptedToken {
   token_id: number; symbol: string; name: string;
   price_in_token: string; is_primary: boolean;
@@ -339,20 +353,14 @@ export default function ProductDetailPage() {
               {/* Thumbnails */}
               {images.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                  {images.map((img, idx) => {
-                    const [thumbSrc, setThumbSrc] = useState(img.url || PLACEHOLDER);
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => setCurrentImg(idx)}
-                        className={`flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border-2 transition-all shadow-sm
-                          ${currentImg === idx ? 'border-primary ring-2 ring-primary/20' : 'border-border opacity-70 hover:opacity-100'}`}
-                      >
-                        <img src={thumbSrc} alt="" className="w-full h-full object-cover"
-                          onError={() => setThumbSrc(PLACEHOLDER)} />
-                      </button>
-                    );
-                  })}
+                  {images.map((img, idx) => (
+                    <ThumbnailBtn
+                      key={idx}
+                      url={img.url}
+                      active={currentImg === idx}
+                      onClick={() => setCurrentImg(idx)}
+                    />
+                  ))}
                 </div>
               )}
             </div>

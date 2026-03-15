@@ -60,6 +60,7 @@ export default function OrderDetailPage() {
       return;
     }
     if (isAuthenticated && id) fetchOrder();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, id]);
 
   // Auto poll order status if waiting for blockchain confirmation
@@ -73,11 +74,13 @@ export default function OrderDetailPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.status, id]);
 
   useEffect(() => {
     if (!order || !success || !order.paypal_order_id || capturing) return;
     capturePayPal();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, success]);
 
   const fetchOrder = async () => {
