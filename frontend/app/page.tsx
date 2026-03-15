@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { useAuth } from '@/lib/hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Header } from '@/components/layout/Header';
@@ -334,7 +337,7 @@ export default function HomePage() {
     t.symbol.toLowerCase().includes(coinSearch.toLowerCase())
   );
 
-  const flashProducts  = products.slice(0, 6);
+  const flashProducts = products.slice(0, 6);
   const featuredProducts = products.slice(6, 14);
 
   if (isLoading) {
@@ -695,7 +698,7 @@ export default function HomePage() {
 
             {prodLoading ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {[1,2,3,4,5,6].map(i => (
+                {[1, 2, 3, 4, 5, 6].map(i => (
                   <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border animate-pulse">
                     <div className="h-48 bg-muted" />
                     <div className="p-4 space-y-2">

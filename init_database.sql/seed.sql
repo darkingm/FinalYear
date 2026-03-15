@@ -663,3 +663,40 @@ COMMIT;
 
 
 /* --- Added from 02_p2p_multichain.sql (Seed Data) --- */
+
+-- Seed mock credit scores cho accounts hiện tại
+INSERT INTO user_credit_scores (user_id, wallet_address, score, tier, completed_orders, dispute_count)
+SELECT u.user_id, 
+       u.wallet_address,
+       CASE 
+           WHEN u.email LIKE '%admin%' THEN 520 
+           WHEN u.role = 'seller' THEN 180
+           ELSE 45 
+       END,
+       CASE 
+           WHEN u.email LIKE '%admin%' THEN 'GOLD'
+           WHEN u.role = 'seller' THEN 'SILVER'
+           ELSE 'BRONZE'
+       END,
+       FLOOR(RANDOM() * 20)::INT,
+       FLOOR(RANDOM() * 2)::INT
+FROM users u
+WHERE u.wallet_address IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM user_credit_scores cs WHERE cs.user_id = u.user_id
+);
+
+-- Seed mock product_nfts cho các sản phẩm đầu tiên (demo data)
+INSERT INTO product_nfts (product_id, token_uri, token_id, contract_addr, has_nfc, tx_hash)
+SELECT p.product_id,
+       'https://ipfs.io/ipfs/Qm' || ENCODE(GEN_RANDOM_BYTES(20), 'hex'),
+       (ROW_NUMBER() OVER () + 100)::BIGINT,
+       '0x1234567890123456789012345678901234567890',
+       (RANDOM() > 0.5),
+       '0x' || ENCODE(GEN_RANDOM_BYTES(32), 'hex')
+FROM products p
+WHERE p.status = 'active'
+  AND NOT EXISTS (
+      SELECT 1 FROM product_nfts n WHERE n.product_id = p.product_id
+  )
+LIMIT 10;
+

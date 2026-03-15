@@ -5,6 +5,8 @@ export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_MAIN_API_URL || 'http://localhost:3001',
   headers: {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
   },
   withCredentials: true,
 });
@@ -13,6 +15,8 @@ export const paymentClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_PAYMENT_API_URL || 'http://localhost:3002',
   headers: {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
   },
   withCredentials: true,
 });

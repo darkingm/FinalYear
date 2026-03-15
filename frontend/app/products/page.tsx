@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -43,21 +46,21 @@ interface TokenProduct {
 
 /* ─── Constants ──────────────────────────────────────────────── */
 const CATEGORIES = [
-  { value: '',            label: 'Tất cả',        icon: '🛍️' },
-  { value: 'electronics', label: 'Điện tử',        icon: '💻' },
-  { value: 'fashion',     label: 'Thời trang',     icon: '👗' },
-  { value: 'home',        label: 'Nhà cửa',        icon: '🏠' },
-  { value: 'accessories', label: 'Phụ kiện',       icon: '⌚' },
-  { value: 'gaming',      label: 'Gaming',         icon: '🎮' },
-  { value: 'books',       label: 'Sách',           icon: '📚' },
-  { value: 'collectibles',label: 'Sưu tập',        icon: '💎' },
+  { value: '', label: 'Tất cả', icon: '🛍️' },
+  { value: 'electronics', label: 'Điện tử', icon: '💻' },
+  { value: 'fashion', label: 'Thời trang', icon: '👗' },
+  { value: 'home', label: 'Nhà cửa', icon: '🏠' },
+  { value: 'accessories', label: 'Phụ kiện', icon: '⌚' },
+  { value: 'gaming', label: 'Gaming', icon: '🎮' },
+  { value: 'books', label: 'Sách', icon: '📚' },
+  { value: 'collectibles', label: 'Sưu tập', icon: '💎' },
 ];
 
 const SORT_OPTIONS = [
-  { value: 'newest',     label: 'Mới nhất',      icon: <Sparkles className="w-3.5 h-3.5" /> },
-  { value: 'price_asc',  label: 'Giá thấp nhất', icon: <TrendingUp className="w-3.5 h-3.5 rotate-180" /> },
-  { value: 'price_desc', label: 'Giá cao nhất',  icon: <TrendingUp className="w-3.5 h-3.5" /> },
-  { value: 'popular',    label: 'Phổ biến nhất', icon: <Tag className="w-3.5 h-3.5" /> },
+  { value: 'newest', label: 'Mới nhất', icon: <Sparkles className="w-3.5 h-3.5" /> },
+  { value: 'price_asc', label: 'Giá thấp nhất', icon: <TrendingUp className="w-3.5 h-3.5 rotate-180" /> },
+  { value: 'price_desc', label: 'Giá cao nhất', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+  { value: 'popular', label: 'Phổ biến nhất', icon: <Tag className="w-3.5 h-3.5" /> },
 ];
 
 const CHAIN_CONFIG: Record<string, { color: string; gradient: string; icon: string }> = {
@@ -239,22 +242,22 @@ function ProductsPageContent() {
   );
 
   // Products tab state
-  const [products, setProducts]     = useState<ProductCardData[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState(searchParams.get('q') || '');
+  const [products, setProducts] = useState<ProductCardData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState(searchParams.get('q') || '');
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
-  const [category, setCategory]     = useState(searchParams.get('category') || '');
-  const [sort, setSort]             = useState('newest');
-  const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid');
+  const [category, setCategory] = useState(searchParams.get('category') || '');
+  const [sort, setSort] = useState('newest');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
-  const [sortOpen, setSortOpen]     = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
 
   // NFT tab state
   const [nftProducts, setNftProducts] = useState<TokenProduct[]>([]);
-  const [nftLoading, setNftLoading]   = useState(false);
+  const [nftLoading, setNftLoading] = useState(false);
   const [nftCategory, setNftCategory] = useState('');
-  const [nftChain, setNftChain]       = useState('');
+  const [nftChain, setNftChain] = useState('');
 
   // Fetch regular products
   const fetchProducts = useCallback(async () => {
@@ -262,12 +265,12 @@ function ProductsPageContent() {
     try {
       const params = new URLSearchParams();
       if (category) params.append('category', category);
-      if (search)   params.append('search', search);
+      if (search) params.append('search', search);
       const res = await apiClient.get(`/api/products?${params}`);
       let data: ProductCardData[] = res.data.data ?? [];
       if (priceRange.min) data = data.filter(p => Number(p.base_price_usd) >= Number(priceRange.min));
       if (priceRange.max) data = data.filter(p => Number(p.base_price_usd) <= Number(priceRange.max));
-      if (sort === 'price_asc')  data.sort((a, b) => Number(a.base_price_usd) - Number(b.base_price_usd));
+      if (sort === 'price_asc') data.sort((a, b) => Number(a.base_price_usd) - Number(b.base_price_usd));
       if (sort === 'price_desc') data.sort((a, b) => Number(b.base_price_usd) - Number(a.base_price_usd));
       setProducts(data);
     } catch { toast.error('Không thể tải sản phẩm'); }
@@ -345,29 +348,31 @@ function ProductsPageContent() {
         {/* Tabs */}
         <div className="flex gap-1.5 p-1 bg-card border border-border rounded-2xl w-fit mb-6">
           {[
-            { key: 'products', label: 'Sản phẩm', icon: Package,
-              desc: `${products.length}` },
-            { key: 'nft',      label: 'NFT & Token hóa', icon: Gem,
-              desc: nftProducts.length ? `${nftProducts.length}` : '•', special: true },
+            {
+              key: 'products', label: 'Sản phẩm', icon: Package,
+              desc: `${products.length}`
+            },
+            {
+              key: 'nft', label: 'NFT & Token hóa', icon: Gem,
+              desc: nftProducts.length ? `${nftProducts.length}` : '•', special: true
+            },
           ].map(({ key, label, icon: Icon, desc, special }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key as 'products' | 'nft')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === key
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === key
                   ? special
                     ? 'bg-gradient-to-r from-[#8247e5] to-[#12aaff] text-white shadow-md'
                     : 'bg-[#f0b90b] text-black shadow-md'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-              }`}
+                }`}
             >
               <Icon className="w-4 h-4" />
               {label}
-              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-                activeTab === key
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${activeTab === key
                   ? 'bg-black/20 text-white'
                   : 'bg-muted text-muted-foreground'
-              }`}>
+                }`}>
                 {desc}
               </span>
             </button>
@@ -420,9 +425,8 @@ function ProductsPageContent() {
                             <button
                               key={opt.value}
                               onClick={() => { setSort(opt.value); setSortOpen(false); }}
-                              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors ${
-                                sort === opt.value ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground hover:bg-muted'
-                              }`}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors ${sort === opt.value ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground hover:bg-muted'
+                                }`}
                             >
                               {opt.icon} {opt.label}
                             </button>
@@ -434,11 +438,10 @@ function ProductsPageContent() {
 
                   <button
                     onClick={() => setShowFilters(v => !v)}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                      showFilters || hasActiveFilters
+                    className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${showFilters || hasActiveFilters
                         ? 'bg-primary/10 text-primary border-primary/30'
                         : 'bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
+                      }`}
                   >
                     <SlidersHorizontal className="w-4 h-4" />
                     Lọc
@@ -495,11 +498,10 @@ function ProductsPageContent() {
                 <button
                   key={cat.value}
                   onClick={() => setCategory(cat.value)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0 ${
-                    category === cat.value
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0 ${category === cat.value
                       ? 'bg-[#f0b90b] text-black border-transparent shadow-md'
                       : 'bg-card border-border text-muted-foreground hover:text-foreground'
-                  }`}
+                    }`}
                 >
                   {cat.icon} {cat.label}
                 </button>
@@ -602,19 +604,18 @@ function ProductsPageContent() {
             <div className="flex gap-2 mb-5 overflow-x-auto scrollbar-hide">
               {[
                 { key: '', label: 'Tất cả chain' },
-                { key: 'polygon',  label: '🔷 Polygon' },
+                { key: 'polygon', label: '🔷 Polygon' },
                 { key: 'arbitrum', label: '⚡ Arbitrum' },
-                { key: 'bnb',      label: '🟡 BNB Chain' },
-                { key: 'eth',      label: '💎 Ethereum' },
+                { key: 'bnb', label: '🟡 BNB Chain' },
+                { key: 'eth', label: '💎 Ethereum' },
               ].map(c => (
                 <button
                   key={c.key}
                   onClick={() => setNftChain(c.key)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0 ${
-                    nftChain === c.key
+                  className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0 ${nftChain === c.key
                       ? 'bg-gradient-to-r from-[#8247e5] to-[#12aaff] text-white border-transparent shadow-md'
                       : 'bg-card border-border text-muted-foreground hover:text-foreground'
-                  }`}
+                    }`}
                 >
                   {c.label}
                 </button>
