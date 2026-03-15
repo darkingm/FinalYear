@@ -309,12 +309,21 @@ export default function CheckoutPage() {
     if (!quote || !walletClient || !address) { toast.error('Kết nối ví MetaMask'); return; }
     if (isWrongChain) { await handleSwitchChain(); return; }
 
+    // Check quote hasn't expired
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (quote.expires_at && nowSec > quote.expires_at) {
+      toast.error('Hóa đơn đã hết hạn. Vui lòng lấy hóa đơn mới.');
+      setQuote(null); setStep(2);
+      return;
+    }
+
     setSubmitLoading(true); setPayStep('sending');
     try {
       let hash: string;
 
       if (isNativePayment) {
-        // Native token (MATIC, ETH, BNB) — direct send
+        // Native token (MATIC/ETH) — send calldata + msg.value together
+        // EscrowCore.deposit() is payable: accepts native via msg.value, calldata tracks orderId+seller
         const tx = await walletClient.sendTransaction({
           to: quote.escrow_contract as Address,
           data: quote.calldata as `0x${string}`,
@@ -322,8 +331,9 @@ export default function CheckoutPage() {
           chainId: quote.chain_id,
         });
         hash = typeof tx === 'string' ? tx : (tx as any).hash;
+
       } else {
-        // ERC-20 — call escrow contract with calldata (which includes transferFrom logic)
+        // ERC-20 — call escrow contract with calldata (after approve)
         const tx = await walletClient.sendTransaction({
           to: quote.escrow_contract as Address,
           data: quote.calldata as `0x${string}`,

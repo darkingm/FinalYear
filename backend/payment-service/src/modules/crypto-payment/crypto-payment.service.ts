@@ -224,20 +224,25 @@ export class CryptoPaymentService {
     const order = orderResult.rows[0];
 
     // Create payment record
+    // Use escrow_contract stored on order (set at quote time, chain-specific)
+    const escrowAddr = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
+    const fromAddr = order.buyer_wallet || String(order.buyer_id);
     await query(
       `INSERT INTO payments (order_id, tx_hash, chain_id, status, from_address, to_address)
-       VALUES ($1, $2, $3, 'pending', $4, $5)`,
-      [orderId, txHash, order.chain_id, order.buyer_id, process.env.ESCROW_CONTRACT_ADDRESS]
+       VALUES ($1, $2, $3, 'pending', $4, $5)
+       ON CONFLICT (tx_hash) DO NOTHING`,
+      [orderId, txHash, order.chain_id, fromAddr, escrowAddr]
     );
 
     // Publish event
     await publishEvent('tx.submitted', {
       order_id: orderId,
       tx_hash: txHash,
+      chain_id: order.chain_id,
       timestamp: Date.now(),
     });
 
-    logger.info('Transaction submitted', { orderId, txHash });
+    logger.info('Transaction submitted', { orderId, txHash, chain_id: order.chain_id, escrow: escrowAddr });
   }
 
   /**
