@@ -170,6 +170,7 @@ export default function CheckoutPage() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState('');
+  const [quoteAddress, setQuoteAddress] = useState<string | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [payStep, setPayStep] = useState<'idle' | 'approve' | 'sending' | 'done'>('idle');
@@ -200,7 +201,7 @@ export default function CheckoutPage() {
     
     // Auto-clear quote if user switches metamask accounts or network manually
     if (quote) {
-      if (address !== quote.buyer_wallet && !quoteLoading) {
+      if (address !== quoteAddress && !quoteLoading) {
         setQuote(null);
         setStep(2);
         toast.info('Tài khoản thay đổi, vui lòng lấy báo giá lại');
@@ -269,6 +270,7 @@ export default function CheckoutPage() {
       });
       const q: CryptoQuote = res.data.quote;
       setQuote(q);
+      setQuoteAddress(address || null);
       setStep(3);
 
       // Update preferred chain to match what backend actually returned
@@ -415,7 +417,7 @@ export default function CheckoutPage() {
 
   const quoteTimeLeft = quote ? Math.max(0, Math.floor((quote.expires_at * 1000 - Date.now()) / 1000)) : 0;
   
-  const metadataPricing = order?.product_metadata?.pricing || {};
+  const metadataPricing = (order?.product_metadata as any)?.pricing || {};
   const estimatedToken = metadataPricing[selectedToken]
     ? Number(metadataPricing[selectedToken]).toFixed(6)
     : coinPrices[selectedToken]
