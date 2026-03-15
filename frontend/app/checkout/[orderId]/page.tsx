@@ -228,21 +228,38 @@ export default function CheckoutPage() {
     if (!isConnected || !address) { toast.error('Vui lòng kết nối ví MetaMask trước'); return; }
     setQuote(null); setQuoteError(null); setQuoteLoading(true);
     try {
-      // Pass preferred_chain_id so backend quotes on the right network (testnet/mainnet)
       const res = await paymentClient.post('/api/payments/crypto/quote', {
         order_id: orderId,
         token_symbol: selectedToken,
         buyer_wallet: address,
-        preferred_chain_id: effectiveChainId,  // ← KEY FIX: tell backend which network
+        preferred_chain_id: effectiveChainId,
       });
       const q: CryptoQuote = res.data.quote;
       setQuote(q);
       setStep(3);
-      // Auto-switch MetaMask to the quoted chain if needed
+
+      // Update preferred chain to match what backend actually returned
+      // This avoids "wrong chain" confusion when backend fell back to a different chain
+      if (q.chain_id !== effectiveChainId) {
+        const returnedNet = SUPPORTED_NETWORKS.find(n => n.chainId === q.chain_id);
+        const preferredNetName = preferredNet?.name || `Chain ${effectiveChainId}`;
+        const returnedNetName = returnedNet?.name || `Chain ${q.chain_id}`;
+        toast.warning(
+          `Không có token ${selectedToken} trên ${preferredNetName}. ` +
+          `Hóa đơn được tạo trên ${returnedNetName}.`,
+          { duration: 6000 }
+        );
+        // Sync preferred to what backend returned so user sees the right network
+        setPreferredChainId(q.chain_id);
+      }
+
+      // Auto-switch MetaMask to the quoted chain
       if (chainId !== q.chain_id) {
         try {
           await switchChainAsync({ chainId: q.chain_id });
-        } catch { /* user can switch manually */ }
+        } catch {
+          // Don't throw — user will see the "wrong chain" banner and can switch manually
+        }
       }
     } catch (e: any) {
       const msg = e.response?.data?.message || 'Lấy báo giá thất bại';

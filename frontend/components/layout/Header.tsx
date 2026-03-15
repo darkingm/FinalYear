@@ -1,15 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+
 import { Button } from '@/components/ui/button';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { signOut } from 'next-auth/react';
-import { useDisconnect } from 'wagmi';
+import { useDisconnect, useAccount } from 'wagmi';
 import {
   Menu, X, ShoppingBag, Wallet, Package,
   LogOut, User, Shield, Search, Bell,
-  TrendingUp, Zap, BarChart3, Settings, ChevronDown,
+  TrendingUp, Zap, BarChart3, ChevronDown, Copy, Check,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -37,6 +38,7 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [tickers, setTickers] = useState<any[]>([]);
   const [, setLang] = useState(i18n.language);
+  const [addrCopied, setAddrCopied] = useState(false);
 
   const { items: cartItems } = useCartStore();
   const cartItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -210,10 +212,99 @@ export function Header() {
 
                     <Separator orientation="vertical" className="h-6 mx-1" />
 
-                    {/* Web3 wallet connect */}
-                    <div className="scale-[0.85] origin-right">
-                      <ConnectButton showBalance={false} />
-                    </div>
+                    {/* Web3 wallet — Custom ConnectButton */}
+                    <ConnectButton.Custom>
+                      {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
+                        if (!mounted) return null;
+                        const connected = !!(account && chain);
+                        return (
+                          <div className="flex items-center gap-1">
+                            {connected ? (
+                              <>
+                                {/* Chain badge */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={openChainModal}
+                                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-accent/10 border border-border hover:bg-accent/20 transition-colors text-xs"
+                                    >
+                                      {chain.hasIcon && chain.iconUrl && (
+                                        <img src={chain.iconUrl} alt={chain.name} className="w-4 h-4 rounded-full" />
+                                      )}
+                                      <span className="hidden lg:block font-medium text-foreground max-w-[70px] truncate">{chain.name}</span>
+                                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Đổi mạng</TooltipContent>
+                                </Tooltip>
+
+                                {/* Wallet address + account selector */}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">
+                                      <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#8247e5] flex-shrink-0" />
+                                      <span className="text-xs font-mono font-semibold text-emerald-400">
+                                        {account.address.slice(0, 6)}…{account.address.slice(-4)}
+                                      </span>
+                                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-64">
+                                    <DropdownMenuLabel>
+                                      <p className="text-xs text-muted-foreground mb-1">Ví đang kết nối</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#8247e5] flex-shrink-0" />
+                                        <p className="font-mono text-xs text-foreground truncate flex-1">{account.address}</p>
+                                        <button
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(account.address);
+                                            setAddrCopied(true);
+                                            setTimeout(() => setAddrCopied(false), 2000);
+                                          }}
+                                          className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                                        >
+                                          {addrCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                        </button>
+                                      </div>
+                                      {account.displayBalance && (
+                                        <p className="text-[11px] text-muted-foreground mt-1">Số dư: <span className="text-foreground font-semibold">{account.displayBalance}</span></p>
+                                      )}
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={openAccountModal} className="gap-2">
+                                      <Wallet className="w-4 h-4" />
+                                      Quản lý ví / Đổi tài khoản
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={openChainModal} className="gap-2">
+                                      {chain.hasIcon && chain.iconUrl
+                                        ? <img src={chain.iconUrl} alt={chain.name} className="w-4 h-4 rounded-full" />
+                                        : <Shield className="w-4 h-4" />}
+                                      Đổi mạng ({chain.name})
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => disconnect()}
+                                      className="text-destructive focus:text-destructive focus:bg-destructive/10 gap-2"
+                                    >
+                                      <LogOut className="w-4 h-4" />
+                                      Ngắt kết nối ví
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </>
+                            ) : (
+                              <button
+                                onClick={openConnectModal}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f0b90b]/10 border border-[#f0b90b]/30 hover:bg-[#f0b90b]/20 transition-colors text-xs font-bold text-[#f0b90b]"
+                              >
+                                <Wallet className="w-3.5 h-3.5" />
+                                Kết nối ví
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }}
+                    </ConnectButton.Custom>
                   </>
                 )}
 
