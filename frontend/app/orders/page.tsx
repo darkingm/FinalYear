@@ -10,6 +10,9 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import {
   Package, Clock, CheckCircle, XCircle, Search, Truck,
   AlertTriangle, ShoppingBag, RefreshCw, ArrowRight, Filter,
@@ -259,36 +262,32 @@ export default function OrdersPage() {
             />
           </div>
 
-          {/* Filter tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {FILTER_TABS.map(tab => (
-              <button
-                key={tab.value}
-                onClick={() => setFilter(tab.value)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${
-                  filter === tab.value
-                    ? 'bg-blue-500 text-white border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
-                    : 'bg-white/5 text-gray-400 border-white/5 hover:border-white/20 hover:text-white'
-                }`}
-              >
-                {tab.label}
-                {statusCounts[tab.value] > 0 && (
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono ${
-                    filter === tab.value ? 'bg-white/20 text-white' : 'bg-black/30 text-gray-400'
-                  }`}>
-                    {statusCounts[tab.value]}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+          {/* Filter tabs — Radix Tabs */}
+          <Tabs value={filter} onValueChange={setFilter}>
+            <TabsList className="w-full bg-black/20 border border-white/5 h-auto p-1 gap-1 flex overflow-x-auto justify-start">
+              {FILTER_TABS.map(tab => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="flex-shrink-0 flex items-center gap-2 px-3 py-2 text-xs font-bold whitespace-nowrap data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-[0_0_20px_rgba(59,130,246,0.35)] text-gray-400"
+                >
+                  {tab.label}
+                  {statusCounts[tab.value] > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-black/30 data-[state=active]:bg-white/20">
+                      {statusCounts[tab.value]}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </motion.div>
 
         {/* Loading skeletons */}
         {(loading || isLoading) ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-32 bg-white/5 border border-white/5 rounded-3xl animate-pulse" />
+              <Skeleton key={i} className="h-32 w-full rounded-3xl bg-white/5" />
             ))}
           </div>
         ) : filteredOrders.length === 0 ? (
