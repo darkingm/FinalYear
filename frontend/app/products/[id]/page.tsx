@@ -119,19 +119,16 @@ export default function ProductDetailPage() {
 
   const handleShareFacebook = () => {
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getShareUrl())}`, '_blank', 'width=600,height=400');
-    setShowShare(false);
   };
 
   const handleShareTwitter = () => {
     const text = product ? `Xem sản phẩm: ${product.name}` : 'Xem sản phẩm này!';
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(getShareUrl())}`, '_blank', 'width=600,height=400');
-    setShowShare(false);
   };
 
   const handleShareWhatsApp = () => {
     const text = product ? `${product.name} - ${getShareUrl()}` : getShareUrl();
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-    setShowShare(false);
   };
 
   const handleBuyNow = async () => {
