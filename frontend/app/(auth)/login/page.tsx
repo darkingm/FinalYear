@@ -154,20 +154,25 @@ export default function LoginPage() {
             Tiếp tục với Google
           </button>
 
-          <button
-            onClick={() => handleSocialSignIn('facebook')}
-            disabled={!!socialLoading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#1877F2]/10 border border-[#1877F2]/20 rounded-xl text-foreground hover:bg-[#1877F2]/20 hover:border-[#1877F2]/40 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm disabled:opacity-60 shadow-sm"
-          >
-            {socialLoading === 'facebook' ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <svg className="w-5 h-5" fill="#1877F2" viewBox="0 0 24 24">
+
+          {/* Facebook — disabled: requires FB Business Verification for public login */}
+          <div className="relative group">
+            <button
+              disabled
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#1877F2]/5 border border-[#1877F2]/10 rounded-xl text-foreground/40 cursor-not-allowed transition-all duration-200 font-medium text-sm"
+            >
+              <svg className="w-5 h-5 opacity-40" fill="#1877F2" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
               </svg>
-            )}
-            Tiếp tục với Facebook
-          </button>
+              Tiếp tục với Facebook
+              <span className="ml-auto text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                Beta
+              </span>
+            </button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-card border border-border rounded-lg text-xs text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg z-10">
+              Đang chờ xác minh doanh nghiệp Facebook. Dùng Google để đăng nhập.
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 mb-6">
