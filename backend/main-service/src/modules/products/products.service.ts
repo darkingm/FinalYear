@@ -183,15 +183,16 @@ export class ProductService {
 
       // If no pricing is provided by seller but they accept crypto, auto-generate it (best effort for backward compat)
       if (Object.keys(pricing).length === 0 && acceptedCrypto.length > 0) {
-        const { BinanceService } = await import('../pricing/binance.service');
-        const binanceService = new BinanceService();
         for (const token of acceptedCrypto) {
            if (['USDT', 'USDC', 'DAI', 'BUSD'].includes(token)) {
               pricing[token] = baseUsd;
            } else {
              try {
-               const price = await binanceService.getPrice(`${token}USDT`);
-               pricing[token] = baseUsd / price;
+               const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${token}USDT`);
+               if (res.ok) {
+                 const data: any = await res.json();
+                 pricing[token] = baseUsd / parseFloat(data.price);
+               }
              } catch (e) {
                console.warn(`Could not fetch price for ${token}`);
              }
