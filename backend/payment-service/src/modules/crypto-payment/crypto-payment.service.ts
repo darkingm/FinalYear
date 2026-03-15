@@ -9,8 +9,19 @@ const ESCROW_ABI = [
   'function deposit(bytes32 orderId, address token, uint256 amount, address seller) external',
 ];
 
-// Chains with RPC and escrow support (31337 = Hardhat/Anvil local)
-const SUPPORTED_CHAIN_IDS = [31337, 137, 80001, 80002, 42161];
+// All supported payment chains (testnets first for easy dev testing)
+const ALL_SUPPORTED_CHAINS = [31337, 80002, 97, 421614, 84532, 137, 42161, 56, 1];
+
+// Escrow contract addresses per chain — falls back to ESCROW_CONTRACT_ADDRESS for unspecified
+const ESCROW_BY_CHAIN: Record<number, string | undefined> = {
+  31337:  process.env.ESCROW_CONTRACT_LOCALHOST   || process.env.ESCROW_CONTRACT_ADDRESS,
+  80002:  process.env.ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
+  137:    process.env.ESCROW_CONTRACT_POLYGON      || process.env.ESCROW_CONTRACT_ADDRESS,
+  42161:  process.env.ESCROW_CONTRACT_ARBITRUM     || process.env.ESCROW_CONTRACT_ADDRESS,
+  97:     process.env.ESCROW_CONTRACT_BSC_TESTNET  || process.env.ESCROW_CONTRACT_ADDRESS,
+  421614: process.env.ESCROW_CONTRACT_ARB_SEPOLIA  || process.env.ESCROW_CONTRACT_ADDRESS,
+  84532:  process.env.ESCROW_CONTRACT_BASE_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
+};
 
 export class CryptoPaymentService {
   private binanceService: BinanceService;
@@ -20,15 +31,22 @@ export class CryptoPaymentService {
     this.binanceService = new BinanceService();
     this.providers = new Map();
 
-    const localRpc = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
-    this.providers.set(31337, new ethers.JsonRpcProvider(localRpc));
-    this.providers.set(137, new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
-    this.providers.set(80001, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
-    this.providers.set(80002, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL)); // Amoy
-    this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
+    const localRpc   = process.env.LOCALHOST_RPC_URL          || 'http://127.0.0.1:8545';
+    const amoyRpc    = process.env.POLYGON_AMOY_RPC_URL        // correct env var
+                    || process.env.POLYGON_MUMBAI_RPC_URL      // fallback
+                    || 'https://polygon-amoy.drpc.org';        // public fallback
+
+    this.providers.set(31337,  new ethers.JsonRpcProvider(localRpc));
+    this.providers.set(80002,  new ethers.JsonRpcProvider(amoyRpc));
+    this.providers.set(80001,  new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
+    this.providers.set(137,    new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
+    this.providers.set(42161,  new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
+    this.providers.set(97,     new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'));
+    this.providers.set(421614, new ethers.JsonRpcProvider(process.env.ARB_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'));
+    this.providers.set(84532,  new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
   }
 
-  async generateQuote(orderId: number, tokenSymbol: string) {
+  async generateQuote(orderId: number, tokenSymbol: string, preferredChainId?: number, buyerWallet?: string) {
     // Get order details
     const orderResult = await mainQuery(
       'SELECT * FROM orders WHERE order_id = $1',
@@ -52,11 +70,9 @@ export class CryptoPaymentService {
     );
     const rawWallet: string | null = sellerResult.rows[0]?.payout_wallet ?? null;
 
-    // ethers v6 isAddress() requires EIP-55 checksum — use regex for plain hex check
     const isValidEthAddress = (w: string | null): w is string =>
       !!w && /^0x[0-9a-fA-F]{40}$/.test(w);
 
-    // Use seller wallet if valid, otherwise fall back to escrow contract as recipient
     const sellerWallet = isValidEthAddress(rawWallet)
       ? rawWallet.toLowerCase()
       : isValidEthAddress(process.env.ESCROW_CONTRACT_ADDRESS ?? null)
@@ -70,22 +86,48 @@ export class CryptoPaymentService {
       );
     }
 
-    // Get token only on supported chains (Polygon, Mumbai, Amoy, Arbitrum)
+    // Determine which chains to look for the token on.
+    // If preferredChainId is specified, try that chain first.
+    // Otherwise fall back to: localhost > amoy > polygon mainnet > others
+    let chainPriority: number[];
+    if (preferredChainId && ALL_SUPPORTED_CHAINS.includes(preferredChainId)) {
+      // Preferred chain first, then others as fallback
+      chainPriority = [preferredChainId, ...ALL_SUPPORTED_CHAINS.filter(c => c !== preferredChainId)];
+    } else {
+      // Default order: testnet first (localhost, amoy), then mainnet
+      chainPriority = [31337, 80002, 97, 421614, 84532, 137, 42161, 56, 1];
+    }
+
+    // Build a CASE for chain priority in SQL
+    const priorityCaseExpr = chainPriority
+      .map((cid, i) => `WHEN chain_id = ${cid} THEN ${i}`)
+      .join(' ');
+
     const tokenResult = await query(
       `SELECT * FROM token_whitelist 
        WHERE symbol = $1 AND is_active = true AND chain_id = ANY($2::int[]) 
-       ORDER BY CASE WHEN chain_id = 31337 THEN 0 WHEN chain_id = 137 THEN 1 WHEN chain_id = 42161 THEN 2 ELSE 3 END`,
-      [tokenSymbol, SUPPORTED_CHAIN_IDS]
+       ORDER BY CASE ${priorityCaseExpr} ELSE ${chainPriority.length} END`,
+      [tokenSymbol, chainPriority]
     );
 
     if (tokenResult.rows.length === 0) {
+      const chainHint = preferredChainId ? ` on chain ${preferredChainId}` : '';
       throw new AppError(
-        `Token "${tokenSymbol}" is not available on supported networks.`,
+        `Token "${tokenSymbol}" is not available${chainHint}. Try a different token or network.`,
         400
       );
     }
 
     const token = tokenResult.rows[0];
+
+    // Get escrow contract address for this specific chain
+    const escrowAddress = ESCROW_BY_CHAIN[token.chain_id] || process.env.ESCROW_CONTRACT_ADDRESS;
+    if (!escrowAddress || escrowAddress === '0x0000000000000000000000000000000000000000') {
+      throw new AppError(
+        `No escrow contract deployed on ${token.chain_id === 80002 ? 'Polygon Amoy' : `chain ${token.chain_id}`}. Please choose a different network.`,
+        400
+      );
+    }
 
     // Get current token price
     const tokenPrice = await this.binanceService.getPrice(`${tokenSymbol}USDT`);
@@ -94,7 +136,6 @@ export class CryptoPaymentService {
     let amountToken: number;
 
     if (order.amount_token && order.token_id) {
-      // Product was explicitly priced in crypto
       const prodTokenResult = await query(
         'SELECT symbol FROM token_whitelist WHERE token_id = $1 LIMIT 1',
         [order.token_id]
@@ -102,10 +143,8 @@ export class CryptoPaymentService {
       if (prodTokenResult.rows.length > 0) {
         const prodTokenSymbol = prodTokenResult.rows[0].symbol;
         if (prodTokenSymbol === tokenSymbol) {
-          // Same token, exact amount
           amountToken = Number(order.amount_token);
         } else {
-          // Different token, swap based on USDT value
           let prodTokenPrice = 1;
           if (prodTokenSymbol !== 'USDT') {
             prodTokenPrice = await this.binanceService.getPrice(`${prodTokenSymbol}USDT`);
@@ -114,12 +153,10 @@ export class CryptoPaymentService {
           amountToken = valueUsd / tokenPrice;
         }
       } else {
-        // Fallback if token not found
         const priceUsd = Number(order.total_amount);
         amountToken = priceUsd / tokenPrice;
       }
     } else {
-      // USD mode fallback
       const priceUsd = Number(order.total_amount);
       amountToken = priceUsd / tokenPrice;
     }
@@ -127,11 +164,7 @@ export class CryptoPaymentService {
     const amountWei = ethers.parseUnits(amountToken.toFixed(token.decimals), token.decimals);
 
     // Generate calldata for escrow contract
-    const escrowContract = new ethers.Contract(
-      process.env.ESCROW_CONTRACT_ADDRESS!,
-      ESCROW_ABI
-    );
-
+    const escrowContract = new ethers.Contract(escrowAddress, ESCROW_ABI);
     const calldata = escrowContract.interface.encodeFunctionData('deposit', [
       ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id)),
       (token.token_address as string).toLowerCase(),
@@ -139,27 +172,33 @@ export class CryptoPaymentService {
       (sellerWallet as string).toLowerCase(),
     ]);
 
-    // Update order with token info
+    // Update order with token + chain info
     await mainQuery(
       `UPDATE orders 
        SET token_id = $1, amount_token = $2, chain_id = $3, 
            escrow_contract = $4, price_expires_at = NOW() + INTERVAL '10 minutes'
        WHERE order_id = $5`,
-      [token.token_id, amountToken, token.chain_id, process.env.ESCROW_CONTRACT_ADDRESS, orderId]
+      [token.token_id, amountToken, token.chain_id, escrowAddress, orderId]
     );
 
-    logger.info('Generated quote', { orderId, tokenSymbol, amountToken, tokenPrice });
+    logger.info('Generated quote', {
+      orderId, tokenSymbol, amountToken, tokenPrice,
+      chain_id: token.chain_id,
+      preferred_chain: preferredChainId,
+      escrow: escrowAddress,
+    });
 
     return {
       order_id: orderId,
-      escrow_contract: process.env.ESCROW_CONTRACT_ADDRESS,
+      escrow_contract: escrowAddress,
       token_address: token.token_address,
       chain_id: token.chain_id,
       amount_token: amountToken,
       amount_wei: amountWei.toString(),
       calldata,
-      expires_at: Date.now() + 600000, // 10 minutes
+      expires_at: Math.floor(Date.now() / 1000) + 600, // 10 minutes as unix seconds
       token_price: tokenPrice,
+      seller_wallet: sellerWallet,
     };
   }
 

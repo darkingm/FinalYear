@@ -46,18 +46,25 @@ interface CryptoQuote {
 /* ─── Constants ─────────────────────────────────────────────── */
 const DEFAULT_TOKENS = ['USDT', 'USDC', 'MATIC', 'ETH', 'BNB'];
 
-const CHAIN_META: Record<number, { name: string; color: string; icon: string; nativeSym: string }> = {
-  137:    { name: 'Polygon',        color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' },
-  80002:  { name: 'Polygon Amoy',  color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' },
-  80001:  { name: 'Mumbai',        color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' },
-  42161:  { name: 'Arbitrum',      color: '#12aaff', icon: '⚡', nativeSym: 'ETH'  },
-  421614: { name: 'Arbitrum Sep.', color: '#12aaff', icon: '⚡', nativeSym: 'ETH'  },
-  56:     { name: 'BNB Chain',     color: '#f0b90b', icon: '🟡', nativeSym: 'BNB'  },
-  97:     { name: 'BNB Testnet',   color: '#f0b90b', icon: '🟡', nativeSym: 'tBNB' },
-  1:      { name: 'Ethereum',      color: '#627eea', icon: '💎', nativeSym: 'ETH'  },
-  11155111: { name: 'Sepolia',     color: '#627eea', icon: '💎', nativeSym: 'ETH'  },
-  31337:  { name: 'Localhost',     color: '#22c55e', icon: '🖥️', nativeSym: 'ETH'  },
-};
+/* Supported networks for payment — testnet first for dev convenience */
+export const SUPPORTED_NETWORKS: { chainId: number; name: string; color: string; icon: string; nativeSym: string; testnet: boolean }[] = [
+  { chainId: 80002,  name: 'Polygon Amoy (Testnet)', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: true  },
+  { chainId: 31337,  name: 'Localhost (Hardhat)',    color: '#22c55e', icon: '🖥️', nativeSym: 'ETH',  testnet: true  },
+  { chainId: 97,     name: 'BNB Testnet',           color: '#f0b90b', icon: '🟡', nativeSym: 'tBNB', testnet: true  },
+  { chainId: 421614, name: 'Arbitrum Sepolia',      color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: true  },
+  { chainId: 84532,  name: 'Base Sepolia',          color: '#0052ff', icon: '🔵', nativeSym: 'ETH',  testnet: true  },
+  { chainId: 137,    name: 'Polygon Mainnet',       color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: false },
+  { chainId: 42161,  name: 'Arbitrum One',         color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: false },
+  { chainId: 56,     name: 'BNB Chain',            color: '#f0b90b', icon: '🟡', nativeSym: 'BNB',  testnet: false },
+  { chainId: 1,      name: 'Ethereum',             color: '#627eea', icon: '💎', nativeSym: 'ETH',  testnet: false },
+];
+
+const CHAIN_META: Record<number, { name: string; color: string; icon: string; nativeSym: string }> =
+  Object.fromEntries(SUPPORTED_NETWORKS.map(n => [n.chainId, { name: n.name, color: n.color, icon: n.icon, nativeSym: n.nativeSym }]));
+// Add fallback entries for chains not in SUPPORTED_NETWORKS
+CHAIN_META[80001]    = { name: 'Mumbai (Deprecated)', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' };
+CHAIN_META[11155111] = { name: 'Sepolia', color: '#627eea', icon: '💎', nativeSym: 'ETH' };
+CHAIN_META[11155420] = { name: 'OP Sepolia', color: '#ff0420', icon: '🔴', nativeSym: 'ETH' };
 
 // ERC-20 approve ABI (minimal)
 const APPROVE_ABI = [
@@ -143,6 +150,8 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'paypal'>('crypto');
   const [selectedToken, setSelectedToken] = useState('USDT');
+  // Preferred network for payment — defaults to current MetaMask chain or Amoy testnet
+  const [preferredChainId, setPreferredChainId] = useState<number | null>(null);
   const [quote, setQuote] = useState<CryptoQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -152,15 +161,28 @@ export default function CheckoutPage() {
   const [payStep, setPayStep] = useState<'idle' | 'approve' | 'sending' | 'done'>('idle');
   const [step, setStep] = useState(1);
   const [showAddresses, setShowAddresses] = useState(false);
+  const [showNetworkSelector, setShowNetworkSelector] = useState(false);
 
   const acceptedCrypto = order?.product_metadata?.accepted_tokens?.crypto || DEFAULT_TOKENS;
   const acceptPayPal = order?.product_metadata?.accepted_tokens?.fiat?.includes('paypal') ?? true;
   const coinPrices = useCoinPrices(acceptedCrypto);
 
+  // Auto-set preferred network to current MetaMask chain when connected
+  useEffect(() => {
+    if (chainId && !preferredChainId) {
+      const supported = SUPPORTED_NETWORKS.find(n => n.chainId === chainId);
+      setPreferredChainId(supported ? chainId : 80002); // fallback to Amoy if unsupported
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chainId]);
+
+  const effectiveChainId = preferredChainId || chainId || 80002;
+  const preferredNet = SUPPORTED_NETWORKS.find(n => n.chainId === effectiveChainId);
+
   // Is current chain correct for the quote?
   const isWrongChain = quote && chainId !== undefined && chainId !== quote.chain_id;
   const quoteChainMeta = quote ? (CHAIN_META[quote.chain_id] || { name: `Chain ${quote.chain_id}`, color: '#888', icon: '🔗', nativeSym: 'ETH' }) : null;
-  const currentChainMeta = chainId ? CHAIN_META[chainId] : null;
+  const currentChainMeta = chainId ? (CHAIN_META[chainId] || { name: `Chain ${chainId}`, color: '#888', icon: '🔗', nativeSym: 'ETH' }) : null;
   const isNativePayment = !quote?.token_address || quote?.token_address === '0x0000000000000000000000000000000000000000';
 
   // Allowance check for ERC-20
@@ -206,11 +228,22 @@ export default function CheckoutPage() {
     if (!isConnected || !address) { toast.error('Vui lòng kết nối ví MetaMask trước'); return; }
     setQuote(null); setQuoteError(null); setQuoteLoading(true);
     try {
+      // Pass preferred_chain_id so backend quotes on the right network (testnet/mainnet)
       const res = await paymentClient.post('/api/payments/crypto/quote', {
-        order_id: orderId, token_symbol: selectedToken, buyer_wallet: address,
+        order_id: orderId,
+        token_symbol: selectedToken,
+        buyer_wallet: address,
+        preferred_chain_id: effectiveChainId,  // ← KEY FIX: tell backend which network
       });
-      setQuote(res.data.quote);
+      const q: CryptoQuote = res.data.quote;
+      setQuote(q);
       setStep(3);
+      // Auto-switch MetaMask to the quoted chain if needed
+      if (chainId !== q.chain_id) {
+        try {
+          await switchChainAsync({ chainId: q.chain_id });
+        } catch { /* user can switch manually */ }
+      }
     } catch (e: any) {
       const msg = e.response?.data?.message || 'Lấy báo giá thất bại';
       setQuoteError(msg); toast.error(msg);
@@ -461,6 +494,111 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
+                  {/* ══ Network Selector ══ */}
+                  <div className="p-4 bg-background border border-border rounded-xl">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Mạng blockchain thanh toán</p>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                        {preferredNet?.testnet ? 'TESTNET' : 'MAINNET'}
+                      </span>
+                    </div>
+
+                    {/* Currently selected network */}
+                    <button
+                      onClick={() => setShowNetworkSelector(v => !v)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-[#f0b90b]/40 bg-[#f0b90b]/5 hover:bg-[#f0b90b]/10 transition-colors mb-2"
+                    >
+                      <span className="text-lg">{preferredNet?.icon || '🔗'}</span>
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-bold text-foreground">{preferredNet?.name || `Chain ${effectiveChainId}`}</p>
+                        <p className="text-xs text-muted-foreground">Chain ID: {effectiveChainId}</p>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showNetworkSelector ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Network dropdown list */}
+                    <AnimatePresence>
+                      {showNetworkSelector && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="space-y-1 pt-1 max-h-64 overflow-y-auto">
+                            {/* Testnets group */}
+                            <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest px-1 mb-1">Testnet (miễn phí)</p>
+                            {SUPPORTED_NETWORKS.filter(n => n.testnet).map(net => (
+                              <button
+                                key={net.chainId}
+                                onClick={async () => {
+                                  setPreferredChainId(net.chainId);
+                                  setQuote(null);
+                                  setShowNetworkSelector(false);
+                                  // Auto-switch MetaMask if connected
+                                  if (isConnected) {
+                                    try { await switchChainAsync({ chainId: net.chainId }); }
+                                    catch { toast.info(`Vui lòng chuyển thủ công sang ${net.name} trong MetaMask`); }
+                                  }
+                                }}
+                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${
+                                  effectiveChainId === net.chainId
+                                    ? 'border-emerald-500/40 bg-emerald-500/10'
+                                    : 'border-transparent hover:border-border hover:bg-muted/50'
+                                }`}
+                              >
+                                <span className="text-base">{net.icon}</span>
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-foreground">{net.name}</p>
+                                  <p className="text-[10px] text-muted-foreground">Chain ID: {net.chainId} · {net.nativeSym}</p>
+                                </div>
+                                {effectiveChainId === net.chainId && (
+                                  <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                                )}
+                              </button>
+                            ))}
+
+                            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest px-1 mt-3 mb-1">Mainnet (tiền thật)</p>
+                            {SUPPORTED_NETWORKS.filter(n => !n.testnet).map(net => (
+                              <button
+                                key={net.chainId}
+                                onClick={async () => {
+                                  setPreferredChainId(net.chainId);
+                                  setQuote(null);
+                                  setShowNetworkSelector(false);
+                                  if (isConnected) {
+                                    try { await switchChainAsync({ chainId: net.chainId }); }
+                                    catch { toast.info(`Vui lòng chuyển thủ công sang ${net.name} trong MetaMask`); }
+                                  }
+                                }}
+                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${
+                                  effectiveChainId === net.chainId
+                                    ? 'border-[#f0b90b]/40 bg-[#f0b90b]/5'
+                                    : 'border-transparent hover:border-border hover:bg-muted/50'
+                                }`}
+                              >
+                                <span className="text-base">{net.icon}</span>
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-foreground">{net.name}</p>
+                                  <p className="text-[10px] text-muted-foreground">Chain ID: {net.chainId} · {net.nativeSym}</p>
+                                </div>
+                                {effectiveChainId === net.chainId && (
+                                  <CheckCircle className="w-4 h-4 text-[#f0b90b] flex-shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {preferredNet?.testnet && (
+                      <p className="text-[10px] text-emerald-400/80 mt-2 flex items-center gap-1">
+                        ✅ Testnet: Test hoàn toàn miễn phí, không mất tiền thật
+                      </p>
+                    )}
+                  </div>
+
                   {/* Estimated + Wallet Panel */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Estimate */}
@@ -564,13 +702,17 @@ export default function CheckoutPage() {
 
                   {/* Get Quote Button */}
                   {!quote && (
-                    <button onClick={handleGetQuote} disabled={quoteLoading || !isConnected}
-                      className="w-full py-4 bg-gradient-to-r from-[#f0b90b] to-[#f3ba2f] text-black font-black rounded-xl text-base hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20">
-                      {quoteLoading ? <><Loader2 className="w-5 h-5 animate-spin" />Đang tạo hóa đơn...</> : <><Shield className="w-5 h-5" />Xác nhận & Lấy hóa đơn</>}
-                    </button>
-                  )}
-                  {!isConnected && !quote && (
-                    <p className="text-xs text-center text-amber-400">⚠ Kết nối ví trước khi lấy báo giá</p>
+                    <div className="space-y-2">
+                      <button onClick={handleGetQuote} disabled={quoteLoading || !isConnected}
+                        className="w-full py-4 bg-gradient-to-r from-[#f0b90b] to-[#f3ba2f] text-black font-black rounded-xl text-base hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20">
+                        {quoteLoading
+                          ? <><Loader2 className="w-5 h-5 animate-spin" />Đang tạo hóa đơn...</>
+                          : <><Shield className="w-5 h-5" />Xác nhận & Lấy hóa đơn trên {preferredNet?.name || 'Polygon Amoy'}</>}
+                      </button>
+                      {!isConnected && (
+                        <p className="text-xs text-center text-amber-400">⚠ Kết nối ví trước khi lấy báo giá</p>
+                      )}
+                    </div>
                   )}
 
                   {/* Quote Error */}

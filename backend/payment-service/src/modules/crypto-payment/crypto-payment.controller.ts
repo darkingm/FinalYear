@@ -6,7 +6,7 @@ const cryptoPaymentService = new CryptoPaymentService();
 
 export async function generateQuote(req: Request, res: Response, next: NextFunction) {
   try {
-    const { order_id, token_symbol } = req.body;
+    const { order_id, token_symbol, preferred_chain_id, buyer_wallet } = req.body;
     
     if (!order_id || !token_symbol) {
       return res.status(400).json({
@@ -15,7 +15,9 @@ export async function generateQuote(req: Request, res: Response, next: NextFunct
       });
     }
 
-    const quote = await cryptoPaymentService.generateQuote(order_id, token_symbol);
+    // preferred_chain_id lets frontend choose testnet vs mainnet
+    const chainId = preferred_chain_id ? parseInt(preferred_chain_id, 10) : undefined;
+    const quote = await cryptoPaymentService.generateQuote(order_id, token_symbol, chainId, buyer_wallet);
     
     res.json({
       success: true,
