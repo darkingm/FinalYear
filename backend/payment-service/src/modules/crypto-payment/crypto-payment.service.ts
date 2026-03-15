@@ -6,8 +6,13 @@ import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
 
 const ESCROW_ABI = [
+  // ERC-20 tokens: requires approve() first, then deposit()
   'function deposit(bytes32 orderId, address token, uint256 amount, address seller) external',
+  // Native ETH/MATIC/BNB: payable, no approve needed
+  'function depositNative(bytes32 orderId, address seller) external payable',
 ];
+
+const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 // All supported payment chains (testnets first for easy dev testing)
 const ALL_SUPPORTED_CHAINS = [31337, 80002, 97, 421614, 84532, 137, 42161, 56, 1];
@@ -163,14 +168,24 @@ export class CryptoPaymentService {
 
     const amountWei = ethers.parseUnits(amountToken.toFixed(token.decimals), token.decimals);
 
-    // Generate calldata for escrow contract
-    const escrowContract = new ethers.Contract(escrowAddress, ESCROW_ABI);
-    const calldata = escrowContract.interface.encodeFunctionData('deposit', [
-      ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id)),
-      (token.token_address as string).toLowerCase(),
-      amountWei,
-      (sellerWallet as string).toLowerCase(),
-    ]);
+    // Generate calldata — CRITICAL: native vs ERC-20 use different functions!
+    const isNative = (token.token_address as string).toLowerCase() === NATIVE_TOKEN_ADDRESS;
+    const escrowIface = new ethers.Interface(ESCROW_ABI);
+    const orderId32 = ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id));
+
+    const calldata = isNative
+      // depositNative(bytes32 orderId, address seller) — payable, no token param
+      ? escrowIface.encodeFunctionData('depositNative', [
+          orderId32,
+          (sellerWallet as string).toLowerCase(),
+        ])
+      // deposit(bytes32 orderId, address token, uint256 amount, address seller) — ERC-20
+      : escrowIface.encodeFunctionData('deposit', [
+          orderId32,
+          (token.token_address as string).toLowerCase(),
+          amountWei,
+          (sellerWallet as string).toLowerCase(),
+        ]);
 
     // Update order with token + chain info
     await mainQuery(
