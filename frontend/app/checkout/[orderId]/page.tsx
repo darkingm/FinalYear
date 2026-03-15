@@ -65,12 +65,20 @@ export const SUPPORTED_NETWORKS = TESTNET_MODE
   ? ALL_PAYMENT_NETWORKS.filter(n => n.testnet)
   : ALL_PAYMENT_NETWORKS;
 
+// CHAIN_META must include ALL chains (not just SUPPORTED_NETWORKS) so we can display
+// the current MetaMask chain correctly even if it's not in SUPPORTED_NETWORKS.
+// e.g. MetaMask on Polygon mainnet (137) → still show its name in "wrong chain" warning.
 const CHAIN_META: Record<number, { name: string; color: string; icon: string; nativeSym: string }> =
-  Object.fromEntries(SUPPORTED_NETWORKS.map(n => [n.chainId, { name: n.name, color: n.color, icon: n.icon, nativeSym: n.nativeSym }]));
-// Add fallback entries for chains not in SUPPORTED_NETWORKS
+  Object.fromEntries(ALL_PAYMENT_NETWORKS.map(n => [n.chainId, { name: n.name, color: n.color, icon: n.icon, nativeSym: n.nativeSym }]));
+
+// Extra common chains MetaMask users might be on:
 CHAIN_META[80001]    = { name: 'Mumbai (Deprecated)', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' };
 CHAIN_META[11155111] = { name: 'Sepolia', color: '#627eea', icon: '💎', nativeSym: 'ETH' };
 CHAIN_META[11155420] = { name: 'OP Sepolia', color: '#ff0420', icon: '🔴', nativeSym: 'ETH' };
+CHAIN_META[43114]    = { name: 'Avalanche', color: '#e84142', icon: '🔺', nativeSym: 'AVAX' };
+CHAIN_META[10]       = { name: 'Optimism', color: '#ff0420', icon: '🔴', nativeSym: 'ETH' };
+CHAIN_META[8453]     = { name: 'Base', color: '#0052ff', icon: '🔵', nativeSym: 'ETH' };
+
 
 // ERC-20 approve ABI (minimal)
 const APPROVE_ABI = [
@@ -189,8 +197,17 @@ export default function CheckoutPage() {
     } else if (!preferredChainId) {
       setPreferredChainId(DEFAULT_CHAIN_ID);
     }
+    
+    // Auto-clear quote if user switches metamask accounts or network manually
+    if (quote) {
+      if (address !== quote.buyer_wallet && !quoteLoading) {
+        setQuote(null);
+        setStep(2);
+        toast.info('Tài khoản thay đổi, vui lòng lấy báo giá lại');
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chainId]);
+  }, [chainId, address]);
 
   const effectiveChainId = preferredChainId || DEFAULT_CHAIN_ID;
   const preferredNet = SUPPORTED_NETWORKS.find(n => n.chainId === effectiveChainId);
@@ -397,9 +414,13 @@ export default function CheckoutPage() {
   };
 
   const quoteTimeLeft = quote ? Math.max(0, Math.floor((quote.expires_at * 1000 - Date.now()) / 1000)) : 0;
-  const estimatedToken = coinPrices[selectedToken]
-    ? (Number(order?.total_amount || order?.price_usd || 0) / coinPrices[selectedToken]).toFixed(5)
-    : '...';
+  
+  const metadataPricing = order?.product_metadata?.pricing || {};
+  const estimatedToken = metadataPricing[selectedToken]
+    ? Number(metadataPricing[selectedToken]).toFixed(6)
+    : coinPrices[selectedToken]
+      ? (Number(order?.total_amount || order?.price_usd || 0) / coinPrices[selectedToken]).toFixed(6)
+      : '...';
 
   if (authLoading || loading) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -653,7 +674,11 @@ export default function CheckoutPage() {
                       </div>
                       <div className="flex items-center gap-1 mt-1">
                         <RefreshCw className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Giá thực từ Binance · cập nhật 30s</span>
+                        <span className="text-xs text-muted-foreground">
+                          {metadataPricing[selectedToken] 
+                            ? 'Giá được cố định bởi người bán' 
+                            : 'Giá thực từ Binance · cập nhật 30s'}
+                        </span>
                       </div>
                     </div>
 

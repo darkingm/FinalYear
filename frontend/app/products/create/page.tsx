@@ -32,16 +32,21 @@ export default function CreateProductPage() {
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [acceptedTokens, setAcceptedTokens] = useState<string[]>(['USDT']);
+  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [acceptPayPal, setAcceptPayPal] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [priceConverting, setPriceConverting] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
   });
+
+  const basePrice = watch('price');
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -68,9 +73,45 @@ export default function CreateProductPage() {
   };
 
   const toggleToken = (token: string) => {
-    setAcceptedTokens((prev) =>
-      prev.includes(token) ? prev.filter((t) => t !== token) : [...prev, token]
-    );
+    setAcceptedTokens((prev) => {
+      const isSelected = prev.includes(token);
+      if (isSelected) {
+        const next = prev.filter((t) => t !== token);
+        const newPrices = { ...tokenPrices };
+        delete newPrices[token];
+        setTokenPrices(newPrices);
+        return next;
+      }
+      return [...prev, token];
+    });
+  };
+
+  const setTokenPrice = (token: string, value: number) => {
+    setTokenPrices((prev) => ({ ...prev, [token]: value }));
+  };
+
+  const handleFetchBinancePrice = async (token: string) => {
+    if (!basePrice) {
+      toast.error('Vui lòng nhập giá USD trước');
+      return;
+    }
+    setPriceConverting(token);
+    try {
+      if (['USDT', 'USDC', 'DAI', 'BUSD'].includes(token)) {
+        setTokenPrice(token, basePrice);
+        toast.success(`Đã tự động điền ${basePrice} ${token}`);
+      } else {
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${token}USDT`);
+        const data = await res.json();
+        const priceInToken = basePrice / parseFloat(data.price);
+        setTokenPrice(token, Number(priceInToken.toFixed(6)));
+        toast.success(`Quy đổi thành công: ${priceInToken.toFixed(6)} ${token}`);
+      }
+    } catch (err) {
+      toast.error(`Lỗi quy đổi giá cho ${token}`);
+    } finally {
+      setPriceConverting(null);
+    }
   };
 
   const onSubmit = async (data: ProductFormData) => {
@@ -92,6 +133,7 @@ export default function CreateProductPage() {
       // Create product
       await apiClient.post('/products', {
         ...data,
+        pricing: tokenPrices,
         metadata: {
           images: imageResponse.data.urls,
           category: data.category,
@@ -232,9 +274,9 @@ export default function CreateProductPage() {
             <label className="block text-sm font-medium mb-3">{t('product.acceptedPayments')}</label>
 
             {/* Crypto Tokens */}
-            <div className="space-y-2 mb-4">
+            <div className="space-y-4 mb-6">
               <p className="text-sm text-muted-foreground">{t('product.acceptCrypto')}</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 mb-4">
                 {tokenOptions.map((token) => (
                   <button
                     key={token}
@@ -260,6 +302,42 @@ export default function CreateProductPage() {
                   </button>
                 ))}
               </div>
+
+              {/* Token Pricing Inputs */}
+              {acceptedTokens.length > 0 && (
+                <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wider mb-2">Giá cho từng token</p>
+                  {acceptedTokens.map(token => (
+                    <div key={token} className="flex items-center gap-3">
+                      <div className="w-20 font-bold flex items-center gap-1.5 flex-shrink-0">
+                        <img src={`https://cryptologos.cc/logos/${token.toLowerCase()}-logo.svg`} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        {token}
+                      </div>
+                      <Input
+                        type="number"
+                        placeholder="VD: 0.05"
+                        value={tokenPrices[token] || ''}
+                        onChange={(e) => setTokenPrice(token, parseFloat(e.target.value))}
+                        className="flex-1"
+                        step="any"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleFetchBinancePrice(token)}
+                        disabled={priceConverting === token}
+                        className="px-3 py-2 bg-[#f0b90b] text-black font-bold rounded-md hover:bg-[#e6a800] transition-colors text-xs whitespace-nowrap disabled:opacity-50"
+                        title="Tự động tính từ giá USD (Binance Realtime)"
+                      >
+                        {priceConverting === token ? '...' : '~='}
+                      </button>
+                    </div>
+                  ))}
+                  <div className="text-[10px] text-muted-foreground/80 mt-1 flex items-start gap-1">
+                    <span>ℹ️</span> 
+                    <span>Bấm nút "~=" để mượn API Binance tính toán tự động số lượng {acceptedTokens.join(', ')} tương đương với {basePrice || 0}$</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* PayPal */}

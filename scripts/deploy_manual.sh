@@ -53,7 +53,11 @@ docker run -d --name marketplace-payment-api --network "$NETWORK" \
   -e "PAYPAL_SECRET=EPxefifbE6-6hPXAsqdY8jGlxcTpYRwuAjhT2aRPxWChSK0QOwIhijGbgwfRNhS2TEN2FSwSG-Mf4hhN" \
   -e PAYPAL_MODE=sandbox \
   -e ESCROW_CONTRACT_ADDRESS=0xCDE08Be0190482691b3288C27240378497d74E79 \
+  -e ESCROW_CONTRACT_POLYGON_AMOY=0xCDE08Be0190482691b3288C27240378497d74E79 \
+  -e POLYGON_AMOY_RPC_URL=https://rpc-amoy.polygon.technology \
   -e POLYGON_RPC_URL=https://polygon.drpc.org \
+  -e BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545 \
+  -e ARB_SEPOLIA_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc \
   -e FRONTEND_URL=https://kienai.id.vn \
   -p 127.0.0.1:3002:3002 --restart unless-stopped \
   kiendzpro/marketplace-payment-api:$TAG

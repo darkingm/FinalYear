@@ -52,9 +52,12 @@ export class CryptoPaymentService {
   }
 
   async generateQuote(orderId: number, tokenSymbol: string, preferredChainId?: number, buyerWallet?: string) {
-    // Get order details
+    // Get order and product details
     const orderResult = await mainQuery(
-      'SELECT * FROM orders WHERE order_id = $1',
+      `SELECT o.*, p.metadata AS product_metadata 
+       FROM orders o 
+       LEFT JOIN products p ON o.product_id = p.product_id 
+       WHERE o.order_id = $1`,
       [orderId]
     );
 
@@ -91,34 +94,38 @@ export class CryptoPaymentService {
       );
     }
 
-    // Determine which chains to look for the token on.
-    // If preferredChainId is specified, try that chain first.
-    // Otherwise fall back to: localhost > amoy > polygon mainnet > others
-    let chainPriority: number[];
-    if (preferredChainId && ALL_SUPPORTED_CHAINS.includes(preferredChainId)) {
-      // Preferred chain first, then others as fallback
-      chainPriority = [preferredChainId, ...ALL_SUPPORTED_CHAINS.filter(c => c !== preferredChainId)];
-    } else {
-      // Default order: testnet first (localhost, amoy), then mainnet
-      chainPriority = [31337, 80002, 97, 421614, 84532, 137, 42161, 56, 1];
-    }
-
-    // Build a CASE for chain priority in SQL
-    const priorityCaseExpr = chainPriority
-      .map((cid, i) => `WHEN chain_id = ${cid} THEN ${i}`)
-      .join(' ');
+    // Determine which chains to query.
+    // If preferredChainId is specified → search ONLY that chain (strict).
+    // Otherwise use default priority: amoy > bscTestnet > arbSepolia > mainnet chains.
+    const searchChains: number[] = preferredChainId && ALL_SUPPORTED_CHAINS.includes(preferredChainId)
+      ? [preferredChainId]   // strict: only the chosen chain
+      : [80002, 97, 421614, 84532, 137, 42161, 56, 1]; // broad fallback
 
     const tokenResult = await query(
       `SELECT * FROM token_whitelist 
-       WHERE symbol = $1 AND is_active = true AND chain_id = ANY($2::int[]) 
-       ORDER BY CASE ${priorityCaseExpr} ELSE ${chainPriority.length} END`,
-      [tokenSymbol, chainPriority]
+       WHERE symbol = $1 AND is_active = true AND chain_id = ANY($2::int[])
+       ORDER BY array_position($2::int[], chain_id) NULLS LAST
+       LIMIT 1`,
+      [tokenSymbol, searchChains]
     );
 
     if (tokenResult.rows.length === 0) {
-      const chainHint = preferredChainId ? ` on chain ${preferredChainId}` : '';
+      // Tell the user which chains DO support this token
+      const availableResult = await query(
+        `SELECT chain_id FROM token_whitelist WHERE symbol = $1 AND is_active = true`,
+        [tokenSymbol]
+      );
+      const availableChains = availableResult.rows.map((r: any) => r.chain_id).join(', ');
+
+      const chainName = preferredChainId
+        ? `chain ${preferredChainId}`
+        : 'any supported chain';
+
       throw new AppError(
-        `Token "${tokenSymbol}" is not available${chainHint}. Try a different token or network.`,
+        availableChains
+          ? `Token "${tokenSymbol}" không khả dụng trên ${chainName}. ` +
+            `Hỗ trợ trên chain: [${availableChains}]. Vui lòng chọn mạng khác.`
+          : `Token "${tokenSymbol}" chưa được thêm vào whitelist. Liên hệ admin.`,
         400
       );
     }
@@ -140,28 +147,15 @@ export class CryptoPaymentService {
     // Calculate token amount needed
     let amountToken: number;
 
-    if (order.amount_token && order.token_id) {
-      const prodTokenResult = await query(
-        'SELECT symbol FROM token_whitelist WHERE token_id = $1 LIMIT 1',
-        [order.token_id]
-      );
-      if (prodTokenResult.rows.length > 0) {
-        const prodTokenSymbol = prodTokenResult.rows[0].symbol;
-        if (prodTokenSymbol === tokenSymbol) {
-          amountToken = Number(order.amount_token);
-        } else {
-          let prodTokenPrice = 1;
-          if (prodTokenSymbol !== 'USDT') {
-            prodTokenPrice = await this.binanceService.getPrice(`${prodTokenSymbol}USDT`);
-          }
-          const valueUsd = Number(order.amount_token) * prodTokenPrice;
-          amountToken = valueUsd / tokenPrice;
-        }
-      } else {
-        const priceUsd = Number(order.total_amount);
-        amountToken = priceUsd / tokenPrice;
-      }
-    } else {
+    const metadata = order.product_metadata || {};
+    const customPricing = metadata.pricing || {};
+    
+    // 1. If seller explicitly set a price for this token
+    if (customPricing[tokenSymbol]) {
+      amountToken = Number(customPricing[tokenSymbol]);
+    }
+    // 2. Otherwise calculate based on base_price in USD
+    else {
       const priceUsd = Number(order.total_amount);
       amountToken = priceUsd / tokenPrice;
     }
@@ -204,16 +198,19 @@ export class CryptoPaymentService {
     });
 
     return {
-      order_id: orderId,
-      escrow_contract: escrowAddress,
-      token_address: token.token_address,
-      chain_id: token.chain_id,
-      amount_token: amountToken,
-      amount_wei: amountWei.toString(),
+      order_id:        orderId,
+      escrow_contract: escrowAddress,   // ← primary field name
+      escrow_address:  escrowAddress,   // ← alias for backward compat
+      token_address:   token.token_address,
+      token_symbol:    tokenSymbol,
+      chain_id:        token.chain_id,
+      amount_token:    amountToken,     // ← primary numeric amount
+      amount:          amountToken,     // ← alias for backward compat
+      amount_wei:      amountWei.toString(),
       calldata,
-      expires_at: Math.floor(Date.now() / 1000) + 600, // 10 minutes as unix seconds
-      token_price: tokenPrice,
-      seller_wallet: sellerWallet,
+      expires_at:      Math.floor(Date.now() / 1000) + 600, // 10 phút
+      token_price:     tokenPrice,
+      seller_wallet:   sellerWallet,
     };
   }
 

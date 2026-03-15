@@ -176,6 +176,34 @@ export class ProductService {
     const client = await getClient();
     await client.query('BEGIN');
     try {
+      // Build metadata pricing if pricing is empty but crypto is enabled
+      const acceptedCrypto: string[] = data.metadata?.accepted_tokens?.crypto || [];
+      const pricing: Record<string, number> = data.pricing || {};
+      const baseUsd = data.price || data.base_price_usd || 0;
+
+      // If no pricing is provided by seller but they accept crypto, auto-generate it (best effort for backward compat)
+      if (Object.keys(pricing).length === 0 && acceptedCrypto.length > 0) {
+        const { BinanceService } = await import('../pricing/binance.service');
+        const binanceService = new BinanceService();
+        for (const token of acceptedCrypto) {
+           if (['USDT', 'USDC', 'DAI', 'BUSD'].includes(token)) {
+              pricing[token] = baseUsd;
+           } else {
+             try {
+               const price = await binanceService.getPrice(`${token}USDT`);
+               pricing[token] = baseUsd / price;
+             } catch (e) {
+               console.warn(`Could not fetch price for ${token}`);
+             }
+           }
+        }
+      }
+
+      const finalMetadata = {
+        ...(data.metadata || {}),
+        pricing
+      };
+
       const productResult = await client.query(
         `INSERT INTO products
            (seller_id, name, description, category, base_price_usd,
@@ -190,7 +218,7 @@ export class ProductService {
           data.price || data.base_price_usd || 0,
           data.token_id || null,
           data.price_in_token || null,
-          JSON.stringify(data.metadata || {}),
+          JSON.stringify(finalMetadata),
           data.product_type || 'physical',
         ]
       );
@@ -249,7 +277,10 @@ export class ProductService {
            description    = COALESCE($2, description),
            base_price_usd = COALESCE($3, base_price_usd),
            category       = COALESCE($4, category),
-           metadata       = COALESCE($5::jsonb, metadata),
+           metadata       = CASE 
+                              WHEN $5::jsonb IS NOT NULL THEN metadata || $5::jsonb
+                              ELSE metadata 
+                            END,
            token_id       = COALESCE($6, token_id),
            price_in_token = COALESCE($7, price_in_token),
            updated_at     = NOW()
@@ -259,7 +290,7 @@ export class ProductService {
         updates.description || null,
         updates.price || updates.base_price_usd || null,
         updates.category || null,
-        updates.metadata ? JSON.stringify(updates.metadata) : null,
+        updates.metadata ? JSON.stringify({ ...updates.metadata, pricing: updates.pricing || undefined }) : null,
         updates.token_id || null,
         updates.price_in_token || null,
         productId,

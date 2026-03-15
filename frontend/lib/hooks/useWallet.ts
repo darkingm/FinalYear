@@ -62,9 +62,14 @@ function useWalletInner() {
       setTotalUSDT(0);
       return;
     }
+    
+    // reset balances before fetch on chain/account change
+    setTokenBalances([]);
+    setTotalUSDT(0);
+    
     fetchBalances();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, isConnected, chainId, prices]);
+  }, [address, isConnected, chainId]);
 
   const fetchBalances = async () => {
     if (!address || typeof window === 'undefined' || !window.ethereum) return;

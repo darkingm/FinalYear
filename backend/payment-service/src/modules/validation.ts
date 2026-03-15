@@ -4,6 +4,8 @@ export const generateQuoteSchema = z.object({
   body: z.object({
     order_id: z.number().positive('order_id must be a positive number'),
     token_symbol: z.string().min(1, 'token_symbol is required'),
+    preferred_chain_id: z.number().int().optional(),  // ← chain buyer muốn thanh toán
+    buyer_wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(), // ← wallet address buyer
   }),
 });
 

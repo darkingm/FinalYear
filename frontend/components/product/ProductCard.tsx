@@ -43,20 +43,41 @@ interface ProductCardProps {
 }
 
 function PriceBadge({ product }: { product: ProductCardData }) {
-  const hasToken = product.price_in_token && product.token_symbol;
-  const price = hasToken
-    ? `${Number(product.price_in_token).toFixed(
-        ['ETH', 'WBTC', 'BTC'].includes(product.token_symbol!) ? 6 : 2
-      )} ${product.token_symbol}`
-    : `$${Number(product.base_price_usd).toFixed(2)}`;
+  const pricing = product.metadata?.pricing || {};
+  const tokenKeys = Object.keys(pricing);
+  const hasLegacyToken = Boolean(product.price_in_token && product.token_symbol);
+  const hasMetadataTokens = tokenKeys.length > 0;
+  
+  if (!hasLegacyToken && !hasMetadataTokens) {
+    return (
+      <div className="flex items-baseline gap-1.5 flex-wrap">
+        <span className="font-black text-foreground text-lg">
+          ${Number(product.base_price_usd).toFixed(2)}
+        </span>
+      </div>
+    );
+  }
+
+  const primaryToken = hasMetadataTokens ? tokenKeys[0] : product.token_symbol!;
+  const primaryAmount = hasMetadataTokens ? pricing[primaryToken] : product.price_in_token!;
+  
+  const formattedAmount = Number(primaryAmount).toFixed(
+    ['ETH', 'WBTC', 'BTC'].includes(primaryToken) ? 6 : 2
+  );
+
   return (
-    <div className="flex items-baseline gap-1.5 flex-wrap">
-      <span className={`font-black ${hasToken ? 'text-[#f0b90b]' : 'text-foreground'} text-lg`}>
-        {price}
-      </span>
-      {hasToken && (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-baseline gap-1.5 flex-wrap">
+        <span className="font-black text-[#f0b90b] text-lg">
+          {formattedAmount} {primaryToken}
+        </span>
         <span className="text-xs text-muted-foreground">
           ~${Number(product.base_price_usd).toFixed(2)}
+        </span>
+      </div>
+      {tokenKeys.length > 1 && (
+        <span className="text-[10px] text-muted-foreground font-medium">
+          hoặc bằng {tokenKeys.slice(1).join(', ')}
         </span>
       )}
     </div>
@@ -94,7 +115,12 @@ export const ProductCard = memo(function ProductCard({
 
   const sellerAvatar = product.seller_user_avatar ?? product.seller_avatar ?? null;
   const rating = product.rating_avg ?? product.seller_rating ?? 0;
-  const hasToken = !!(product.price_in_token && product.token_symbol);
+  
+  const pricing = product.metadata?.pricing || {};
+  const tokenKeys = Object.keys(pricing);
+  const hasToken = tokenKeys.length > 0 || !!(product.price_in_token && product.token_symbol);
+  
+  const displayTokenSymbol = tokenKeys.length > 0 ? tokenKeys[0] : product.token_symbol;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
@@ -144,9 +170,9 @@ export const ProductCard = memo(function ProductCard({
                   <h3 className="font-bold text-base text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                     {product.name}
                   </h3>
-                  {product.token_symbol && (
+                  {displayTokenSymbol && (
                     <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20">
-                      {product.token_symbol}
+                      {displayTokenSymbol} {tokenKeys.length > 1 ? '+' : ''}
                     </span>
                   )}
                 </div>
@@ -245,9 +271,9 @@ export const ProductCard = memo(function ProductCard({
               )}
             </div>
             <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
-              {hasToken && product.token_symbol && (
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#f0b90b] text-black">
-                  {product.token_symbol}
+              {hasToken && displayTokenSymbol && (
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#f0b90b] text-black shadow-lg">
+                  {displayTokenSymbol} {tokenKeys.length > 1 ? `+${tokenKeys.length - 1}` : ''}
                 </span>
               )}
             </div>
