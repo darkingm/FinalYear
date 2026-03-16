@@ -29,6 +29,16 @@ result.txt
 query.sql
 *.sql.tmp
 
+# ── Debug / diagnostic output files in scripts/ ───────────────
+scripts/*-out.txt
+scripts/*-output.txt
+scripts/*-log.txt
+scripts/payment-log.txt
+scripts/vps-diag*.txt
+scripts/vps-deploy*.txt
+scripts/vps-fix*.txt
+scripts/vps-restart*.txt
+
 # ── OS / Editor ───────────────────────────────────────────────
 .DS_Store
 .vscode
