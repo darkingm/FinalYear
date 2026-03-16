@@ -19,13 +19,13 @@ const ALL_SUPPORTED_CHAINS = [31337, 80002, 97, 421614, 84532, 137, 42161, 56, 1
 
 // Escrow contract addresses per chain — falls back to ESCROW_CONTRACT_ADDRESS for unspecified
 const ESCROW_BY_CHAIN: Record<number, string | undefined> = {
-  31337:  process.env.ESCROW_CONTRACT_LOCALHOST   || process.env.ESCROW_CONTRACT_ADDRESS,
-  80002:  process.env.ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
-  137:    process.env.ESCROW_CONTRACT_POLYGON      || process.env.ESCROW_CONTRACT_ADDRESS,
-  42161:  process.env.ESCROW_CONTRACT_ARBITRUM     || process.env.ESCROW_CONTRACT_ADDRESS,
-  97:     process.env.ESCROW_CONTRACT_BSC_TESTNET  || process.env.ESCROW_CONTRACT_ADDRESS,
-  421614: process.env.ESCROW_CONTRACT_ARB_SEPOLIA  || process.env.ESCROW_CONTRACT_ADDRESS,
-  84532:  process.env.ESCROW_CONTRACT_BASE_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
+  31337: process.env.ESCROW_CONTRACT_LOCALHOST || process.env.ESCROW_CONTRACT_ADDRESS,
+  80002: process.env.ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
+  137: process.env.ESCROW_CONTRACT_POLYGON || process.env.ESCROW_CONTRACT_ADDRESS,
+  42161: process.env.ESCROW_CONTRACT_ARBITRUM || process.env.ESCROW_CONTRACT_ADDRESS,
+  97: process.env.ESCROW_CONTRACT_BSC_TESTNET || process.env.ESCROW_CONTRACT_ADDRESS,
+  421614: process.env.ESCROW_CONTRACT_ARB_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
+  84532: process.env.ESCROW_CONTRACT_BASE_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
 };
 
 export class CryptoPaymentService {
@@ -36,19 +36,19 @@ export class CryptoPaymentService {
     this.binanceService = new BinanceService();
     this.providers = new Map();
 
-    const localRpc   = process.env.LOCALHOST_RPC_URL          || 'http://127.0.0.1:8545';
-    const amoyRpc    = process.env.POLYGON_AMOY_RPC_URL        // correct env var
-                    || process.env.POLYGON_MUMBAI_RPC_URL      // fallback
-                    || 'https://polygon-amoy.drpc.org';        // public fallback
+    const localRpc = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
+    const amoyRpc = process.env.POLYGON_AMOY_RPC_URL        // correct env var
+      || process.env.POLYGON_MUMBAI_RPC_URL      // fallback
+      || 'https://polygon-amoy.drpc.org';        // public fallback
 
-    this.providers.set(31337,  new ethers.JsonRpcProvider(localRpc));
-    this.providers.set(80002,  new ethers.JsonRpcProvider(amoyRpc));
-    this.providers.set(80001,  new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
-    this.providers.set(137,    new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
-    this.providers.set(42161,  new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
-    this.providers.set(97,     new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'));
+    this.providers.set(31337, new ethers.JsonRpcProvider(localRpc));
+    this.providers.set(80002, new ethers.JsonRpcProvider(amoyRpc));
+    this.providers.set(80001, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
+    this.providers.set(137, new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
+    this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
+    this.providers.set(97, new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'));
     this.providers.set(421614, new ethers.JsonRpcProvider(process.env.ARB_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'));
-    this.providers.set(84532,  new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
+    this.providers.set(84532, new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
   }
 
   async generateQuote(orderId: number, tokenSymbol: string, preferredChainId?: number, buyerWallet?: string) {
@@ -124,7 +124,7 @@ export class CryptoPaymentService {
       throw new AppError(
         availableChains
           ? `Token "${tokenSymbol}" không khả dụng trên ${chainName}. ` +
-            `Hỗ trợ trên chain: [${availableChains}]. Vui lòng chọn mạng khác.`
+          `Hỗ trợ trên chain: [${availableChains}]. Vui lòng chọn mạng khác.`
           : `Token "${tokenSymbol}" chưa được thêm vào whitelist. Liên hệ admin.`,
         400
       );
@@ -141,22 +141,51 @@ export class CryptoPaymentService {
       );
     }
 
-    // Get current token price
-    const tokenPrice = await this.binanceService.getPrice(`${tokenSymbol}USDT`);
+    // Get current token price — handle testnet native tokens specially
+    // ETH on any chain (address 0x0) → use ETH/USDT Binance price
+    // MATIC on Amoy (0x000...1010) → use MATIC/USDT Binance price
+    // For testnet tokens with no real price (USDT/USDC) → price = 1
+    const isNativeOnThisChain = (token.token_address as string).toLowerCase() === NATIVE_TOKEN_ADDRESS
+      || (token.token_address as string).toLowerCase() === '0x0000000000000000000000000000000000001010';
+
+    // Map token symbol to Binance pair — testnet native uses mainnet equivalent
+    const pricePairMap: Record<string, string> = {
+      'ETH': 'ETHUSDT',
+      'MATIC': 'MATICUSDT',
+      'BNB': 'BNBUSDT',
+      'BTC': 'BTCUSDT',
+      'WBTC': 'BTCUSDT',
+      'USDT': 'USDTUSDT',
+      'USDC': 'USDCUSDT',
+      'ARB': 'ARBUSDT',
+    };
+
+    let tokenPrice: number;
+    // Stablecoins → always $1
+    if (['USDT', 'USDC', 'DAI', 'BUSD'].includes(tokenSymbol)) {
+      tokenPrice = 1;
+    } else {
+      const binancePair = pricePairMap[tokenSymbol] || `${tokenSymbol}USDT`;
+      tokenPrice = await this.binanceService.getPrice(binancePair);
+    }
+
+    logger.info('Token price resolved', { tokenSymbol, tokenPrice, chain_id: token.chain_id });
 
     // Calculate token amount needed
     let amountToken: number;
 
     const metadata = order.product_metadata || {};
     const customPricing = metadata.pricing || {};
-    
-    // 1. If seller explicitly set a price for this token
+
+    // 1. If product has a fixed token price set by seller
     if (customPricing[tokenSymbol]) {
       amountToken = Number(customPricing[tokenSymbol]);
     }
     // 2. Otherwise calculate based on base_price in USD
     else {
       const priceUsd = Number(order.total_amount);
+      if (!priceUsd || priceUsd <= 0) throw new AppError('Invalid order price', 400);
+      if (!tokenPrice || tokenPrice <= 0) throw new AppError(`Cannot get price for ${tokenSymbol}`, 500);
       amountToken = priceUsd / tokenPrice;
     }
 
@@ -170,16 +199,16 @@ export class CryptoPaymentService {
     const calldata = isNative
       // depositNative(bytes32 orderId, address seller) — payable, no token param
       ? escrowIface.encodeFunctionData('depositNative', [
-          orderId32,
-          (sellerWallet as string).toLowerCase(),
-        ])
+        orderId32,
+        (sellerWallet as string).toLowerCase(),
+      ])
       // deposit(bytes32 orderId, address token, uint256 amount, address seller) — ERC-20
       : escrowIface.encodeFunctionData('deposit', [
-          orderId32,
-          (token.token_address as string).toLowerCase(),
-          amountWei,
-          (sellerWallet as string).toLowerCase(),
-        ]);
+        orderId32,
+        (token.token_address as string).toLowerCase(),
+        amountWei,
+        (sellerWallet as string).toLowerCase(),
+      ]);
 
     // Update order with token + chain info
     await mainQuery(
@@ -198,19 +227,19 @@ export class CryptoPaymentService {
     });
 
     return {
-      order_id:        orderId,
+      order_id: orderId,
       escrow_contract: escrowAddress,   // ← primary field name
-      escrow_address:  escrowAddress,   // ← alias for backward compat
-      token_address:   token.token_address,
-      token_symbol:    tokenSymbol,
-      chain_id:        token.chain_id,
-      amount_token:    amountToken,     // ← primary numeric amount
-      amount:          amountToken,     // ← alias for backward compat
-      amount_wei:      amountWei.toString(),
+      escrow_address: escrowAddress,   // ← alias for backward compat
+      token_address: token.token_address,
+      token_symbol: tokenSymbol,
+      chain_id: token.chain_id,
+      amount_token: amountToken,     // ← primary numeric amount
+      amount: amountToken,     // ← alias for backward compat
+      amount_wei: amountWei.toString(),
       calldata,
-      expires_at:      Math.floor(Date.now() / 1000) + 600, // 10 phút
-      token_price:     tokenPrice,
-      seller_wallet:   sellerWallet,
+      expires_at: Math.floor(Date.now() / 1000) + 600, // 10 phút
+      token_price: tokenPrice,
+      seller_wallet: sellerWallet,
     };
   }
 

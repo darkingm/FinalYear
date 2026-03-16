@@ -83,6 +83,20 @@ export const PAYMENT_NETWORKS = [
 const CHAIN_META: Record<number, typeof PAYMENT_NETWORKS[0]> =
   Object.fromEntries(PAYMENT_NETWORKS.map(n => [n.chainId, n]));
 
+/* ─── Token availability per chain ─────────────────────────────────────── */
+// Defines which tokens are valid on each chain for payment
+const CHAIN_TOKENS: Record<number, string[]> = {
+  31337: ['ETH'],                      // Hardhat VPS — only native ETH
+  80002: ['MATIC', 'ETH'],             // Polygon Amoy — MATIC native + ETH
+  97: ['BNB'],                      // BNB Testnet — native BNB
+  421614: ['ETH'],                     // Arbitrum Sepolia
+  84532: ['ETH'],                     // Base Sepolia
+  137: ['MATIC', 'USDT', 'USDC'],    // Polygon mainnet
+  42161: ['ETH', 'USDT'],             // Arbitrum mainnet
+  1: ['ETH', 'USDT', 'USDC', 'WBTC'], // Ethereum mainnet
+  56: ['BNB', 'USDT'],              // BSC mainnet
+};
+
 /* ─── ERC-20 Minimal ABI ────────────────────────────────────────────────── */
 const ERC20_ABI = [
   { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
@@ -195,7 +209,22 @@ export default function CheckoutPage() {
   const currentNet = CHAIN_META[selectedNet] || PAYMENT_NETWORKS[0];
   const quoteNet = quote ? CHAIN_META[quote.chain_id] : null;
   const isWrongChain = !!quote && !!chainId && chainId !== quote.chain_id;
-  const isNative = !quote?.token_address || quote.token_address === '0x0000000000000000000000000000000000000000';
+  const isNative = !quote?.token_address || quote.token_address === '0x0000000000000000000000000000000000000000'
+    || quote.token_address === '0x0000000000000000000000000000000000001010';
+
+  // Tokens available on selected chain, intersected with what product accepts
+  const chainSupportedTokens = CHAIN_TOKENS[selectedNet] || ['ETH'];
+  const availableTokens = acceptedCrypto.filter(t => chainSupportedTokens.includes(t));
+  // If no intersection → show chain tokens only (product accepts "all")
+  const tokensToShow = availableTokens.length > 0 ? availableTokens : chainSupportedTokens;
+
+  // Auto-correct selectedToken when chain changes
+  useEffect(() => {
+    if (!tokensToShow.includes(selectedToken)) {
+      setSelectedToken(tokensToShow[0] || 'ETH');
+      setQuote(null);
+    }
+  }, [selectedNet, tokensToShow, selectedToken]);
 
   /* ─── ERC-20 allowance check ──────────────────────────────────────────── */
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -512,8 +541,17 @@ export default function CheckoutPage() {
                   {/* Token Selector */}
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Token thanh toán</p>
+                    {availableTokens.length === 0 && acceptedCrypto.length > 0 && (
+                      <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-400">
+                          Sản phẩm hỗ trợ <b>{acceptedCrypto.join(', ')}</b> nhưng không có token nào trên {currentNet.name}.
+                          Đang hiển thị token mặc định của mạng này.
+                        </p>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
-                      {acceptedCrypto.map(token => (
+                      {tokensToShow.map(token => (
                         <button
                           key={token}
                           onClick={() => { setSelectedToken(token); setQuote(null); }}
