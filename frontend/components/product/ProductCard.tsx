@@ -67,9 +67,11 @@ interface ProductCardProps {
  * - If product has explicit token pricing, uses that token.
  * - Fallback: compute MATIC from USD.
  */
+const STABLECOINS = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD']);
+
 function PriceBadge({ product }: { product: ProductCardData }) {
   const { prices } = useTokenPrice();
-  const chainId = useChainId(); // always called unconditionally at top level
+  const chainId = useChainId();
   const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
 
   const pricing = product.metadata?.pricing || {};
@@ -81,13 +83,21 @@ function PriceBadge({ product }: { product: ProductCardData }) {
   let primaryAmount: number;
 
   if (hasMetadataTokens) {
-    primaryToken = tokenKeys[0];
-    primaryAmount = Number(pricing[primaryToken]);
-  } else if (hasLegacyToken) {
+    // Prefer non-stablecoin token if available
+    const preferredKey = tokenKeys.find(k => !STABLECOINS.has(k.toUpperCase())) || tokenKeys[0];
+    primaryToken = preferredKey;
+    primaryAmount = Number(pricing[preferredKey]);
+    // If still a stablecoin, convert to MATIC
+    if (STABLECOINS.has(primaryToken.toUpperCase())) {
+      primaryToken = 'MATIC';
+      primaryAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
+    }
+  } else if (hasLegacyToken && !STABLECOINS.has((product.token_symbol || '').toUpperCase())) {
+    // Use legacy non-stablecoin token
     primaryToken = product.token_symbol!;
     primaryAmount = Number(product.price_in_token);
   } else {
-    // Fallback: compute MATIC from USD using live price
+    // Fallback OR legacy is stablecoin: always compute MATIC from USD
     primaryToken = 'MATIC';
     primaryAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
   }
@@ -107,7 +117,7 @@ function PriceBadge({ product }: { product: ProductCardData }) {
           <span className="text-xs font-bold text-[#8247e5]">{primaryToken}</span>
         )}
         {isTestnet ? (
-          <span className="text-[10px] text-muted-foreground ml-1">(testnet ≈ 0 USDT)</span>
+          <span className="text-[10px] text-muted-foreground ml-1">(testnet)</span>
         ) : (
           <span className="text-[10px] text-muted-foreground ml-1">
             ≈ ${Number(product.base_price_usd).toFixed(2)}
@@ -116,7 +126,7 @@ function PriceBadge({ product }: { product: ProductCardData }) {
       </div>
       {tokenKeys.length > 1 && (
         <span className="text-[10px] text-muted-foreground font-medium">
-          hoặc bằng {tokenKeys.slice(1).join(', ')}
+          hoặc bằng {tokenKeys.filter(k => k !== primaryToken).slice(0, 2).join(', ')}
         </span>
       )}
     </div>

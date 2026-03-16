@@ -98,20 +98,33 @@ function SkeletonCard() {
   );
 }
 
+const STABLECOINS_SET = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD']);
+
 /* ─── NFT Product Card ───────────────────────────────────────── */
 function NFTProductCard({ product, index }: { product: TokenProduct; index: number }) {
-  const primaryToken = product.accepted_tokens?.find(t => t.is_primary) || product.accepted_tokens?.[0];
+  // Prefer non-stablecoin token for primary display
+  const nonStableToken = product.accepted_tokens?.find(t => !STABLECOINS_SET.has(t.symbol.toUpperCase()) && t.is_primary)
+    || product.accepted_tokens?.find(t => !STABLECOINS_SET.has(t.symbol.toUpperCase()))
+    || product.accepted_tokens?.find(t => t.is_primary)
+    || product.accepted_tokens?.[0];
+  const primaryToken = nonStableToken;
   const chainKey = (primaryToken?.chain_name || '').toLowerCase().replace(/\s/g, '');
   const chain = CHAIN_CONFIG[chainKey] || CHAIN_CONFIG.polygon;
   const { prices } = useTokenPrice();
   const chainId = useChainId();
   const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
 
-  // Compute MATIC fallback when no token price available
+  // Compute MATIC fallback (always used when stablecoin or no token)
   const maticAmount = usdToToken(parseFloat(product.base_price_usd), 'MATIC', prices);
   const maticFormatted = formatTokenAmount(maticAmount, 'MATIC');
 
   const [imgSrc, setImgSrc] = useState(product.primary_image || PLACEHOLDER);
+
+  // Determine what to show as price
+  const isStable = primaryToken ? STABLECOINS_SET.has(primaryToken.symbol.toUpperCase()) : true;
+  const showMatic = !primaryToken || isStable;  // show MATIC when no token or stablecoin
+  const displayAmount = showMatic ? maticFormatted : formatTokenAmount(parseFloat(primaryToken!.price_in_token), primaryToken!.symbol);
+  const displaySymbol = showMatic ? 'MATIC' : primaryToken!.symbol;
 
   return (
     <motion.div
@@ -172,19 +185,15 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
             {/* Price */}
             <div className="flex items-end justify-between">
               <div>
-                {primaryToken ? (
-                  <p className="font-black text-lg flex items-center gap-1" style={{ color: chain.color }}>
-                    {parseFloat(primaryToken.price_in_token).toFixed(4)}{' '}
-                    <span className="text-sm">{primaryToken.symbol}</span>
-                  </p>
-                ) : (
-                  <p className="font-black text-lg text-white flex items-center gap-1">
-                    {maticFormatted}
-                    <MaticIcon className="w-4 h-4 inline-block" />
-                  </p>
-                )}
+                <p className="font-black text-lg flex items-center gap-1" style={{ color: chain.color }}>
+                  {displayAmount}{' '}
+                  {displaySymbol === 'MATIC'
+                    ? <MaticIcon className="w-4 h-4 inline-block" />
+                    : <span className="text-sm">{displaySymbol}</span>
+                  }
+                </p>
                 <p className="text-xs text-white/40">
-                  {isTestnet ? '(testnet ≈ 0 USDT)' : `≈ $${parseFloat(product.base_price_usd).toFixed(2)}`}
+                  {isTestnet ? '(testnet)' : `≈ $${parseFloat(product.base_price_usd).toFixed(2)}`}
                 </p>
               </div>
 

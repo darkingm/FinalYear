@@ -524,16 +524,44 @@ export default function CheckoutPage() {
                       ))}
                     </div>
 
-                    {/* Hardhat tip */}
+                    {/* Hardhat setup guide */}
                     {selectedNet === 31337 && (
-                      <div className="mt-3 flex items-start gap-2 p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl">
-                        <Info className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                        <div className="text-xs text-emerald-400/90">
-                          <p className="font-bold mb-0.5">MetaMask: Thêm mạng Hardhat VPS</p>
-                          <p>RPC URL: <span className="font-mono">http://103.20.96.79:8545</span></p>
-                          <p>Chain ID: <span className="font-mono">31337</span> · Symbol: <span className="font-mono">ETH</span></p>
-                          <p className="mt-1">Import ví: <span className="font-mono text-[10px] break-all">0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80</span></p>
+                      <div className="mt-3 p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl space-y-2">
+                        <p className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5" /> Hướng dẫn test trên Hardhat VPS (miễn phí)
+                        </p>
+                        <p className="text-[11px] text-emerald-400/80">
+                          <span className="font-bold">Bước 1:</span> Thêm mạng vào MetaMask (Settings → Add Network)
+                        </p>
+                        <div className="space-y-1.5 text-[11px] font-mono text-emerald-300/80 pl-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400/50 w-20 flex-shrink-0">RPC URL:</span>
+                            <span className="flex-1 truncate">http://103.20.96.79:8545</span>
+                            <button onClick={() => copyText('http://103.20.96.79:8545', 'RPC URL')} className="flex-shrink-0 text-emerald-400/60 hover:text-emerald-400"><Copy className="w-3 h-3" /></button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400/50 w-20 flex-shrink-0">Chain ID:</span>
+                            <span>31337</span>
+                            <button onClick={() => copyText('31337', 'Chain ID')} className="flex-shrink-0 text-emerald-400/60 hover:text-emerald-400"><Copy className="w-3 h-3" /></button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400/50 w-20 flex-shrink-0">Symbol:</span>
+                            <span>ETH</span>
+                          </div>
                         </div>
+                        <p className="text-[11px] text-emerald-400/80 font-bold">
+                          Bước 2: Import ví có 10,000 ETH test (MetaMask → Import Account)
+                        </p>
+                        <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
+                          <code className="text-[9px] text-emerald-300/70 flex-1 break-all">0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80</code>
+                          <button
+                            onClick={() => copyText('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80', 'private key')}
+                            className="flex-shrink-0 p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-md transition-colors"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-emerald-400/50">Chỉ dùng private key này để test!</p>
                       </div>
                     )}
                   </div>
