@@ -52,7 +52,19 @@ const config: HardhatUserConfig = {
       url: process.env.ARB_SEPOLIA_RPC_URL || "https://sepolia-rollup.arbitrum.io/rpc",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 421614,
-    }
+    },
+
+    // ── VPS Hardhat node (chain ảo chạy trên VPS 103.20.96.79) ──
+    // Dùng để deploy lại EscrowCore lên VPS khi cần:
+    //   npx hardhat run scripts/bootstrap-local.ts --network vps
+    vps: {
+      url: process.env.VPS_RPC_URL || "http://103.20.96.79:8545",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [
+        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" // Hardhat #0
+      ],
+      chainId: 31337,
+      timeout: 120000,
+    },
   },
   etherscan: {
     apiKey: {

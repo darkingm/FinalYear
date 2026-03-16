@@ -45,24 +45,33 @@ export const polygonAmoy = defineChain({
   },
 });
 
-// ─── Hardhat / Anvil local node ────────────────────────────────────────────
+// ─── Hardhat / Anvil local node ───────────────────────────────────────────────────
+// VPS Hardhat: http://103.20.96.79:8545 — chain ảo, không cần token thật
+// Local: http://127.0.0.1:8545 — khi dùng locally
+const HARDHAT_RPC_URL = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://127.0.0.1:8545';
 export const localhost = defineChain({
   id: 31337,
-  name: 'Localhost',
+  name: 'Hardhat (VPS Local)',
   nativeCurrency: { decimals: 18, name: 'Ether', symbol: 'ETH' },
   rpcUrls: {
-    default: { http: ['http://127.0.0.1:8545'] },
+    default: { http: [HARDHAT_RPC_URL, 'http://127.0.0.1:8545'] },
+    public: { http: [HARDHAT_RPC_URL, 'http://127.0.0.1:8545'] },
   },
+  blockExplorers: {
+    default: { name: 'Hardhat Local', url: 'http://103.20.96.79:8545' },
+  },
+  testnet: true,
 });
 
-// ─── Chain ordering: TESTNET FIRST, then mainnet ──────────────────────────
-// RainbowKit will show the first chain as "default" in UI
+// ─── Chain ordering ───────────────────────────────────────────────────────
+// Hardhat VPS (31337) đặt đầu tiên — default cho test tự do
+// Polygon Amoy (80002) — secondary khi có đủ MATIC
 const testnets = [
-  polygonAmoy,    // 80002  ← DEFAULT for testing
+  localhost,      // 31337  ← MặC ĐỊNH cho testing trên VPS
+  polygonAmoy,    // 80002  ← Sử DỦNG khi có MATIC testnet
   bscTestnet,     // 97
   arbitrumSepolia,// 421614
   baseSepolia,    // 84532
-  localhost,      // 31337
 ] as const;
 
 const mainnets = [
@@ -88,18 +97,20 @@ export function getWagmiConfig(): Config {
 
 export { allChains as chains };
 
-// ─── Escrow contract addresses per chain ──────────────────────────────────
+// ─── Escrow contract addresses per chain ────────────────────────────────────
 export const ESCROW_CONTRACTS: Record<number, string> = {
-  // Testnets (active for development)
-  80002:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
-  31337:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_LOCALHOST    || '0x0000000000000000000000000000000000000000',
-  97:     process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BSC_TESTNET  || '0x0000000000000000000000000000000000000000',
-  421614: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARB_SEPOLIA  || '0x0000000000000000000000000000000000000000',
-  84532:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BASE_SEPOLIA || '0x0000000000000000000000000000000000000000',
+  // Hardhat VPS (ACTIVE — chạy trực tiếp trên VPS, instant confirmation)
+  31337: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_LOCALHOST || '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+  // Polygon Amoy (secondary testnet — cần MATIC faucet)
+  80002: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
+  // Other testnets (chưa deploy)
+  97: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BSC_TESTNET || '0x0000000000000000000000000000000000000000',
+  421614: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARB_SEPOLIA || '0x0000000000000000000000000000000000000000',
+  84532: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_BASE_SEPOLIA || '0x0000000000000000000000000000000000000000',
   // Mainnets (NOT active yet — zero address means not deployed)
-  137:    process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON      || '0x0000000000000000000000000000000000000000',
-  42161:  process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARBITRUM     || '0x0000000000000000000000000000000000000000',
-  1:      process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ETH          || '0x0000000000000000000000000000000000000000',
+  137: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON || '0x0000000000000000000000000000000000000000',
+  42161: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ARBITRUM || '0x0000000000000000000000000000000000000000',
+  1: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ETH || '0x0000000000000000000000000000000000000000',
 };
 
 // Helper: check if a chain has an active escrow contract
