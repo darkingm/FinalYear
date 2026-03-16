@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api/client';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { Header } from '@/components/layout/Header';
 import Image from 'next/image';
 import { X } from 'lucide-react';
@@ -27,7 +27,7 @@ const productSchema = z.object({
 type ProductFormData = z.infer<typeof productSchema>;
 
 export default function CreateProductPage() {
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
   const router = useRouter();
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);

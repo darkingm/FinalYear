@@ -4,36 +4,17 @@ import Link from 'next/link';
 import { ShoppingBag, Shield, Wallet, Package, Mail, MapPin, Phone, Github, Twitter, TrendingUp, Zap, ExternalLink, MessageCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
-import i18n from '@/lib/i18n/config';
 
 export function Footer() {
   const { t } = useTranslation();
-  const [, setLang] = useState(i18n.language);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Re-render on language change
   useEffect(() => {
-    const handler = () => setLang(i18n.language);
-    i18n.on('languageChanged', handler);
-    window.addEventListener('languagechange', handler);
-    return () => {
-      i18n.off('languageChanged', handler);
-      window.removeEventListener('languagechange', handler);
-    };
+    setIsMounted(true);
   }, []);
 
-  const shopLinks = [
-    { href: '/products', label: t('product.products'), icon: ShoppingBag },
-    { href: '/orders', label: t('order.myOrders'), icon: Package },
-    { href: '/wallet', label: t('wallet.yourWallet'), icon: Wallet },
-    { href: '/disputes', label: t('common.error'), icon: Shield },
-  ];
-
-  const supportLinks = [
-    { href: '/disputes', label: t('common.tryAgain') },
-    { href: '#', label: 'FAQ' },
-    { href: '#', label: t('auth.agreeToTerms').replace('Tôi đồng ý với ', '').replace("I agree to the ", '') },
-    { href: '#', label: t('auth.agreeToTerms') },
-  ];
+  // Helper: only translate after mount (avoids SSR/client mismatch)
+  const vi = (viText: string, enText: string) => isMounted ? viText : enText;
 
   return (
     <footer className="bg-background text-muted-foreground border-t border-border">
@@ -42,16 +23,18 @@ export function Footer() {
         <div className="container mx-auto px-4 max-w-7xl">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
-              { label: i18n.language === 'vi' ? 'Người dùng hoạt động' : 'Active Users', value: '10K+', icon: '👥', color: 'text-blue-500' },
-              { label: i18n.language === 'vi' ? 'Sản phẩm' : 'Products', value: '5,000+', icon: '📦', color: 'text-emerald-500' },
-              { label: i18n.language === 'vi' ? 'Bảo vệ bởi Escrow' : 'Escrow Protected', value: '100%', icon: '🛡️', color: 'text-purple-500' },
-              { label: i18n.language === 'vi' ? 'Khối lượng giao dịch' : 'Trading Volume', value: '$2M+', icon: '💹', color: 'text-yellow-500' },
+              { labelVi: 'Người dùng hoạt động', labelEn: 'Active Users', value: '10K+', icon: '👥', color: 'text-blue-500' },
+              { labelVi: 'Sản phẩm', labelEn: 'Products', value: '5,000+', icon: '📦', color: 'text-emerald-500' },
+              { labelVi: 'Bảo vệ bởi Escrow', labelEn: 'Escrow Protected', value: '100%', icon: '🛡️', color: 'text-purple-500' },
+              { labelVi: 'Khối lượng giao dịch', labelEn: 'Trading Volume', value: '$2M+', icon: '💹', color: 'text-yellow-500' },
             ].map((stat) => (
-              <div key={stat.label} className="flex items-center gap-3">
+              <div key={stat.labelEn} className="flex items-center gap-3">
                 <span className="text-2xl">{stat.icon}</span>
                 <div>
                   <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
-                  <p className="text-xs text-muted-foreground/60">{stat.label}</p>
+                  <p className="text-xs text-muted-foreground/60" suppressHydrationWarning>
+                    {vi(stat.labelVi, stat.labelEn)}
+                  </p>
                 </div>
               </div>
             ))}
@@ -72,21 +55,22 @@ export function Footer() {
                 Web3<span className="text-[#f0b90b]">Market</span>
               </span>
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6 max-w-xs">
-              {i18n.language === 'vi'
-                ? 'Sàn thương mại điện tử Web3 hàng đầu — mua sắm và thanh toán bằng crypto với sự bảo vệ của hợp đồng thông minh Escrow.'
-                : 'The leading Web3 e-commerce platform — shop and pay with crypto, protected by smart contract Escrow.'}
+            <p className="text-sm text-muted-foreground leading-relaxed mb-6 max-w-xs" suppressHydrationWarning>
+              {vi(
+                'Sàn thương mại điện tử Web3 hàng đầu — mua sắm và thanh toán bằng crypto với sự bảo vệ của hợp đồng thông minh Escrow.',
+                'The leading Web3 e-commerce platform — shop and pay with crypto, protected by smart contract Escrow.'
+              )}
             </p>
 
             {/* Newsletter */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-foreground mb-2">
-                {i18n.language === 'vi' ? 'Nhận thông báo mới nhất' : 'Subscribe to updates'}
+              <p className="text-sm font-semibold text-foreground mb-2" suppressHydrationWarning>
+                {vi('Nhận thông báo mới nhất', 'Subscribe to updates')}
               </p>
               <div className="flex gap-2">
                 <input
                   type="email"
-                  placeholder={i18n.language === 'vi' ? 'Email của bạn...' : 'Your email...'}
+                  placeholder={vi('Email của bạn...', 'Your email...')}
                   className="flex-1 px-3 py-2 bg-accent/10 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#f0b90b]/50 transition-all"
                 />
                 <button className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e6a800] text-black text-sm font-semibold rounded-lg transition-colors">
@@ -112,21 +96,21 @@ export function Footer() {
 
           {/* Shopping Links */}
           <div>
-            <h4 className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wider">
-              {i18n.language === 'vi' ? 'Mua sắm' : 'Shopping'}
+            <h4 className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wider" suppressHydrationWarning>
+              {vi('Mua sắm', 'Shopping')}
             </h4>
             <ul className="space-y-3">
               {[
-                { href: '/products', label: i18n.language === 'vi' ? 'Tất cả sản phẩm' : 'All Products', icon: ShoppingBag },
-                { href: '/orders', label: i18n.language === 'vi' ? 'Đơn hàng của tôi' : 'My Orders', icon: Package },
-                { href: '/wallet', label: i18n.language === 'vi' ? 'Ví crypto' : 'Crypto Wallet', icon: Wallet },
-                { href: '/disputes', label: i18n.language === 'vi' ? 'Tranh chấp' : 'Disputes', icon: Shield },
+                { href: '/products', labelVi: 'Tất cả sản phẩm', labelEn: 'All Products', icon: ShoppingBag },
+                { href: '/orders', labelVi: 'Đơn hàng của tôi', labelEn: 'My Orders', icon: Package },
+                { href: '/wallet', labelVi: 'Ví crypto', labelEn: 'Crypto Wallet', icon: Wallet },
+                { href: '/disputes', labelVi: 'Tranh chấp', labelEn: 'Disputes', icon: Shield },
               ].map(item => (
                 <li key={item.href}>
                   <Link href={item.href}
                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-[#f0b90b] transition-colors group">
                     <item.icon className="w-3.5 h-3.5 group-hover:text-[#f0b90b]" />
-                    {item.label}
+                    <span suppressHydrationWarning>{vi(item.labelVi, item.labelEn)}</span>
                   </Link>
                 </li>
               ))}
@@ -160,21 +144,21 @@ export function Footer() {
 
           {/* Support */}
           <div>
-            <h4 className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wider">
-              {i18n.language === 'vi' ? 'Hỗ trợ' : 'Support'}
+            <h4 className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wider" suppressHydrationWarning>
+              {vi('Hỗ trợ', 'Support')}
             </h4>
             <ul className="space-y-3">
               {[
-                { href: '/disputes', label: i18n.language === 'vi' ? 'Báo cáo vấn đề' : 'Report Issue' },
-                { href: '#', label: 'FAQ' },
-                { href: '#', label: i18n.language === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy' },
-                { href: '#', label: i18n.language === 'vi' ? 'Điều khoản sử dụng' : 'Terms of Service' },
+                { href: '/disputes', labelVi: 'Báo cáo vấn đề', labelEn: 'Report Issue' },
+                { href: '#', labelVi: 'FAQ', labelEn: 'FAQ' },
+                { href: '#', labelVi: 'Chính sách bảo mật', labelEn: 'Privacy Policy' },
+                { href: '#', labelVi: 'Điều khoản sử dụng', labelEn: 'Terms of Service' },
               ].map(item => (
-                <li key={item.label}>
+                <li key={item.labelEn}>
                   <Link href={item.href}
                     className="text-sm text-muted-foreground hover:text-[#f0b90b] transition-colors flex items-center gap-1.5">
                     <ExternalLink className="w-3 h-3" />
-                    {item.label}
+                    <span suppressHydrationWarning>{vi(item.labelVi, item.labelEn)}</span>
                   </Link>
                 </li>
               ))}
@@ -203,11 +187,15 @@ export function Footer() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
               <Shield className="w-3.5 h-3.5 text-[#f0b90b]" />
-              {i18n.language === 'vi' ? 'Bảo vệ bởi Smart Contract Escrow' : 'Protected by Smart Contract Escrow'}
+              <span suppressHydrationWarning>
+                {vi('Bảo vệ bởi Smart Contract Escrow', 'Protected by Smart Contract Escrow')}
+              </span>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              {i18n.language === 'vi' ? 'Hệ thống hoạt động bình thường' : 'Systems operational'}
+              <span suppressHydrationWarning>
+                {vi('Hệ thống hoạt động bình thường', 'Systems operational')}
+              </span>
             </div>
           </div>
         </div>

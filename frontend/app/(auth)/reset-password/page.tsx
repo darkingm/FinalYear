@@ -4,14 +4,14 @@ export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { toast } from 'sonner';
 import { Lock, Zap, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import Link from 'next/link';
 
 export default function ResetPasswordPage() {
-    const { t } = useTranslation();
+    const { t } = useClientTranslation();
     const router = useRouter();
     const searchParams = useSearchParams();
     const token = searchParams.get('token');

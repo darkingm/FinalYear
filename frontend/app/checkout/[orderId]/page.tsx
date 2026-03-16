@@ -49,15 +49,15 @@ const DEFAULT_TOKENS = ['USDT', 'USDC', 'MATIC', 'ETH', 'BNB'];
 
 /* Supported networks for payment — testnet first for dev convenience */
 export const ALL_PAYMENT_NETWORKS: { chainId: number; name: string; color: string; icon: string; nativeSym: string; testnet: boolean }[] = [
-  { chainId: 80002,  name: 'Polygon Amoy',         color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: true  },
-  { chainId: 31337,  name: 'Localhost (Hardhat)',   color: '#22c55e', icon: '🖥️', nativeSym: 'ETH',  testnet: true  },
-  { chainId: 97,     name: 'BNB Testnet',           color: '#f0b90b', icon: '🟡', nativeSym: 'tBNB', testnet: true  },
-  { chainId: 421614, name: 'Arbitrum Sepolia',      color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: true  },
-  { chainId: 84532,  name: 'Base Sepolia',          color: '#0052ff', icon: '🔵', nativeSym: 'ETH',  testnet: true  },
-  { chainId: 137,    name: 'Polygon ⚠️ Mainnet',    color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: false },
-  { chainId: 42161,  name: 'Arbitrum One ⚠️',        color: '#12aaff', icon: '⚡', nativeSym: 'ETH',  testnet: false },
-  { chainId: 56,     name: 'BNB Chain ⚠️',           color: '#f0b90b', icon: '🟡', nativeSym: 'BNB',  testnet: false },
-  { chainId: 1,      name: 'Ethereum ⚠️',            color: '#627eea', icon: '💎', nativeSym: 'ETH',  testnet: false },
+  { chainId: 80002, name: 'Polygon Amoy', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: true },
+  { chainId: 31337, name: 'Localhost (Hardhat)', color: '#22c55e', icon: '🖥️', nativeSym: 'ETH', testnet: true },
+  { chainId: 97, name: 'BNB Testnet', color: '#f0b90b', icon: '🟡', nativeSym: 'tBNB', testnet: true },
+  { chainId: 421614, name: 'Arbitrum Sepolia', color: '#12aaff', icon: '⚡', nativeSym: 'ETH', testnet: true },
+  { chainId: 84532, name: 'Base Sepolia', color: '#0052ff', icon: '🔵', nativeSym: 'ETH', testnet: true },
+  { chainId: 137, name: 'Polygon ⚠️ Mainnet', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC', testnet: false },
+  { chainId: 42161, name: 'Arbitrum One ⚠️', color: '#12aaff', icon: '⚡', nativeSym: 'ETH', testnet: false },
+  { chainId: 56, name: 'BNB Chain ⚠️', color: '#f0b90b', icon: '🟡', nativeSym: 'BNB', testnet: false },
+  { chainId: 1, name: 'Ethereum ⚠️', color: '#627eea', icon: '💎', nativeSym: 'ETH', testnet: false },
 ];
 
 // When TESTNET_MODE=true, hide mainnet options to avoid confusion / accidental real payments
@@ -72,24 +72,30 @@ const CHAIN_META: Record<number, { name: string; color: string; icon: string; na
   Object.fromEntries(ALL_PAYMENT_NETWORKS.map(n => [n.chainId, { name: n.name, color: n.color, icon: n.icon, nativeSym: n.nativeSym }]));
 
 // Extra common chains MetaMask users might be on:
-CHAIN_META[80001]    = { name: 'Mumbai (Deprecated)', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' };
+CHAIN_META[80001] = { name: 'Mumbai (Deprecated)', color: '#8247e5', icon: '🔷', nativeSym: 'MATIC' };
 CHAIN_META[11155111] = { name: 'Sepolia', color: '#627eea', icon: '💎', nativeSym: 'ETH' };
 CHAIN_META[11155420] = { name: 'OP Sepolia', color: '#ff0420', icon: '🔴', nativeSym: 'ETH' };
-CHAIN_META[43114]    = { name: 'Avalanche', color: '#e84142', icon: '🔺', nativeSym: 'AVAX' };
-CHAIN_META[10]       = { name: 'Optimism', color: '#ff0420', icon: '🔴', nativeSym: 'ETH' };
-CHAIN_META[8453]     = { name: 'Base', color: '#0052ff', icon: '🔵', nativeSym: 'ETH' };
+CHAIN_META[43114] = { name: 'Avalanche', color: '#e84142', icon: '🔺', nativeSym: 'AVAX' };
+CHAIN_META[10] = { name: 'Optimism', color: '#ff0420', icon: '🔴', nativeSym: 'ETH' };
+CHAIN_META[8453] = { name: 'Base', color: '#0052ff', icon: '🔵', nativeSym: 'ETH' };
 
 
 // ERC-20 approve ABI (minimal)
 const APPROVE_ABI = [
-  { name: 'approve', type: 'function', stateMutability: 'nonpayable',
+  {
+    name: 'approve', type: 'function', stateMutability: 'nonpayable',
     inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
-    outputs: [{ name: '', type: 'bool' }] },
-  { name: 'allowance', type: 'function', stateMutability: 'view',
+    outputs: [{ name: '', type: 'bool' }]
+  },
+  {
+    name: 'allowance', type: 'function', stateMutability: 'view',
     inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
-    outputs: [{ name: '', type: 'uint256' }] },
-  { name: 'decimals', type: 'function', stateMutability: 'view',
-    inputs: [], outputs: [{ name: '', type: 'uint8' }] },
+    outputs: [{ name: '', type: 'uint256' }]
+  },
+  {
+    name: 'decimals', type: 'function', stateMutability: 'view',
+    inputs: [], outputs: [{ name: '', type: 'uint8' }]
+  },
 ] as const;
 
 /* ─── Coin Price Hook ────────────────────────────────────────── */
@@ -116,7 +122,7 @@ function useCoinPrices(tokens: string[]) {
     fetchPrices();
     const iv = setInterval(fetchPrices, 30000);
     return () => clearInterval(iv);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenKey]);
   return prices;
 }
@@ -170,6 +176,9 @@ export default function CheckoutPage() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState('');
+  const [submittedTxHash, setSubmittedTxHash] = useState<string | null>(null);
+  const [confirmedTx, setConfirmedTx] = useState(false);
+  const [confirmPolling, setConfirmPolling] = useState(false);
   const [quoteAddress, setQuoteAddress] = useState<string | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -198,7 +207,7 @@ export default function CheckoutPage() {
     } else if (!preferredChainId) {
       setPreferredChainId(DEFAULT_CHAIN_ID);
     }
-    
+
     // Auto-clear quote if user switches metamask accounts or network manually
     if (quote) {
       if (address !== quoteAddress && !quoteLoading) {
@@ -207,7 +216,7 @@ export default function CheckoutPage() {
         toast.info('Tài khoản thay đổi, vui lòng lấy báo giá lại');
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chainId, address]);
 
   const effectiveChainId = preferredChainId || DEFAULT_CHAIN_ID;
@@ -241,7 +250,7 @@ export default function CheckoutPage() {
     if (!authLoading && !isAuthenticated) { router.push('/login'); return; }
     if (isAuthenticated && orderId && !Number.isNaN(orderId)) fetchOrder();
     else if (!authLoading) setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, orderId]);
 
   const fetchOrder = async () => {
@@ -379,10 +388,43 @@ export default function CheckoutPage() {
       }
 
       toast.loading('Đang chờ xác nhận on-chain...', { id: 'tx' });
+
+      // Submit tx hash to backend
       await paymentClient.post('/api/payments/crypto/submit', { order_id: orderId, tx_hash: hash });
-      toast.success('Giao dịch thành công! 🎉', { id: 'tx' });
+      toast.success('Giao dịch đã gửi! Đang chờ xác nhận...', { id: 'tx' });
+
+      // Show the submitted tx hash
+      setSubmittedTxHash(hash);
       setPayStep('done');
-      router.push(`/orders/${orderId}`);
+
+      // Start polling payment status until ONCHAIN_CONFIRMED
+      setConfirmPolling(true);
+      const pollStart = Date.now();
+      const MAX_POLL_MS = 60_000; // 60s timeout
+
+      const poll = async (): Promise<void> => {
+        if (Date.now() - pollStart > MAX_POLL_MS) {
+          setConfirmPolling(false);
+          toast.info('Giao dịch đang chờ xác nhận. Kiểm tra lại sau tại đơn hàng.');
+          router.push(`/orders/${orderId}`);
+          return;
+        }
+        try {
+          const statusRes = await paymentClient.get(`/api/payments/crypto/status/${orderId}`);
+          const orderStatus = statusRes.data?.status?.status || statusRes.data?.status;
+          if (orderStatus === 'ONCHAIN_CONFIRMED' || orderStatus === 'PAID') {
+            setConfirmPolling(false);
+            setConfirmedTx(true);
+            toast.success('✅ Thanh toán đã xác nhận on-chain!', { id: 'tx', duration: 5000 });
+            return; // Stay on page, show success screen
+          }
+        } catch { /* ignore polling errors */ }
+        // Poll again after 2s
+        await new Promise(r => setTimeout(r, 2000));
+        return poll();
+      };
+
+      poll().catch(() => setConfirmPolling(false));
     } catch (e: any) {
       const msg = e.shortMessage || e.message || 'Giao dịch thất bại';
       if (e.code === 4001 || msg.includes('rejected')) toast.info('Bạn đã hủy giao dịch');
@@ -416,7 +458,7 @@ export default function CheckoutPage() {
   };
 
   const quoteTimeLeft = quote ? Math.max(0, Math.floor((quote.expires_at * 1000 - Date.now()) / 1000)) : 0;
-  
+
   const metadataPricing = (order?.product_metadata as any)?.pricing || {};
   const estimatedToken = metadataPricing[selectedToken]
     ? Number(metadataPricing[selectedToken]).toFixed(6)
@@ -480,9 +522,8 @@ export default function CheckoutPage() {
               <div className="bg-card border border-border rounded-2xl p-4 flex items-center justify-between">
                 {[{ id: 1, label: 'Đơn hàng' }, { id: 2, label: 'Phương thức' }, { id: 3, label: 'Thanh toán' }].map((s, i) => (
                   <div key={s.id} className="flex items-center gap-2 flex-1">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      step > s.id ? 'bg-[#f0b90b] text-black' : step === s.id ? 'border-2 border-[#f0b90b] text-[#f0b90b] bg-transparent' : 'bg-muted text-muted-foreground'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step > s.id ? 'bg-[#f0b90b] text-black' : step === s.id ? 'border-2 border-[#f0b90b] text-[#f0b90b] bg-transparent' : 'bg-muted text-muted-foreground'
+                      }`}>
                       {step > s.id ? <CheckCircle className="w-4 h-4" /> : s.id}
                     </div>
                     <span className={`text-xs font-semibold ${step >= s.id ? 'text-foreground' : 'text-muted-foreground'}`}>{s.label}</span>
@@ -607,11 +648,10 @@ export default function CheckoutPage() {
                                     catch { toast.info(`Vui lòng chuyển thủ công sang ${net.name} trong MetaMask`); }
                                   }
                                 }}
-                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${
-                                  effectiveChainId === net.chainId
-                                    ? 'border-emerald-500/40 bg-emerald-500/10'
-                                    : 'border-transparent hover:border-border hover:bg-muted/50'
-                                }`}
+                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${effectiveChainId === net.chainId
+                                  ? 'border-emerald-500/40 bg-emerald-500/10'
+                                  : 'border-transparent hover:border-border hover:bg-muted/50'
+                                  }`}
                               >
                                 <span className="text-base">{net.icon}</span>
                                 <div className="flex-1">
@@ -637,11 +677,10 @@ export default function CheckoutPage() {
                                     catch { toast.info(`Vui lòng chuyển thủ công sang ${net.name} trong MetaMask`); }
                                   }
                                 }}
-                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${
-                                  effectiveChainId === net.chainId
-                                    ? 'border-[#f0b90b]/40 bg-[#f0b90b]/5'
-                                    : 'border-transparent hover:border-border hover:bg-muted/50'
-                                }`}
+                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${effectiveChainId === net.chainId
+                                  ? 'border-[#f0b90b]/40 bg-[#f0b90b]/5'
+                                  : 'border-transparent hover:border-border hover:bg-muted/50'
+                                  }`}
                               >
                                 <span className="text-base">{net.icon}</span>
                                 <div className="flex-1">
@@ -677,8 +716,8 @@ export default function CheckoutPage() {
                       <div className="flex items-center gap-1 mt-1">
                         <RefreshCw className="w-3 h-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
-                          {metadataPricing[selectedToken] 
-                            ? 'Giá được cố định bởi người bán' 
+                          {metadataPricing[selectedToken]
+                            ? 'Giá được cố định bởi người bán'
                             : 'Giá thực từ Binance · cập nhật 30s'}
                         </span>
                       </div>
@@ -906,7 +945,7 @@ export default function CheckoutPage() {
                             className="w-full py-4 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-black rounded-xl text-base transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20">
                             {submitLoading ? <><Loader2 className="w-5 h-5 animate-spin" />Đang xử lý giao dịch...</>
                               : payStep === 'done' ? <><CheckCircle className="w-5 h-5" />Hoàn tất!</>
-                              : <><Wallet className="w-5 h-5" />Ký & Thanh toán qua MetaMask</>}
+                                : <><Wallet className="w-5 h-5" />Ký & Thanh toán qua MetaMask</>}
                           </button>
                         )}
 
@@ -929,6 +968,83 @@ export default function CheckoutPage() {
                     </motion.div>
                   )}
                 </div>
+              )}
+
+              {/* ── SUCCESS SCREEN (after tx confirmed) ── */}
+              {confirmedTx && submittedTxHash && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5"
+                >
+                  <div className="w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center mx-auto">
+                    <CheckCircle className="w-10 h-10 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-emerald-400">Thanh toán thành công! 🎉</h2>
+                    <p className="text-muted-foreground text-sm mt-1">Giao dịch đã được xác nhận on-chain</p>
+                  </div>
+
+                  {/* Tx Hash */}
+                  <div className="p-4 bg-background border border-border rounded-xl text-left">
+                    <p className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wider">Transaction Hash</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-xs text-foreground flex-1 break-all">{submittedTxHash}</p>
+                      <button
+                        onClick={() => copyToClipboard(submittedTxHash, 'Tx Hash')}
+                        className="flex-shrink-0 p-1.5 hover:bg-muted rounded-lg transition-colors"
+                      >
+                        <Copy className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Link href={`/orders/${orderId}`}>
+                      <button className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-400 transition-colors text-sm flex items-center justify-center gap-2">
+                        <CheckCircle className="w-4 h-4" /> Xem đơn hàng
+                      </button>
+                    </Link>
+                    <Link href="/products">
+                      <button className="w-full py-3 bg-card border border-border text-foreground text-sm font-semibold rounded-xl hover:bg-muted transition-colors">
+                        Tiếp tục mua sắm
+                      </button>
+                    </Link>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ── TX PENDING SCREEN (while polling) ── */}
+              {confirmPolling && submittedTxHash && !confirmedTx && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-card border border-[#f0b90b]/30 rounded-2xl p-6 space-y-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0">
+                      <Loader2 className="w-5 h-5 text-[#f0b90b] animate-spin" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-[#f0b90b]">Đang xác nhận on-chain...</p>
+                      <p className="text-xs text-muted-foreground">Giao dịch đã gửi thành công, đang chờ blockchain xác nhận</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-background border border-border rounded-xl">
+                    <p className="text-xs text-muted-foreground mb-1 font-semibold">Tx Hash (giao dịch của bạn)</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-xs text-foreground flex-1 break-all">{submittedTxHash}</p>
+                      <button onClick={() => copyToClipboard(submittedTxHash, 'Tx Hash')} className="flex-shrink-0">
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    ⏱ Tự động cập nhật mỗi 2 giây (Hardhat: ~instant)
+                  </p>
+                </motion.div>
               )}
 
               {/* ── PAYPAL PANEL ── */}

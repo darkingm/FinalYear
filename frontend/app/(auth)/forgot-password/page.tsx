@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { toast } from 'sonner';
 import { Mail, Zap, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 
 export default function ForgotPasswordPage() {
-    const { t } = useTranslation();
+    const { t } = useClientTranslation();
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
     const [sent, setSent] = useState(false);

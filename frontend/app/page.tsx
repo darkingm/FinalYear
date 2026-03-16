@@ -23,7 +23,7 @@ import { getCoinLogo } from '@/lib/utils/coin-logos';
 import { getProductGallery } from '@/lib/utils/product-images';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
 import { AIChatButton } from '@/components/ui/ai-chat-button';
 
@@ -94,7 +94,7 @@ function useFlashSaleTimer() {
 /* ─── Wallet Balance Section ─────────────────────── */
 function WalletBalanceSection() {
   const { isConnected, tokenBalances, totalUSDT, isLoading, refetch } = useWallet();
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -181,7 +181,7 @@ function WalletBalanceSection() {
 
 /* ─── Market Table ───────────────────────────────── */
 function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boolean }) {
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
@@ -296,7 +296,7 @@ function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boo
 
 /* ─── Main Page ──────────────────────────────────── */
 export default function HomePage() {
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
   const { isAuthenticated, isLoading } = useAuth();
   const [products, setProducts] = useState<ProductCardData[]>([]);
   const [prodLoading, setProdLoading] = useState(true);

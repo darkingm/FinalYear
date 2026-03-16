@@ -22,7 +22,7 @@ import { productService } from '@/services';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { ShoppingCart } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 
 // Lazy load chart
 const CoinChart = nextDynamic(
@@ -838,7 +838,7 @@ function RecommendedProducts({ symbol }: { symbol: string }) {
   const [products, setProducts] = useState<any[]>([]);
   const [failed, setFailed] = useState<Set<number>>(new Set());
   const addItem = useCartStore(s => s.addItem);
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
 
   useEffect(() => {
     productService.list({ limit: 4 }).then(res => {

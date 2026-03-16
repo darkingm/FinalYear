@@ -39,9 +39,14 @@ export function Header() {
   const [tickers, setTickers] = useState<any[]>([]);
   const [, setLang] = useState(i18n.language);
   const [addrCopied, setAddrCopied] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const { items: cartItems } = useCartStore();
   const cartItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -89,11 +94,11 @@ export function Header() {
   };
 
   const navLinks = [
-    { href: '/', label: t('nav.home'), authRequired: false },
-    { href: '/products', label: t('nav.products'), authRequired: false },
-    { href: '/trading/BTCUSDT', label: t('nav.trading'), icon: TrendingUp, authRequired: false },
-    { href: '/orders', label: t('nav.orders'), icon: ShoppingBag, hasBadge: true, authRequired: true },
-    { href: '/wallet', label: t('nav.wallet'), authRequired: true },
+    { href: '/', label: isMounted ? t('nav.home') : 'Home', authRequired: false },
+    { href: '/products', label: isMounted ? t('nav.products') : 'Products', authRequired: false },
+    { href: '/trading/BTCUSDT', label: isMounted ? t('nav.trading') : 'Trading', icon: TrendingUp, authRequired: false },
+    { href: '/orders', label: isMounted ? t('nav.orders') : 'Orders', icon: ShoppingBag, hasBadge: true, authRequired: true },
+    { href: '/wallet', label: isMounted ? t('nav.wallet') : 'Wallet', authRequired: true },
   ].filter(link => !link.authRequired || isAuthenticated);
 
   const isActive = (href: string) => href === '/' ? pathname === '/' : pathname?.startsWith(href);
@@ -152,11 +157,10 @@ export function Header() {
               <nav className="hidden lg:flex items-center gap-0.5">
                 {navLinks.map((link) => (
                   <Link key={link.href} href={link.href}
-                    className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
-                      isActive(link.href)
-                        ? 'text-[#f0b90b] bg-[#f0b90b]/10'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                    }`}>
+                    className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
+                      ? 'text-[#8247e5] bg-[#8247e5]/10'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
+                      }`}>
                     {link.icon && <link.icon className="w-3.5 h-3.5" />}
                     {link.label}
                     {link.hasBadge && cartItemCount > 0 && (
@@ -168,11 +172,10 @@ export function Header() {
                 ))}
                 {isAdmin && (
                   <Link href="/admin"
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
-                      pathname?.startsWith('/admin')
-                        ? 'text-[#f0b90b] bg-[#f0b90b]/10'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                    }`}>
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${pathname?.startsWith('/admin')
+                      ? 'text-[#8247e5] bg-[#8247e5]/10'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
+                      }`}>
                     <Shield className="w-3.5 h-3.5" /> Admin
                   </Link>
                 )}
@@ -204,7 +207,7 @@ export function Header() {
                       <TooltipTrigger asChild>
                         <button className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors">
                           <Bell className="w-5 h-5" />
-                          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#f0b90b] rounded-full" />
+                          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#8247e5] rounded-full" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Thông báo</TooltipContent>
@@ -295,7 +298,7 @@ export function Header() {
                             ) : (
                               <button
                                 onClick={openConnectModal}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f0b90b]/10 border border-[#f0b90b]/30 hover:bg-[#f0b90b]/20 transition-colors text-xs font-bold text-[#f0b90b]"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#8247e5]/10 border border-[#8247e5]/30 hover:bg-[#8247e5]/20 transition-colors text-xs font-bold text-[#8247e5]"
                               >
                                 <Wallet className="w-3.5 h-3.5" />
                                 Kết nối ví
@@ -334,11 +337,11 @@ export function Header() {
                       <DropdownMenuSeparator />
 
                       {[
-                        { href: '/profile', icon: User,     label: t('nav.profile') },
-                        { href: '/orders',  icon: Package,  label: t('nav.orders') },
-                        { href: '/wallet',  icon: Wallet,   label: t('nav.wallet') },
+                        { href: '/profile', icon: User, label: t('nav.profile') },
+                        { href: '/orders', icon: Package, label: t('nav.orders') },
+                        { href: '/wallet', icon: Wallet, label: t('nav.wallet') },
                         { href: '/profile/credit', icon: Shield, label: 'AI Credit Score' },
-                        { href: '/profile/nfts',   icon: Zap,    label: 'NFT Portfolio' },
+                        { href: '/profile/nfts', icon: Zap, label: 'NFT Portfolio' },
                         { href: '/seller/dashboard', icon: BarChart3, label: 'Seller Dashboard' },
                         ...(isAdmin ? [{ href: '/admin', icon: Shield, label: 'Admin Panel' }] : []),
                       ].map((item) => (
@@ -356,20 +359,20 @@ export function Header() {
                         className="text-destructive focus:text-destructive focus:bg-destructive/10"
                       >
                         <LogOut className="w-4 h-4" />
-                        <span>{t('nav.logout')}</span>
+                        <span suppressHydrationWarning>{isMounted ? t('nav.logout') : 'Logout'}</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 ) : (
                   <div className="flex gap-2">
                     <Link href="/login">
-                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground border border-border">
-                        {t('auth.login')}
+                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground border border-border" suppressHydrationWarning>
+                        {isMounted ? t('auth.login') : 'Login'}
                       </Button>
                     </Link>
                     <Link href="/register">
-                      <Button size="sm" className="bg-[#f0b90b] hover:bg-[#e6a800] text-black font-semibold shadow-lg shadow-yellow-500/20">
-                        {t('auth.register')}
+                      <Button size="sm" className="btn-purple-rainbow font-semibold shadow-lg shadow-purple-500/20" suppressHydrationWarning>
+                        {isMounted ? t('auth.register') : 'Register'}
                       </Button>
                     </Link>
                   </div>
@@ -405,9 +408,8 @@ export function Header() {
                 <nav className="flex flex-col gap-1">
                   {navLinks.map((link) => (
                     <Link key={link.href} href={link.href}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        isActive(link.href) ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                      }`}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(link.href) ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
+                        }`}
                       onClick={() => setMobileMenuOpen(false)}>
                       {link.icon && <link.icon className="w-4 h-4" />}
                       {link.label}
@@ -436,7 +438,7 @@ export function Header() {
                       <Button variant="outline" className="w-full border-border">Đăng nhập</Button>
                     </Link>
                     <Link href="/register" className="flex-1">
-                      <Button className="w-full bg-[#f0b90b] hover:bg-[#e6a800] text-black font-semibold">Đăng ký</Button>
+                      <Button className="w-full btn-purple-rainbow font-semibold">Đăng ký</Button>
                     </Link>
                   </div>
                 ) : (
@@ -459,7 +461,7 @@ export function Header() {
                       className="w-full flex items-center gap-2.5 px-3 py-2.5 text-destructive hover:bg-destructive/10 rounded-lg text-sm transition-colors"
                     >
                       <LogOut className="w-4 h-4" />
-                      <span>{t('nav.logout')}</span>
+                      <span suppressHydrationWarning>{isMounted ? t('nav.logout') : 'Logout'}</span>
                     </button>
                   </>
                 )}

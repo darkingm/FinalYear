@@ -1,7 +1,7 @@
 'use client';
 
 import { useWallet } from '@/lib/hooks/useWallet';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { motion } from 'framer-motion';
 import { formatCurrency } from '@/lib/utils/format';
 import { CoinCard } from './CoinCard';
@@ -9,7 +9,7 @@ import { Wallet, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function BalanceOverview() {
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
   const { isConnected, tokenBalances, totalUSDT, isLoading, refetch } = useWallet();
 
   if (!isConnected) {

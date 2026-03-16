@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import { useDisconnect } from 'wagmi';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 
 const NAV_KEYS = [
     { href: '/admin', labelKey: 'admin.dashboard', icon: LayoutDashboard, exact: true, badge: null },
@@ -29,7 +29,7 @@ const NAV_KEYS = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const { user, isAuthenticated, isLoading } = useAuth();
-    const { t } = useTranslation();
+    const { t } = useClientTranslation();
     const router = useRouter();
     const pathname = usePathname();
     const { disconnect } = useDisconnect();

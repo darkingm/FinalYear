@@ -9,10 +9,28 @@ import { useState, memo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Star, User, Zap, Package, Heart, Eye } from 'lucide-react';
+import { ShoppingCart, Star, User, Zap, Heart, Eye } from 'lucide-react';
 import { useCartStore } from '@/store/cart-store';
 import { getProductGallery } from '@/lib/utils/product-images';
 import { toast } from 'sonner';
+import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
+import { useChainId } from 'wagmi';
+
+/* ─── Safe Chain Id Hook ─────────────────────────────────────── */
+// useChainId is called unconditionally at the top. If WagmiProvider is unavailable,
+// wagmi returns its default (amoy 80002 = testnet) which is safe.
+function useCurrentChainId() {
+  return useChainId(); // defaults to 80002 (testnet) if no wallet connected
+}
+
+/* ─── MATIC Icon SVG ─────────────────────────────────────────────── */
+function MaticIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 38 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M28.77 10.01c-.77-.44-1.77-.44-2.62 0l-6.15 3.56-4.17 2.37-6.08 3.56c-.77.44-1.77.44-2.62 0L2.46 16.5c-.77-.44-1.31-1.25-1.31-2.13V9.93c0-.88.46-1.69 1.31-2.13L7.13 4.94c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v3.56l4.17-2.44V6.94c0-.88-.46-1.69-1.31-2.13L9.9.44C9.13 0 8.13 0 7.28.44L.85 4.19C.08 4.63-.38 5.44-.38 6.31v7.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l6.08-3.5 4.17-2.44 6.08-3.5c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v4.44c0 .88-.46 1.69-1.31 2.13l-4.54 2.56c-.77.44-1.77.44-2.62 0L23.31 24c-.77-.44-1.31-1.25-1.31-2.13V18.3l-4.17 2.44v3.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l7.28-4.19c.77-.44 1.31-1.25 1.31-2.13V16.8c0-.88-.46-1.69-1.31-2.13l-7.55-4.66z" fill="#8247E5" />
+    </svg>
+  );
+}
 
 const FALLBACK = '/placeholder-product.svg';
 
@@ -42,38 +60,59 @@ interface ProductCardProps {
   showAddToCart?: boolean;
 }
 
+/**
+ * PriceBadge — shows price in token (MATIC by default).
+ * - Live MATIC/USD rate fetched every 5s from Binance.
+ * - On testnet chains: shows the token amount but marks as testnet (≈ 0 USDT).
+ * - If product has explicit token pricing, uses that token.
+ * - Fallback: compute MATIC from USD.
+ */
 function PriceBadge({ product }: { product: ProductCardData }) {
+  const { prices } = useTokenPrice();
+  const chainId = useChainId(); // always called unconditionally at top level
+  const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
+
   const pricing = product.metadata?.pricing || {};
   const tokenKeys = Object.keys(pricing);
   const hasLegacyToken = Boolean(product.price_in_token && product.token_symbol);
   const hasMetadataTokens = tokenKeys.length > 0;
-  
-  if (!hasLegacyToken && !hasMetadataTokens) {
-    return (
-      <div className="flex items-baseline gap-1.5 flex-wrap">
-        <span className="font-black text-foreground text-lg">
-          ${Number(product.base_price_usd).toFixed(2)}
-        </span>
-      </div>
-    );
+
+  let primaryToken: string;
+  let primaryAmount: number;
+
+  if (hasMetadataTokens) {
+    primaryToken = tokenKeys[0];
+    primaryAmount = Number(pricing[primaryToken]);
+  } else if (hasLegacyToken) {
+    primaryToken = product.token_symbol!;
+    primaryAmount = Number(product.price_in_token);
+  } else {
+    // Fallback: compute MATIC from USD using live price
+    primaryToken = 'MATIC';
+    primaryAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
   }
 
-  const primaryToken = hasMetadataTokens ? tokenKeys[0] : product.token_symbol!;
-  const primaryAmount = hasMetadataTokens ? pricing[primaryToken] : product.price_in_token!;
-  
-  const formattedAmount = Number(primaryAmount).toFixed(
-    ['ETH', 'WBTC', 'BTC'].includes(primaryToken) ? 6 : 2
-  );
+  const formattedAmount = formatTokenAmount(primaryAmount, primaryToken);
+  const isMatic = primaryToken.toUpperCase() === 'MATIC';
 
   return (
     <div className="flex flex-col gap-0.5">
-      <div className="flex items-baseline gap-1.5 flex-wrap">
-        <span className="font-black text-[#f0b90b] text-lg">
-          {formattedAmount} {primaryToken}
+      <div className="flex items-center gap-1 flex-wrap">
+        <span className="font-black text-[#8247e5] text-lg">
+          {formattedAmount}
         </span>
-        <span className="text-xs text-muted-foreground">
-          ~${Number(product.base_price_usd).toFixed(2)}
-        </span>
+        {isMatic ? (
+          <MaticIcon className="w-4 h-4 inline-block flex-shrink-0" />
+        ) : (
+          <span className="text-xs font-bold text-[#8247e5]">{primaryToken}</span>
+        )}
+        {isTestnet ? (
+          <span className="text-[10px] text-muted-foreground ml-1">(testnet ≈ 0 USDT)</span>
+        ) : (
+          <span className="text-[10px] text-muted-foreground ml-1">
+            ≈ ${Number(product.base_price_usd).toFixed(2)}
+          </span>
+        )}
       </div>
       {tokenKeys.length > 1 && (
         <span className="text-[10px] text-muted-foreground font-medium">
@@ -115,11 +154,11 @@ export const ProductCard = memo(function ProductCard({
 
   const sellerAvatar = product.seller_user_avatar ?? product.seller_avatar ?? null;
   const rating = product.rating_avg ?? product.seller_rating ?? 0;
-  
+
   const pricing = product.metadata?.pricing || {};
   const tokenKeys = Object.keys(pricing);
   const hasToken = tokenKeys.length > 0 || !!(product.price_in_token && product.token_symbol);
-  
+
   const displayTokenSymbol = tokenKeys.length > 0 ? tokenKeys[0] : product.token_symbol;
 
   const handleAddToCart = (e: React.MouseEvent) => {
@@ -290,11 +329,10 @@ export const ProductCard = memo(function ProductCard({
               )}
               <button
                 onClick={handleWishlist}
-                className={`w-9 h-9 flex items-center justify-center rounded-xl backdrop-blur-sm transition-colors shadow-lg ${
-                  wishlisted
-                    ? 'bg-red-500 text-white'
-                    : 'bg-white/90 hover:bg-white text-gray-700'
-                }`}
+                className={`w-9 h-9 flex items-center justify-center rounded-xl backdrop-blur-sm transition-colors shadow-lg ${wishlisted
+                  ? 'bg-red-500 text-white'
+                  : 'bg-white/90 hover:bg-white text-gray-700'
+                  }`}
                 title="Yêu thích"
               >
                 <Heart className={`w-4 h-4 ${wishlisted ? 'fill-current' : ''}`} />

@@ -19,6 +19,17 @@ import {
   Plus, ChevronDown, Sparkles, TrendingUp, Tag, Package,
   Gem, Coins, Zap, ExternalLink, Star, Shield,
 } from 'lucide-react';
+import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
+import { useChainId } from 'wagmi';
+
+/* ─── MATIC Icon SVG ─────────────────────────────────────────────── */
+function MaticIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 38 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M28.77 10.01c-.77-.44-1.77-.44-2.62 0l-6.15 3.56-4.17 2.37-6.08 3.56c-.77.44-1.77.44-2.62 0L2.46 16.5c-.77-.44-1.31-1.25-1.31-2.13V9.93c0-.88.46-1.69 1.31-2.13L7.13 4.94c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v3.56l4.17-2.44V6.94c0-.88-.46-1.69-1.31-2.13L9.9.44C9.13 0 8.13 0 7.28.44L.85 4.19C.08 4.63-.38 5.44-.38 6.31v7.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l6.08-3.5 4.17-2.44 6.08-3.5c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v4.44c0 .88-.46 1.69-1.31 2.13l-4.54 2.56c-.77.44-1.77.44-2.62 0L23.31 24c-.77-.44-1.31-1.25-1.31-2.13V18.3l-4.17 2.44v3.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l7.28-4.19c.77-.44 1.31-1.25 1.31-2.13V16.8c0-.88-.46-1.69-1.31-2.13l-7.55-4.66z" fill="#8247E5" />
+    </svg>
+  );
+}
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface TokenProduct {
@@ -92,6 +103,14 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
   const primaryToken = product.accepted_tokens?.find(t => t.is_primary) || product.accepted_tokens?.[0];
   const chainKey = (primaryToken?.chain_name || '').toLowerCase().replace(/\s/g, '');
   const chain = CHAIN_CONFIG[chainKey] || CHAIN_CONFIG.polygon;
+  const { prices } = useTokenPrice();
+  const chainId = useChainId();
+  const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
+
+  // Compute MATIC fallback when no token price available
+  const maticAmount = usdToToken(parseFloat(product.base_price_usd), 'MATIC', prices);
+  const maticFormatted = formatTokenAmount(maticAmount, 'MATIC');
+
   const [imgSrc, setImgSrc] = useState(product.primary_image || PLACEHOLDER);
 
   return (
@@ -154,16 +173,19 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
             <div className="flex items-end justify-between">
               <div>
                 {primaryToken ? (
-                  <p className="font-black text-lg" style={{ color: chain.color }}>
+                  <p className="font-black text-lg flex items-center gap-1" style={{ color: chain.color }}>
                     {parseFloat(primaryToken.price_in_token).toFixed(4)}{' '}
                     <span className="text-sm">{primaryToken.symbol}</span>
                   </p>
                 ) : (
-                  <p className="font-black text-lg text-white">
-                    ${parseFloat(product.base_price_usd).toFixed(2)}
+                  <p className="font-black text-lg text-white flex items-center gap-1">
+                    {maticFormatted}
+                    <MaticIcon className="w-4 h-4 inline-block" />
                   </p>
                 )}
-                <p className="text-xs text-white/40">≈ ${parseFloat(product.base_price_usd).toFixed(2)}</p>
+                <p className="text-xs text-white/40">
+                  {isTestnet ? '(testnet ≈ 0 USDT)' : `≈ $${parseFloat(product.base_price_usd).toFixed(2)}`}
+                </p>
               </div>
 
               {/* Token chips */}
@@ -361,17 +383,17 @@ function ProductsPageContent() {
               key={key}
               onClick={() => setActiveTab(key as 'products' | 'nft')}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === key
-                  ? special
-                    ? 'bg-gradient-to-r from-[#8247e5] to-[#12aaff] text-white shadow-md'
-                    : 'bg-[#f0b90b] text-black shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                ? special
+                  ? 'bg-gradient-to-r from-[#8247e5] to-[#12aaff] text-white shadow-md'
+                  : 'bg-[#f0b90b] text-black shadow-md'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                 }`}
             >
               <Icon className="w-4 h-4" />
               {label}
               <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${activeTab === key
-                  ? 'bg-black/20 text-white'
-                  : 'bg-muted text-muted-foreground'
+                ? 'bg-black/20 text-white'
+                : 'bg-muted text-muted-foreground'
                 }`}>
                 {desc}
               </span>
@@ -439,8 +461,8 @@ function ProductsPageContent() {
                   <button
                     onClick={() => setShowFilters(v => !v)}
                     className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${showFilters || hasActiveFilters
-                        ? 'bg-primary/10 text-primary border-primary/30'
-                        : 'bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                      ? 'bg-primary/10 text-primary border-primary/30'
+                      : 'bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted'
                       }`}
                   >
                     <SlidersHorizontal className="w-4 h-4" />
@@ -499,8 +521,8 @@ function ProductsPageContent() {
                   key={cat.value}
                   onClick={() => setCategory(cat.value)}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0 ${category === cat.value
-                      ? 'bg-[#f0b90b] text-black border-transparent shadow-md'
-                      : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    ? 'bg-[#f0b90b] text-black border-transparent shadow-md'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
                     }`}
                 >
                   {cat.icon} {cat.label}
@@ -613,8 +635,8 @@ function ProductsPageContent() {
                   key={c.key}
                   onClick={() => setNftChain(c.key)}
                   className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0 ${nftChain === c.key
-                      ? 'bg-gradient-to-r from-[#8247e5] to-[#12aaff] text-white border-transparent shadow-md'
-                      : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                    ? 'bg-gradient-to-r from-[#8247e5] to-[#12aaff] text-white border-transparent shadow-md'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
                     }`}
                 >
                   {c.label}

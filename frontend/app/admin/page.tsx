@@ -12,7 +12,7 @@ import {
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 
 interface DashboardData {
     totalUsers: number;
@@ -35,7 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
-    const { t } = useTranslation();
+    const { t } = useClientTranslation();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);

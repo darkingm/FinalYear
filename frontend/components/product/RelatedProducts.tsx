@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/api/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Star, Store } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 
 interface Product {
     product_id: number;
@@ -32,7 +32,7 @@ interface RelatedProductsProps {
 const PLACEHOLDER_IMAGE = '/placeholder-product.svg';
 
 export function RelatedProducts({ currentProductId, category }: RelatedProductsProps) {
-    const { t } = useTranslation();
+    const { t } = useClientTranslation();
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [scrollPosition, setScrollPosition] = useState(0);

@@ -32,7 +32,7 @@
   }
 
   .dark {
-    /* Dark theme - Binance-inspired */
+    /* Dark theme — Purple NFT Web3 */
     --background: 225 12% 7%;
     /* #0c0e14 */
     --foreground: 210 20% 90%;
@@ -42,15 +42,15 @@
     --card-foreground: 210 15% 85%;
     --popover: 225 12% 12%;
     --popover-foreground: 210 15% 85%;
-    --primary: 43 100% 50%;
-    /* #f0b90b yellow */
-    --primary-foreground: 0 0% 0%;
+    --primary: 270 68% 56%;
+    /* #8247e5 purple */
+    --primary-foreground: 0 0% 100%;
     --secondary: 225 10% 18%;
     --secondary-foreground: 210 15% 70%;
     --muted: 225 10% 16%;
     --muted-foreground: 215 10% 55%;
-    --accent: 43 100% 50%;
-    --accent-foreground: 0 0% 0%;
+    --accent: 270 68% 56%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
     --success: 152 60% 45%;
@@ -59,7 +59,7 @@
     --warning-foreground: 0 0% 0%;
     --border: 225 10% 18%;
     --input: 225 10% 16%;
-    --ring: 43 100% 50%;
+    --ring: 270 68% 56%;
   }
 }
 
@@ -334,6 +334,58 @@
 /* ── Yellow glow ── */
 .glow-yellow {
   box-shadow: 0 0 20px rgba(240, 185, 11, 0.15), 0 0 40px rgba(240, 185, 11, 0.05);
+}
+
+/* ── Purple glow ── */
+.glow-purple {
+  box-shadow: 0 0 20px rgba(130, 71, 229, 0.25), 0 0 40px rgba(130, 71, 229, 0.10);
+}
+
+/* ── Rainbow animated gradient ── */
+.bg-rainbow-animate {
+  background: linear-gradient(135deg, #8247e5, #a855f7, #c026d3, #e879f9, #818cf8, #6366f1, #8247e5);
+  background-size: 400% 400%;
+  animation: rainbow-shift 6s ease infinite;
+}
+
+@keyframes rainbow-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+/* ── Purple rainbow button ── */
+.btn-purple-rainbow {
+  background: linear-gradient(135deg, #8247e5, #a855f7, #6366f1);
+  background-size: 200% 200%;
+  animation: rainbow-shift 4s ease infinite;
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 4px 20px rgba(130, 71, 229, 0.3);
+  transition: all 0.3s ease;
+}
+
+.btn-purple-rainbow:hover {
+  box-shadow: 0 6px 28px rgba(130, 71, 229, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-purple-rainbow:active {
+  transform: translateY(0);
+}
+
+/* ── Matic price badge ── */
+.matic-price {
+  color: #8247e5;
+  font-weight: 900;
+}
+
+/* ── Section purple glow background orb ── */
+.orb-purple {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(130,71,229,0.15) 0%, transparent 70%);
 }
 
 /* ── Depth bar animation ── */

@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Star } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
-import { useTranslation } from 'react-i18next';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
 
 export function FeaturedProducts() {
-  const { t } = useTranslation();
+  const { t } = useClientTranslation();
   const [products, setProducts] = useState<ProductCardData[]>([]);
   const [loading, setLoading] = useState(true);
 

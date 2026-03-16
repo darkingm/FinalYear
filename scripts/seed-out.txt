@@ -1,0 +1,13 @@
+=== Seeding Amoy (chain_id=80002) tokens into payment_db ===
+
+=== Current token_whitelist by chain ===
+ chain_id | token_count 
+----------+-------------
+        1 |           6
+       56 |           2
+      137 |           7
+    80001 |           1
+    80002 |           3
+(5 rows)
+
+=== Done ===
