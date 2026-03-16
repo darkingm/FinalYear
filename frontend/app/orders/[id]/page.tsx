@@ -60,7 +60,7 @@ export default function OrderDetailPage() {
       return;
     }
     if (isAuthenticated && id) fetchOrder();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, id]);
 
   // Auto poll order status if waiting for blockchain confirmation
@@ -74,13 +74,14 @@ export default function OrderDetailPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.status, id]);
 
   useEffect(() => {
     if (!order || !success || !order.paypal_order_id || capturing) return;
+    if (order.status === 'PAID' || order.status === 'COMPLETED') return; // already done
     capturePayPal();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, success]);
 
   const fetchOrder = async () => {
@@ -268,14 +269,14 @@ export default function OrderDetailPage() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
               </div>
-              
+
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <h2 className="font-bold text-xl text-white mb-2 leading-tight">{order.product_name}</h2>
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 w-fit mb-3">
                   <span className="text-xs text-gray-400">Số lượng:</span>
                   <span className="text-sm font-bold text-white">x{order.quantity}</span>
                 </div>
-                
+
                 {order.pricing_mode === 'usd' || !order.pricing_mode ? (
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-3xl font-bold font-mono text-emerald-400">\${Number(order.price_usd).toFixed(2)}</span>
@@ -370,7 +371,7 @@ export default function OrderDetailPage() {
                   <CheckCircle className="w-5 h-5" /> Xác nhận nhận hàng
                 </h3>
                 <p className="text-sm text-emerald-200/70 mb-5 leading-relaxed">
-                  Bạn đã nhận được sản phẩm và hoàn toàn hài lòng với chất lượng? 
+                  Bạn đã nhận được sản phẩm và hoàn toàn hài lòng với chất lượng?
                   Xác nhận ngay để hợp đồng thông minh tự động giải ngân cho người bán.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
