@@ -37,10 +37,10 @@ app.use(apiLimiter);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     service: 'payment-service',
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -60,9 +60,23 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await connectDatabase();
-    await connectRedis();
-    await connectRabbitMQ();
-    
+
+    // Redis is optional — used for price caching only
+    // If Redis fails, service still works (fetches from Binance directly)
+    try {
+      await connectRedis();
+      logger.info('Redis connected successfully');
+    } catch (redisErr: any) {
+      logger.warn('Redis unavailable — continuing without cache:', redisErr?.message || redisErr);
+    }
+
+    // RabbitMQ is optional — used for async notifications
+    try {
+      await connectRabbitMQ();
+    } catch (mqErr: any) {
+      logger.warn('RabbitMQ unavailable — continuing without message queue:', mqErr?.message || mqErr);
+    }
+
     // Start background workers
     startWorkers();
 
@@ -71,7 +85,7 @@ async function startServer() {
       logger.info(`Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('Failed to start server (DB connection required):', error);
     process.exit(1);
   }
 }

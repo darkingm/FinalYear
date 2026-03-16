@@ -12,15 +12,28 @@ const PORT = process.env.PORT || 3001;
 async function startServer() {
   try {
     await connectDatabase();
-    await connectRedis();
-    await connectRabbitMQ();
+
+    // Redis optional — cache only, not critical
+    try {
+      await connectRedis();
+      logger.info('Redis connected');
+    } catch (redisErr: any) {
+      logger.warn('Redis unavailable, continuing without cache:', redisErr?.message);
+    }
+
+    // RabbitMQ optional — notifications only
+    try {
+      await connectRabbitMQ();
+    } catch (mqErr: any) {
+      logger.warn('RabbitMQ unavailable, continuing without queue:', mqErr?.message);
+    }
 
     app.listen(PORT, () => {
       logger.info(`Main API server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('Failed to start server (DB required):', error);
     process.exit(1);
   }
 }
