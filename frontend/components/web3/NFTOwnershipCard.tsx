@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, ExternalLink, Cpu, CheckCircle2, XCircle, Clock, Fingerprint, Tag, Image as ImageIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  Shield, ExternalLink, Cpu, CheckCircle2, Clock, Fingerprint, Tag,
+  Image as ImageIcon, Zap, Loader2,
+} from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
-import Image from 'next/image';
+import { toast } from 'sonner';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface NFTInfo {
   nft_id?: number;
@@ -18,8 +22,6 @@ interface NFTInfo {
   minted_at?: string | null;
   delivered_at?: string | null;
   product_id?: number;
-  // from on-chain
-  product_name?: string;
 }
 
 interface NFTOwnershipCardProps {
@@ -30,10 +32,10 @@ interface NFTOwnershipCardProps {
 }
 
 const CHAIN_EXPLORERS: Record<number, string> = {
-  137:   'https://polygonscan.com',
+  137: 'https://polygonscan.com',
   80002: 'https://amoy.polygonscan.com',
-  1:     'https://etherscan.io',
-  56:    'https://bscscan.com',
+  1: 'https://etherscan.io',
+  56: 'https://bscscan.com',
 };
 
 function StatusBadge({ verified, hasNFC }: { verified: boolean; hasNFC: boolean }) {
@@ -56,32 +58,46 @@ function StatusBadge({ verified, hasNFC }: { verified: boolean; hasNFC: boolean 
 }
 
 export function NFTOwnershipCard({ productId, productName, variant = 'full', className = '' }: NFTOwnershipCardProps) {
+  const { user } = useAuth() as any;
+  const isAdmin = user?.role === 'admin';
+
   const [nft, setNFT] = useState<NFTInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [nftImage, setNftImage] = useState<string | null>(null);
+  const [minting, setMinting] = useState(false);
+  const [hasNFC, setHasNFC] = useState(false);
 
-  useEffect(() => {
-    const fetchNFT = async () => {
-      try {
-        const res = await apiClient.get(`/api/nft/product/${productId}`);
-        const data = res.data?.data ?? null;
-        setNFT(data);
+  const fetchNFT = async () => {
+    try {
+      const res = await apiClient.get(`/api/nft/product/${productId}`);
+      const data = res.data?.data ?? null;
+      setNFT(data);
+      if (data?.token_uri) {
+        try {
+          const uri = data.token_uri.replace('ipfs://', 'https://ipfs.io/ipfs/');
+          const meta = await fetch(uri).then(r => r.json());
+          if (meta?.image) setNftImage(meta.image.replace('ipfs://', 'https://ipfs.io/ipfs/'));
+        } catch { /* no image */ }
+      }
+    } catch { /* product has no NFT */ }
+    finally { setLoading(false); }
+  };
 
-        // Try to load NFT metadata image from IPFS/token_uri
-        if (data?.token_uri) {
-          try {
-            const uri = data.token_uri.replace('ipfs://', 'https://ipfs.io/ipfs/');
-            const meta = await fetch(uri).then(r => r.json());
-            if (meta?.image) {
-              setNftImage(meta.image.replace('ipfs://', 'https://ipfs.io/ipfs/'));
-            }
-          } catch { /* no image */ }
-        }
-      } catch { /* product has no NFT */ }
-      finally { setLoading(false); }
-    };
-    fetchNFT();
-  }, [productId]);
+  useEffect(() => { fetchNFT(); }, [productId]);
+
+  const handleMint = async () => {
+    if (!isAdmin) return;
+    setMinting(true);
+    try {
+      toast.loading('Đang mint NFT lên Polygon...', { id: `mini-${productId}` });
+      const res = await apiClient.post(`/api/nft/mint/${productId}`, { hasNFC });
+      const { txHash, tokenURI } = res.data?.data || {};
+      toast.success(`NFT đã mint! TX: ${txHash?.slice(0, 12)}...`, { id: `mini-${productId}` });
+      await fetchNFT();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Mint NFT thất bại', { id: `mini-${productId}` });
+    } finally { setMinting(false); }
+  };
 
   if (loading) {
     return (
@@ -98,21 +114,56 @@ export function NFTOwnershipCard({ productId, productName, variant = 'full', cla
   }
 
   if (!nft) {
-    if (variant === 'compact') return null;
+    // Not yet minted — show admin mint panel or simple "not tokenized" badge
+    if (variant === 'compact' && !isAdmin) return null;
+
     return (
-      <div className={`bg-card border border-border rounded-2xl p-5 ${className}`}>
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-            <ImageIcon className="w-5 h-5" />
+      <div className={`bg-card border border-border rounded-2xl overflow-hidden ${className}`}>
+        <div className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-muted/50 border border-border flex items-center justify-center flex-shrink-0">
+              <ImageIcon className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Chưa Được Token Hóa</p>
+              <p className="text-xs text-muted-foreground">Sản phẩm này chưa được mint NFT trên blockchain</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">Chưa Token Hóa</p>
-            <p className="text-xs text-muted-foreground">Sản phẩm này chưa được mint NFT</p>
-          </div>
+
+          {/* Admin mint panel */}
+          {isAdmin && (
+            <div className="border-t border-border pt-4 space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Admin — Mint NFT</p>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  onClick={() => setHasNFC(v => !v)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${hasNFC ? 'bg-purple-500' : 'bg-muted'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${hasNFC ? 'translate-x-5' : ''}`} />
+                </div>
+                <span className="text-xs font-semibold text-foreground">Sản phẩm có NFC tag</span>
+              </label>
+
+              <button
+                onClick={handleMint}
+                disabled={minting}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg shadow-purple-500/20"
+              >
+                {minting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Đang mint NFT...</>
+                  : <><Zap className="w-4 h-4" />Mint NFT lên Polygon</>}
+              </button>
+              <p className="text-[10px] text-muted-foreground text-center">
+                Metadata sẽ được upload lên IPFS trước khi mint on-chain
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
   }
+
 
   const chainId = 80002; // Polygon Amoy (update from .env)
   const explorer = CHAIN_EXPLORERS[chainId] || 'https://amoy.polygonscan.com';
@@ -123,7 +174,7 @@ export function NFTOwnershipCard({ productId, productName, variant = 'full', cla
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/20 flex items-center justify-center flex-shrink-0">
             {nftImage
-              ? <Image src={nftImage} alt="NFT" fill className="object-cover rounded-xl" unoptimized />
+              ? <img src={nftImage} alt="NFT" className="w-full h-full object-cover rounded-xl" />
               : <Shield className="w-5 h-5 text-purple-400" />}
           </div>
           <div className="flex-1 min-w-0">
@@ -159,7 +210,7 @@ export function NFTOwnershipCard({ productId, productName, variant = 'full', cla
       {/* Header gradient */}
       <div className="relative h-36 bg-gradient-to-br from-purple-900/50 via-blue-900/30 to-card overflow-hidden">
         {nftImage && (
-          <Image src={nftImage} alt="NFT Art" fill className="object-cover opacity-40" unoptimized />
+          <img src={nftImage} alt="NFT Art" className="absolute inset-0 w-full h-full object-cover opacity-40" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
         <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between">

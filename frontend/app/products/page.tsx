@@ -21,15 +21,9 @@ import {
 } from 'lucide-react';
 import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
 import { useChainId } from 'wagmi';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
 
-/* ─── MATIC Icon SVG ─────────────────────────────────────────────── */
-function MaticIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 38 33" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M28.77 10.01c-.77-.44-1.77-.44-2.62 0l-6.15 3.56-4.17 2.37-6.08 3.56c-.77.44-1.77.44-2.62 0L2.46 16.5c-.77-.44-1.31-1.25-1.31-2.13V9.93c0-.88.46-1.69 1.31-2.13L7.13 4.94c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v3.56l4.17-2.44V6.94c0-.88-.46-1.69-1.31-2.13L9.9.44C9.13 0 8.13 0 7.28.44L.85 4.19C.08 4.63-.38 5.44-.38 6.31v7.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l6.08-3.5 4.17-2.44 6.08-3.5c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v4.44c0 .88-.46 1.69-1.31 2.13l-4.54 2.56c-.77.44-1.77.44-2.62 0L23.31 24c-.77-.44-1.31-1.25-1.31-2.13V18.3l-4.17 2.44v3.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l7.28-4.19c.77-.44 1.31-1.25 1.31-2.13V16.8c0-.88-.46-1.69-1.31-2.13l-7.55-4.66z" fill="#8247E5" />
-    </svg>
-  );
-}
+
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface TokenProduct {
@@ -182,19 +176,42 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
               {product.name}
             </h3>
 
-            {/* Price */}
+            {/* Price — show all seller-set token prices as pills */}
             <div className="flex items-end justify-between">
-              <div>
-                <p className="font-black text-lg flex items-center gap-1" style={{ color: chain.color }}>
-                  {displayAmount}{' '}
-                  {displaySymbol === 'MATIC'
-                    ? <MaticIcon className="w-4 h-4 inline-block" />
-                    : <span className="text-sm">{displaySymbol}</span>
-                  }
-                </p>
-                <p className="text-xs text-white/40">
-                  {isTestnet ? '(testnet)' : `≈ $${parseFloat(product.base_price_usd).toFixed(2)}`}
-                </p>
+              <div className="flex-1 min-w-0">
+                {(product.accepted_tokens?.filter(t => !STABLECOINS_SET.has(t.symbol.toUpperCase())).length ?? 0) > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {product.accepted_tokens!
+                      .filter(t => !STABLECOINS_SET.has(t.symbol.toUpperCase()))
+                      .map(t => (
+                        <span
+                          key={t.token_id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black"
+                          style={{ background: `${chain.color}22`, color: chain.color }}
+                        >
+                          {formatTokenAmount(parseFloat(t.price_in_token), t.symbol)}
+                          <img
+                            src={getCoinLogo(t.symbol)}
+                            alt={t.symbol}
+                            className="w-3.5 h-3.5 object-contain flex-shrink-0 rounded-full"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </span>
+                      ))}
+                  </div>
+                ) : (
+                  /* fallback: compute MATIC price from USD */
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black" style={{ background: `${chain.color}22`, color: chain.color }}>
+                    {maticFormatted}
+                    <img
+                      src={getCoinLogo('MATIC')}
+                      alt="MATIC"
+                      className="w-3.5 h-3.5 object-contain flex-shrink-0 rounded-full"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </span>
+                )}
+                {isTestnet && <p className="text-[10px] text-white/40 mt-0.5">(testnet)</p>}
               </div>
 
               {/* Token chips */}

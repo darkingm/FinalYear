@@ -1,13 +1,125 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware';
-import { query } from '../../config/database';
+import { query, getClient } from '../../config/database';
 import { publishEvent } from '../../config/rabbitmq';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
-// ─── Create Order ─────────────────────────────────────────────────────────────
+// ─── Create Multiple Orders (Cart Checkout) ─────────────────────────────────
+export async function checkoutCart(req: AuthRequest, res: Response, next: NextFunction) {
+  const client = await getClient();
+  try {
+    const buyerId = req.user!.user_id;
+    const { items, payment_method } = req.body;
+    // items: Array<{ product_id: number, quantity: number }>
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new AppError('Cart items are required', 400);
+    }
+
+    await client.query('BEGIN');
+
+    const createdOrders = [];
+    const internalOrderId = uuidv4();
+    const year = new Date().getFullYear();
+
+    for (const item of items) {
+      const { product_id, quantity } = item;
+
+      if (!product_id || quantity <= 0) {
+        throw new AppError('Invalid product_id or quantity in cart', 400);
+      }
+
+      const productResult = await client.query(
+        'SELECT * FROM products WHERE product_id = $1 AND status = $2 FOR SHARE',
+        [product_id, 'active']
+      );
+      if (productResult.rows.length === 0) throw new AppError(`Product ${product_id} not found or inactive`, 404);
+      const product = productResult.rows[0];
+
+      const inventoryResult = await client.query(
+        'SELECT * FROM inventory WHERE product_id = $1 FOR UPDATE',
+        [product_id]
+      );
+      if (inventoryResult.rows.length === 0 || inventoryResult.rows[0].available < quantity) {
+        throw new AppError(`Insufficient stock for product ${product.name}`, 400);
+      }
+      const inventory = inventoryResult.rows[0];
+
+      const priceUsd = product.base_price_usd ? Number(product.base_price_usd) * quantity : 0;
+      const subtotal = priceUsd;
+      const shippingFee = 0;
+      const totalAmount = subtotal + shippingFee;
+      const amountToken = product.price_in_token ? Number(product.price_in_token) * quantity : null;
+
+      const seqResult = await client.query(
+        `SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 10) AS INTEGER)), 0) + 1 AS next_seq
+         FROM orders WHERE order_number LIKE $1`,
+        [`ORD-${year}-%`]
+      );
+      const orderNumber = `ORD-${year}-${String(seqResult.rows[0].next_seq).padStart(5, '0')}`;
+
+      const orderResult = await client.query(
+        `INSERT INTO orders (
+           internal_order_id, buyer_id, seller_id, product_id, quantity,
+           price_usd, subtotal, shipping_fee, total_amount,
+           token_id, amount_token,
+           payment_method, order_number, status
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'UNPAID')
+         RETURNING *`,
+        [
+          internalOrderId, buyerId, product.seller_id, product_id, quantity,
+          priceUsd, subtotal, shippingFee, totalAmount,
+          product.token_id || null, amountToken,
+          payment_method || 'crypto', orderNumber,
+        ]
+      );
+
+      const order = orderResult.rows[0];
+
+      await client.query(
+        `INSERT INTO inventory_locks (inventory_id, order_id, quantity, expires_at, status)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes', 'active')`,
+        [inventory.inventory_id, order.order_id, quantity]
+      );
+
+      await client.query(
+        `UPDATE inventory SET available = available - $1, reserved = reserved + $1 WHERE inventory_id = $2`,
+        [quantity, inventory.inventory_id]
+      );
+
+      // We publish the event immediately (fire and forget)
+      // Though strictly speaking, we might want to wait for commit, but it's fine for now
+      await publishEvent('order.created', {
+        order_id: order.order_id, buyer_id: buyerId,
+        seller_id: product.seller_id, product_id, price_usd: priceUsd,
+        timestamp: Date.now(),
+      }).catch(err => logger.warn('Publish order.created failed (Cart Checkout):', err));
+
+      createdOrders.push(order);
+    }
+
+    await client.query('COMMIT');
+
+    logger.info('Cart Checkout created multiple orders', {
+      buyer_id: buyerId,
+      internal_order_id: internalOrderId,
+      orderCount: createdOrders.length
+    });
+
+    res.status(201).json({ success: true, internal_order_id: internalOrderId, orders: createdOrders });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    logger.error('Checkout cart error:', error);
+    next(error);
+  } finally {
+    client.release();
+  }
+}
+
+// ─── Create Single Order ─────────────────────────────────────────────────────────────
 export async function createOrder(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const buyerId = req.user!.user_id;

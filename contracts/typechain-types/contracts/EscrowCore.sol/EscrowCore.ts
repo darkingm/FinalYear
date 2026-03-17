@@ -66,7 +66,9 @@ export interface EscrowCoreInterface extends Interface {
       | "ORDER_TIMEOUT"
       | "buyerConfirmDelivery"
       | "deposit"
+      | "depositBatch"
       | "depositNative"
+      | "depositNativeBatch"
       | "depositWithSwap"
       | "feeVault"
       | "getEffectiveFee"
@@ -139,8 +141,16 @@ export interface EscrowCoreInterface extends Interface {
     values: [BytesLike, AddressLike, BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "depositBatch",
+    values: [BytesLike[], AddressLike, BigNumberish[], AddressLike[]]
+  ): string;
+  encodeFunctionData(
     functionFragment: "depositNative",
     values: [BytesLike, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "depositNativeBatch",
+    values: [BytesLike[], AddressLike[], BigNumberish[]]
   ): string;
   encodeFunctionData(
     functionFragment: "depositWithSwap",
@@ -245,7 +255,15 @@ export interface EscrowCoreInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "deposit", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "depositBatch",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "depositNative",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "depositNativeBatch",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -604,8 +622,25 @@ export interface EscrowCore extends BaseContract {
     "nonpayable"
   >;
 
+  depositBatch: TypedContractMethod<
+    [
+      orderIds: BytesLike[],
+      token: AddressLike,
+      amounts: BigNumberish[],
+      sellers: AddressLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+
   depositNative: TypedContractMethod<
     [orderId: BytesLike, seller: AddressLike],
+    [void],
+    "payable"
+  >;
+
+  depositNativeBatch: TypedContractMethod<
+    [orderIds: BytesLike[], sellers: AddressLike[], amounts: BigNumberish[]],
     [void],
     "payable"
   >;
@@ -762,9 +797,28 @@ export interface EscrowCore extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "depositBatch"
+  ): TypedContractMethod<
+    [
+      orderIds: BytesLike[],
+      token: AddressLike,
+      amounts: BigNumberish[],
+      sellers: AddressLike[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "depositNative"
   ): TypedContractMethod<
     [orderId: BytesLike, seller: AddressLike],
+    [void],
+    "payable"
+  >;
+  getFunction(
+    nameOrSignature: "depositNativeBatch"
+  ): TypedContractMethod<
+    [orderIds: BytesLike[], sellers: AddressLike[], amounts: BigNumberish[]],
     [void],
     "payable"
   >;

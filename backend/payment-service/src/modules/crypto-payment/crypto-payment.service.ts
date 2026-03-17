@@ -246,17 +246,178 @@ export class CryptoPaymentService {
     };
   }
 
+  async generateQuoteBatch(orderIds: number[], tokenSymbol: string, preferredChainId?: number, buyerWallet?: string) {
+    if (!orderIds || orderIds.length === 0) throw new AppError('No orders provided', 400);
+
+    // Fetch all orders
+    const orderResult = await mainQuery(
+      `SELECT o.*, p.metadata AS product_metadata 
+       FROM orders o 
+       LEFT JOIN products p ON o.product_id = p.product_id 
+       WHERE o.order_id = ANY($1::int[])`,
+      [orderIds]
+    );
+
+    if (orderResult.rows.length !== orderIds.length) {
+      throw new AppError('Some orders were not found', 404);
+    }
+
+    const orders = orderResult.rows;
+
+    for (const order of orders) {
+      if (order.status !== 'UNPAID') {
+        throw new AppError(`Order ${order.order_id} is not in UNPAID status`, 400);
+      }
+    }
+
+    // Get sellers wallets
+    const sellerIds = [...new Set(orders.map(o => o.seller_id))];
+    const sellerResult = await mainQuery(
+      'SELECT seller_id, payout_wallet FROM seller_profiles WHERE seller_id = ANY($1::int[])',
+      [sellerIds]
+    );
+
+    const sellerWalletsMap = new Map(sellerResult.rows.map(r => [r.seller_id, r.payout_wallet]));
+    const isValidEthAddress = (w: string | null): w is string => !!w && /^0x[0-9a-fA-F]{40}$/.test(w);
+
+    const escrowAddrEnv = process.env.ESCROW_CONTRACT_ADDRESS ?? null;
+    const escrowFallback = isValidEthAddress(escrowAddrEnv) ? escrowAddrEnv.toLowerCase() : null;
+
+    const sellersForBatch: string[] = [];
+
+    for (const order of orders) {
+      const rawWallet = sellerWalletsMap.get(order.seller_id);
+      const sellerWallet = isValidEthAddress(rawWallet)
+        ? rawWallet.toLowerCase()
+        : escrowFallback;
+
+      if (!sellerWallet) {
+        throw new AppError(`Seller of order ${order.order_id} has no valid wallet. Cannot proceed with crypto cart checkout.`, 400);
+      }
+      sellersForBatch.push(sellerWallet);
+    }
+
+    // Determine Chain and Token
+    const searchChains: number[] = preferredChainId && ALL_SUPPORTED_CHAINS.includes(preferredChainId)
+      ? [preferredChainId]
+      : [80002, 97, 421614, 84532, 137, 42161, 56, 1];
+
+    const tokenResult = await query(
+      `SELECT * FROM token_whitelist 
+       WHERE symbol = $1 AND is_active = true AND chain_id = ANY($2::int[])
+       ORDER BY array_position($2::int[], chain_id) NULLS LAST
+       LIMIT 1`,
+      [tokenSymbol, searchChains]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      throw new AppError(`Token "${tokenSymbol}" unavailable.`, 400);
+    }
+
+    const token = tokenResult.rows[0];
+    const escrowAddress = ESCROW_BY_CHAIN[token.chain_id] || process.env.ESCROW_CONTRACT_ADDRESS;
+    if (!escrowAddress || escrowAddress === '0x0000000000000000000000000000000000000000') {
+      throw new AppError('No escrow contract deployed on this chain.', 400);
+    }
+
+    // Determine Price
+    const pricePairMap: Record<string, string> = {
+      'ETH': 'ETHUSDT', 'MATIC': 'MATICUSDT', 'BNB': 'BNBUSDT',
+      'BTC': 'BTCUSDT', 'WBTC': 'BTCUSDT', 'USDT': 'USDTUSDT',
+      'USDC': 'USDCUSDT', 'ARB': 'ARBUSDT',
+    };
+
+    let tokenPrice: number = 1;
+    if (!['USDT', 'USDC', 'DAI', 'BUSD'].includes(tokenSymbol)) {
+      const binancePair = pricePairMap[tokenSymbol] || `${tokenSymbol}USDT`;
+      tokenPrice = await this.binanceService.getPrice(binancePair);
+    }
+
+    // Calculate amounts per order
+    const amountsToken: number[] = [];
+    const amountsWeiResult: bigint[] = [];
+    let totalWei = 0n;
+
+    for (const order of orders) {
+      const metadata = order.product_metadata || {};
+      const customPricing = metadata.pricing || {};
+      let amtToken = 0;
+
+      if (customPricing[tokenSymbol]) {
+        amtToken = Number(customPricing[tokenSymbol]);
+      } else {
+        const priceUsd = Number(order.total_amount);
+        amtToken = priceUsd / tokenPrice;
+      }
+      amountsToken.push(amtToken);
+
+      const amtWei = ethers.parseUnits(amtToken.toFixed(token.decimals), token.decimals);
+      amountsWeiResult.push(amtWei);
+      totalWei += amtWei;
+    }
+
+    // Generate Calldata
+    const isNative = (token.token_address as string).toLowerCase() === NATIVE_TOKEN_ADDRESS;
+    const escrowIface = new ethers.Interface(ESCROW_ABI);
+
+    // Re-declare ABI with batch functions for local encoding
+    const EXTENDED_ABI = [
+      ...ESCROW_ABI,
+      'function depositBatch(bytes32[] calldata orderIds, address token, uint256[] calldata amounts, address[] calldata sellers) external',
+      'function depositNativeBatch(bytes32[] calldata orderIds, address[] calldata sellers, uint256[] calldata amounts) external payable'
+    ];
+    const extIface = new ethers.Interface(EXTENDED_ABI);
+
+    const orderIdsBytes32 = orders.map(o => ethers.keccak256(ethers.toUtf8Bytes(o.internal_order_id)));
+
+    const calldata = isNative
+      ? extIface.encodeFunctionData('depositNativeBatch', [
+        orderIdsBytes32,
+        sellersForBatch,
+        amountsWeiResult
+      ])
+      : extIface.encodeFunctionData('depositBatch', [
+        orderIdsBytes32,
+        (token.token_address as string).toLowerCase(),
+        amountsWeiResult,
+        sellersForBatch
+      ]);
+
+    // Update ALL orders
+    for (let i = 0; i < orders.length; i++) {
+      await mainQuery(
+        `UPDATE orders 
+         SET token_id = $1, amount_token = $2, chain_id = $3,
+          escrow_contract = $4, price_expires_at = NOW() + INTERVAL '10 minutes'
+         WHERE order_id = $5`,
+        [token.token_id, amountsToken[i], token.chain_id, escrowAddress, orders[i].order_id]
+      );
+    }
+
+    return {
+      order_ids: orderIds,
+      escrow_contract: escrowAddress,
+      token_address: token.token_address,
+      token_symbol: tokenSymbol,
+      chain_id: token.chain_id,
+      amount_token_total: amountsToken.reduce((a, b) => a + b, 0),
+      amount_wei_total: totalWei.toString(),
+      amounts_wei_split: amountsWeiResult.map(a => a.toString()),
+      calldata,
+      expires_at: Math.floor(Date.now() / 1000) + 600,
+      token_price: tokenPrice,
+    };
+  }
+
   async submitTransaction(orderId: number, txHash: string) {
     // Validate transaction hash format
     if (!txHash.match(/^0x[a-fA-F0-9]{64}$/)) {
       throw new AppError('Invalid transaction hash format', 400);
     }
 
-    // Update order status
+    // Update order status first
     await mainQuery(
-      `UPDATE orders 
-       SET tx_hash = $1, status = 'TX_SUBMITTED', updated_at = NOW()
-       WHERE order_id = $2`,
+      `UPDATE orders SET tx_hash = $1, status = 'TX_SUBMITTED', updated_at = NOW() WHERE order_id = $2`,
       [txHash, orderId]
     );
 
@@ -267,16 +428,24 @@ export class CryptoPaymentService {
     );
     const order = orderResult.rows[0];
 
-    // Create payment record
-    // Use escrow_contract stored on order (set at quote time, chain-specific)
-    const escrowAddr = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
-    const fromAddr = order.buyer_wallet || String(order.buyer_id);
-    await query(
-      `INSERT INTO payments (order_id, tx_hash, chain_id, status, from_address, to_address)
-       VALUES ($1, $2, $3, 'pending', $4, $5)
-       ON CONFLICT (tx_hash) DO NOTHING`,
-      [orderId, txHash, order.chain_id, fromAddr, escrowAddr]
+    // Create payment record — guard against duplicate tx_hash (batch has same hash per order).
+    // Use an explicit existence check instead of ON CONFLICT (payments has no UNIQUE on tx_hash).
+    const existing = await query(
+      `SELECT payment_id FROM payments WHERE tx_hash = $1 LIMIT 1`,
+      [txHash]
     );
+
+    if (existing.rows.length === 0) {
+      // First order in the batch — create the payment record
+      const escrowAddr = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
+      const fromAddr = order.buyer_wallet || String(order.buyer_id);
+      await query(
+        `INSERT INTO payments(order_id, tx_hash, chain_id, status, from_address, to_address)
+         VALUES($1, $2, $3, 'pending', $4, $5)`,
+        [orderId, txHash, order.chain_id, fromAddr, escrowAddr]
+      );
+    }
+    // (Subsequent batch orders share the same payment row — only the orders table is updated per order)
 
     // Publish event
     await publishEvent('tx.submitted', {
@@ -286,7 +455,7 @@ export class CryptoPaymentService {
       timestamp: Date.now(),
     });
 
-    logger.info('Transaction submitted', { orderId, txHash, chain_id: order.chain_id, escrow: escrowAddr });
+    logger.info('Transaction submitted', { orderId, txHash, chain_id: order.chain_id });
   }
 
   /**
@@ -424,8 +593,8 @@ export class CryptoPaymentService {
     // Update payment record
     await query(
       `UPDATE payments 
-       SET block_number = $1, block_timestamp = $2, gas_used = $3, 
-           confirmations = $4, verified_by_rpc = true, status = $5, updated_at = NOW()
+       SET block_number = $1, block_timestamp = $2, gas_used = $3,
+          confirmations = $4, verified_by_rpc = true, status = $5, updated_at = NOW()
        WHERE tx_hash = $6`,
       [
         receipt.blockNumber,

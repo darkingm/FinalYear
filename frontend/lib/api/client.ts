@@ -37,78 +37,54 @@ async function getAuthToken(): Promise<string | null> {
   return null;
 }
 
-// Request interceptor to add auth token
-apiClient.interceptors.request.use(
-  async (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+// ─── Request interceptors ─────────────────────────────────────────────────
+// On every request, pull the freshest token from the NextAuth session.
+// This picks up auto-refreshed tokens that the JWT callback may have updated.
+async function attachToken(config: any) {
+  if (typeof window === 'undefined') return config;
+  try {
+    const session = await getSession() as any;
+    const token = session?.accessToken || localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+      // Keep localStorage in sync (so other logic that reads it stays current)
+      localStorage.setItem('auth_token', token);
     }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  } catch {
+    const stored = localStorage.getItem('auth_token');
+    if (stored) config.headers.Authorization = `Bearer ${stored}`;
+  }
+  return config;
+}
 
-paymentClient.interceptors.request.use(
-  async (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+apiClient.interceptors.request.use(attachToken, (e) => Promise.reject(e));
+paymentClient.interceptors.request.use(attachToken, (e) => Promise.reject(e));
 
-// Response interceptor: on 401, try refreshing session token before redirecting
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
-      // Attempt to refresh token from NextAuth session
-      const originalRequest = error.config;
-      if (!originalRequest._retried) {
-        originalRequest._retried = true;
-        try {
-          const session = await getSession() as any;
-          if (session?.accessToken) {
-            localStorage.setItem('auth_token', session.accessToken);
-            originalRequest.headers.Authorization = `Bearer ${session.accessToken}`;
-            return apiClient(originalRequest);
-          }
-        } catch (_) { /* session unavailable */ }
-      }
-      // Token cannot be refreshed — clear and redirect to login
+// ─── Response interceptors ────────────────────────────────────────────────
+// On 401: force a fresh session read (bypasses NextAuth cache) to pick up
+// any token that the JWT callback just refreshed, then retry once.
+async function handle401(error: any, client: any) {
+  if (error.response?.status === 401 && typeof window !== 'undefined') {
+    const original = error.config;
+    if (!original._retried) {
+      original._retried = true;
+      try {
+        // Small delay to let the JWT callback finish if it's in-flight
+        await new Promise(r => setTimeout(r, 300));
+        const session = await getSession() as any;
+        if (session?.accessToken) {
+          localStorage.setItem('auth_token', session.accessToken);
+          original.headers.Authorization = `Bearer ${session.accessToken}`;
+          return client(original);
+        }
+      } catch { /* ignore */ }
+      // No valid session — clear stale token and redirect to login
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
     }
-    return Promise.reject(error);
   }
-);
+  return Promise.reject(error);
+}
 
-paymentClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
-      const originalRequest = error.config;
-      if (!originalRequest._retried) {
-        originalRequest._retried = true;
-        try {
-          const session = await getSession() as any;
-          if (session?.accessToken) {
-            localStorage.setItem('auth_token', session.accessToken);
-            originalRequest.headers.Authorization = `Bearer ${session.accessToken}`;
-            return paymentClient(originalRequest);
-          }
-        } catch (_) { /* ignore */ }
-      }
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+apiClient.interceptors.response.use((r) => r, (e) => handle401(e, apiClient));
+paymentClient.interceptors.response.use((r) => r, (e) => handle401(e, paymentClient));

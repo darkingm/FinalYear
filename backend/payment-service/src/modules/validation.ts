@@ -9,6 +9,15 @@ export const generateQuoteSchema = z.object({
   }),
 });
 
+export const generateQuoteBatchSchema = z.object({
+  body: z.object({
+    order_ids: z.array(z.number().positive('order_id must be a positive number')).min(1, 'At least one order is required'),
+    token_symbol: z.string().min(1, 'token_symbol is required'),
+    preferred_chain_id: z.number().int().optional(),
+    buyer_wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  }),
+});
+
 export const submitTransactionSchema = z.object({
   body: z.object({
     order_id: z.number().positive('order_id must be a positive number'),

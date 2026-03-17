@@ -15,6 +15,7 @@ import { getProductGallery } from '@/lib/utils/product-images';
 import { toast } from 'sonner';
 import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
 import { useChainId } from 'wagmi';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
 
 /* ─── Safe Chain Id Hook ─────────────────────────────────────── */
 // useChainId is called unconditionally at the top. If WagmiProvider is unavailable,
@@ -23,16 +24,19 @@ function useCurrentChainId() {
   return useChainId(); // defaults to 80002 (testnet) if no wallet connected
 }
 
-/* ─── MATIC Icon SVG ─────────────────────────────────────────────── */
-function MaticIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 38 33" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M28.77 10.01c-.77-.44-1.77-.44-2.62 0l-6.15 3.56-4.17 2.37-6.08 3.56c-.77.44-1.77.44-2.62 0L2.46 16.5c-.77-.44-1.31-1.25-1.31-2.13V9.93c0-.88.46-1.69 1.31-2.13L7.13 4.94c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v3.56l4.17-2.44V6.94c0-.88-.46-1.69-1.31-2.13L9.9.44C9.13 0 8.13 0 7.28.44L.85 4.19C.08 4.63-.38 5.44-.38 6.31v7.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l6.08-3.5 4.17-2.44 6.08-3.5c.77-.44 1.77-.44 2.62 0l4.62 2.31c.77.44 1.31 1.25 1.31 2.13v4.44c0 .88-.46 1.69-1.31 2.13l-4.54 2.56c-.77.44-1.77.44-2.62 0L23.31 24c-.77-.44-1.31-1.25-1.31-2.13V18.3l-4.17 2.44v3.56c0 .88.46 1.69 1.31 2.13l7.28 4.19c.77.44 1.77.44 2.62 0l7.28-4.19c.77-.44 1.31-1.25 1.31-2.13V16.8c0-.88-.46-1.69-1.31-2.13l-7.55-4.66z" fill="#8247E5" />
-    </svg>
-  );
-}
+
 
 const FALLBACK = '/placeholder-product.svg';
+
+export interface AcceptedToken {
+  token_id: number;
+  symbol: string;
+  name?: string;
+  price_in_token: string | number;
+  is_primary?: boolean;
+  chain_id?: number;
+  chain_name?: string;
+}
 
 export interface ProductCardData {
   product_id: number;
@@ -51,6 +55,8 @@ export interface ProductCardData {
   seller_user_avatar?: string | null;
   rating_avg?: number;
   seller_rating?: number;
+  is_nft_minted?: boolean;
+  accepted_tokens?: AcceptedToken[] | null;
 }
 
 interface ProductCardProps {
@@ -60,75 +66,95 @@ interface ProductCardProps {
   showAddToCart?: boolean;
 }
 
-/**
- * PriceBadge — shows price in token (MATIC by default).
- * - Live MATIC/USD rate fetched every 5s from Binance.
- * - On testnet chains: shows the token amount but marks as testnet (≈ 0 USDT).
- * - If product has explicit token pricing, uses that token.
- * - Fallback: compute MATIC from USD.
- */
 const STABLECOINS = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD']);
 
+/**
+ * TokenPill — renders a single token price pill with coin logo.
+ */
+function TokenPill({ symbol, amount }: { symbol: string; amount: number }) {
+  const formatted = formatTokenAmount(amount, symbol);
+  return (
+    <span className="inline-flex items-center gap-1 bg-[#8247e5]/8 border border-[#8247e5]/20 rounded-lg px-2 py-0.5">
+      <span className="font-black text-[#8247e5] text-sm leading-none">{formatted}</span>
+      <img
+        src={getCoinLogo(symbol)}
+        alt={symbol}
+        className="w-3.5 h-3.5 object-contain flex-shrink-0 rounded-full"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+    </span>
+  );
+}
+
+/**
+ * PriceBadge — shows prices consistent with product detail page.
+ * Priority: accepted_tokens (DB) → metadata.pricing → legacy price_in_token → MATIC fallback
+ */
 function PriceBadge({ product }: { product: ProductCardData }) {
   const { prices } = useTokenPrice();
   const chainId = useChainId();
   const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
 
-  const pricing = product.metadata?.pricing || {};
-  const tokenKeys = Object.keys(pricing);
-  const hasLegacyToken = Boolean(product.price_in_token && product.token_symbol);
-  const hasMetadataTokens = tokenKeys.length > 0;
+  // Case 1: accepted_tokens from DB (SAME source as product detail page — highest priority)
+  const tokens = product.accepted_tokens;
+  if (tokens && tokens.length > 0) {
+    const nonStable = tokens.filter(t => !STABLECOINS.has(t.symbol.toUpperCase()));
+    const stable = tokens.filter(t => STABLECOINS.has(t.symbol.toUpperCase()));
 
-  let primaryToken: string;
-  let primaryAmount: number;
-
-  if (hasMetadataTokens) {
-    // Prefer non-stablecoin token if available
-    const preferredKey = tokenKeys.find(k => !STABLECOINS.has(k.toUpperCase())) || tokenKeys[0];
-    primaryToken = preferredKey;
-    primaryAmount = Number(pricing[preferredKey]);
-    // If still a stablecoin, convert to MATIC
-    if (STABLECOINS.has(primaryToken.toUpperCase())) {
-      primaryToken = 'MATIC';
-      primaryAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
-    }
-  } else if (hasLegacyToken && !STABLECOINS.has((product.token_symbol || '').toUpperCase())) {
-    // Use legacy non-stablecoin token
-    primaryToken = product.token_symbol!;
-    primaryAmount = Number(product.price_in_token);
-  } else {
-    // Fallback OR legacy is stablecoin: always compute MATIC from USD
-    primaryToken = 'MATIC';
-    primaryAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
+    // Show non-stablecoin tokens as token amount, stablecoins as USD
+    const display = nonStable.length > 0 ? nonStable : stable;
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap gap-1">
+          {display.map(t => (
+            <TokenPill
+              key={t.token_id}
+              symbol={t.symbol}
+              amount={STABLECOINS.has(t.symbol.toUpperCase())
+                ? Number(product.base_price_usd)
+                : Number(t.price_in_token)}
+            />
+          ))}
+        </div>
+        {isTestnet && <span className="text-[10px] text-muted-foreground">(testnet)</span>}
+      </div>
+    );
   }
 
-  const formattedAmount = formatTokenAmount(primaryAmount, primaryToken);
-  const isMatic = primaryToken.toUpperCase() === 'MATIC';
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-1 flex-wrap">
-        <span className="font-black text-[#8247e5] text-lg">
-          {formattedAmount}
-        </span>
-        {isMatic ? (
-          <MaticIcon className="w-4 h-4 inline-block flex-shrink-0" />
-        ) : (
-          <span className="text-xs font-bold text-[#8247e5]">{primaryToken}</span>
-        )}
-        {isTestnet ? (
-          <span className="text-[10px] text-muted-foreground ml-1">(testnet)</span>
-        ) : (
-          <span className="text-[10px] text-muted-foreground ml-1">
-            ≈ ${Number(product.base_price_usd).toFixed(2)}
-          </span>
-        )}
+  // Case 2: metadata.pricing (seller-set custom pricing)
+  const pricing = product.metadata?.pricing || {};
+  const tokenKeys = Object.keys(pricing);
+  if (tokenKeys.length > 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap gap-1">
+          {tokenKeys.map(sym => (
+            <TokenPill key={sym} symbol={sym} amount={Number(pricing[sym])} />
+          ))}
+        </div>
+        {isTestnet && <span className="text-[10px] text-muted-foreground">(testnet)</span>}
       </div>
-      {tokenKeys.length > 1 && (
-        <span className="text-[10px] text-muted-foreground font-medium">
-          hoặc bằng {tokenKeys.filter(k => k !== primaryToken).slice(0, 2).join(', ')}
-        </span>
-      )}
+    );
+  }
+
+  // Case 3: legacy single token (non-stablecoin)
+  const hasLegacyToken = !!(product.price_in_token && product.token_symbol
+    && !STABLECOINS.has((product.token_symbol || '').toUpperCase()));
+  if (hasLegacyToken) {
+    return (
+      <div className="flex flex-wrap gap-1">
+        <TokenPill symbol={product.token_symbol!} amount={Number(product.price_in_token)} />
+        {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
+      </div>
+    );
+  }
+
+  // Case 4: no token data — fallback to MATIC computed from USD
+  const maticAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
+  return (
+    <div className="flex flex-wrap gap-1">
+      <TokenPill symbol="MATIC" amount={maticAmount} />
+      {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
     </div>
   );
 }
@@ -320,6 +346,12 @@ export const ProductCard = memo(function ProductCard({
               )}
             </div>
             <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
+              {/* NFT Certified badge */}
+              {(product.is_nft_minted || product.metadata?.is_nft_minted) && (
+                <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-600/90 text-white shadow-lg backdrop-blur-sm border border-purple-400/30">
+                  ✦ NFT
+                </span>
+              )}
               {hasToken && displayTokenSymbol && (
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#f0b90b] text-black shadow-lg">
                   {displayTokenSymbol} {tokenKeys.length > 1 ? `+${tokenKeys.length - 1}` : ''}

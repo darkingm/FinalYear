@@ -6,6 +6,7 @@ import httpx
 import os
 import json
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
@@ -128,4 +129,3 @@ def health():
     return {"status": "ok", "model": GROQ_MODEL}
 
 
-import asyncio

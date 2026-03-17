@@ -118,3 +118,71 @@ export function hasEscrow(chainId: number): boolean {
   const addr = ESCROW_CONTRACTS[chainId];
   return !!addr && addr !== '0x0000000000000000000000000000000000000000';
 }
+
+// ─── Payment UI Metadata ─────────────────────────────────────────────────────
+export const PAYMENT_NETWORKS: Array<{
+  chainId: number;
+  name: string;
+  icon: string;
+  badge: string;
+  badgeColor: 'emerald' | 'purple' | 'yellow';
+  description: string;
+}> = [
+    {
+      chainId: 31337,
+      name: 'Hardhat (Local)',
+      icon: '🔨',
+      badge: 'LOCAL',
+      badgeColor: 'yellow',
+      description: 'Môi trường dev cục bộ · Xác nhận tức thì',
+    },
+    {
+      chainId: 80002,
+      name: 'Polygon Amoy',
+      icon: '🔷',
+      badge: 'TESTNET',
+      badgeColor: 'purple',
+      description: 'Polygon testnet · Cần MATIC từ faucet',
+    },
+    {
+      chainId: 97,
+      name: 'BNB Testnet',
+      icon: '🟡',
+      badge: 'TESTNET',
+      badgeColor: 'yellow',
+      description: 'Binance Smart Chain testnet',
+    },
+    {
+      chainId: 421614,
+      name: 'Arbitrum Sepolia',
+      icon: '⚡',
+      badge: 'TESTNET',
+      badgeColor: 'emerald',
+      description: 'Arbitrum L2 testnet · ETH tốc độ cao',
+    },
+  ];
+
+/** Tokens available for each chain (by chainId) */
+export const CHAIN_TOKENS: Record<number, string[]> = {
+  31337: ['ETH', 'USDT', 'USDC'],
+  80002: ['MATIC', 'USDT', 'USDC'],
+  97: ['BNB', 'USDT', 'USDC'],
+  421614: ['ETH', 'USDT', 'USDC', 'ARB'],
+  84532: ['ETH', 'USDT', 'USDC'],
+  137: ['MATIC', 'USDT', 'USDC'],
+  42161: ['ETH', 'USDT', 'USDC', 'ARB'],
+  1: ['ETH', 'USDT', 'USDC', 'WBTC'],
+};
+
+/** Human-readable name + explorer for each chain */
+export const CHAIN_META: Record<number, { name: string; explorer: string }> = {
+  31337: { name: 'Hardhat Local', explorer: 'http://localhost:8545' },
+  80002: { name: 'Polygon Amoy', explorer: 'https://amoy.polygonscan.com' },
+  97: { name: 'BNB Testnet', explorer: 'https://testnet.bscscan.com' },
+  421614: { name: 'Arbitrum Sepolia', explorer: 'https://sepolia.arbiscan.io' },
+  84532: { name: 'Base Sepolia', explorer: 'https://sepolia.basescan.org' },
+  137: { name: 'Polygon', explorer: 'https://polygonscan.com' },
+  42161: { name: 'Arbitrum One', explorer: 'https://arbiscan.io' },
+  1: { name: 'Ethereum', explorer: 'https://etherscan.io' },
+};
+

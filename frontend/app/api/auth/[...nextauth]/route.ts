@@ -162,13 +162,47 @@ export const authOptions: NextAuthOptions = {
       }
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
+      // First sign-in: store tokens and expiry from the backend
       if (user) {
-        token.accessToken = user.accessToken;
+        token.accessToken = (user as any).accessToken;
+        token.refreshToken = (user as any).refreshToken;
         token.id = user.id;
-        token.role = user.role;
-        token.walletAddress = user.walletAddress;
+        token.role = (user as any).role;
+        token.walletAddress = (user as any).walletAddress;
+        // Decode expiry from the JWT payload (backend default: 24h = 86400s)
+        try {
+          const decoded: any = JSON.parse(
+            Buffer.from(((user as any).accessToken || '').split('.')[1] || 'e30=', 'base64').toString()
+          );
+          token.accessTokenExpiry = (decoded.exp ?? 0) * 1000;
+        } catch { token.accessTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; }
       }
+
+      // Proactive refresh: if the accessToken expires within the next 5 minutes, refresh it now
+      const expiresAt = (token.accessTokenExpiry as number) || 0;
+      const shouldRefresh = expiresAt - Date.now() < 5 * 60 * 1000;
+      if (shouldRefresh && token.refreshToken) {
+        try {
+          const res = await serverApi.post('/api/auth/refresh', {
+            refreshToken: token.refreshToken,
+          });
+          if (res.data?.accessToken) {
+            token.accessToken = res.data.accessToken;
+            token.refreshToken = res.data.refreshToken ?? token.refreshToken;
+            try {
+              const decoded: any = JSON.parse(
+                Buffer.from(res.data.accessToken.split('.')[1] || 'e30=', 'base64').toString()
+              );
+              token.accessTokenExpiry = (decoded.exp ?? 0) * 1000;
+            } catch { token.accessTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; }
+          }
+        } catch (err) {
+          // Refresh failed — let the token expire naturally; client will see 401
+          console.error('[NextAuth] Failed to refresh backend token:', err);
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -177,6 +211,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
         session.user.walletAddress = token.walletAddress as string;
         session.accessToken = token.accessToken as string;
+        session.refreshToken = token.refreshToken as string;
       }
       return session;
     },

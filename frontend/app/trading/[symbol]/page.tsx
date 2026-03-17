@@ -23,6 +23,8 @@ import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { ShoppingCart } from 'lucide-react';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { usePriceStore } from '@/store';
+
 
 // Lazy load chart
 const CoinChart = nextDynamic(
@@ -57,25 +59,16 @@ interface SidebarTickerData {
   priceChangePercent: string;
 }
 
+/* ─── Sidebar Coin List: uses shared usePriceStore (1.5s live) ── */
 function CoinSidebar({ currentSymbol }: { currentSymbol: string }) {
-  const [tickers, setTickers] = useState<SidebarTickerData[]>([]);
+  const prices = usePriceStore(s => s.prices);
+  const { connect } = usePriceStore();
   const [search, setSearch] = useState('');
 
+  // Ensure the sidebar coins are included in the store's polling
   useEffect(() => {
-    const fetch_ = async () => {
-      try {
-        const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
-        const data = await res.json();
-        const filtered = SIDEBAR_COINS.map(c =>
-          data.find((d: any) => d.symbol === c.symbol) || { symbol: c.symbol, lastPrice: '0', priceChangePercent: '0' }
-        );
-        setTickers(filtered);
-      } catch { }
-    };
-    fetch_();
-    const iv = setInterval(fetch_, 5000);
-    return () => clearInterval(iv);
-  }, []);
+    connect(SIDEBAR_COINS.map(c => c.symbol));
+  }, [connect]);
 
   const filtered = SIDEBAR_COINS.filter(c =>
     c.short.toLowerCase().includes(search.toLowerCase()) ||
@@ -103,8 +96,8 @@ function CoinSidebar({ currentSymbol }: { currentSymbol: string }) {
       </div>
       <div className="overflow-y-auto flex-1">
         {filtered.map(coin => {
-          const ticker = tickers.find(t => t.symbol === coin.symbol);
-          const isPos = ticker ? parseFloat(ticker.priceChangePercent) >= 0 : true;
+          const priceData = prices[coin.symbol];
+          const isPos = priceData ? priceData.change24h >= 0 : true;
           const isCurrent = coin.symbol === currentSymbol;
           return (
             <Link key={coin.symbol} href={`/trading/${coin.symbol}`}>
@@ -122,13 +115,14 @@ function CoinSidebar({ currentSymbol }: { currentSymbol: string }) {
                   </div>
                 </div>
                 <div className="w-20 text-right">
-                  <p className="text-xs font-mono text-gray-300">
-                    {ticker ? parseFloat(ticker.lastPrice).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                  <p className={`text-xs font-mono transition-colors duration-300 ${priceData ? (priceData as any).direction === 'up' ? 'text-emerald-400' : (priceData as any).direction === 'down' ? 'text-red-400' : 'text-gray-300' : 'text-gray-600'
+                    }`}>
+                    {priceData ? priceData.price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
                   </p>
                 </div>
                 <div className="w-14 text-right">
                   <span className={`text-xs font-medium ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {ticker ? `${isPos ? '+' : ''}${parseFloat(ticker.priceChangePercent).toFixed(2)}%` : '—'}
+                    {priceData ? `${isPos ? '+' : ''}${priceData.change24h.toFixed(2)}%` : '—'}
                   </span>
                 </div>
               </div>
@@ -926,24 +920,26 @@ export default function TradingPage() {
 
   useEffect(() => {
     fetchCoinData();
-    const interval = setInterval(fetchCoinData, 3000);
+    const interval = setInterval(fetchCoinData, 2000);
 
-    // WebSocket
-    wsRef.current = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@depth20@1000ms`);
-    wsRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      setCoinData(prev => prev ? ({
-        ...prev,
-        orderBook: {
-          lastUpdateId: data.lastUpdateId,
-          bids: data.bids,
-          asks: data.asks,
-        },
-      }) : null);
-    };
+    // OrderBook via WebSocket (best-effort — may fail on localhost due to CORS)
+    try {
+      const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@depth20@1000ms`);
+      wsRef.current = ws;
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setCoinData(prev => prev ? ({
+            ...prev,
+            orderBook: { lastUpdateId: data.lastUpdateId, bids: data.bids, asks: data.asks },
+          }) : null);
+        } catch { }
+      };
+      ws.onerror = () => { /* silenced — REST polling is fallback */ };
+    } catch { /* WebSocket blocked — REST fallback handles data */ }
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
       clearInterval(interval);
     };
   }, [symbol]);

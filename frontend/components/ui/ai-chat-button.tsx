@@ -54,8 +54,8 @@ export function AIChatButton() {
     setMessages(prev => [...prev, userMsg]);
 
     try {
-      // Call Next.js API route (proxies to AI service)
-      const res = await fetch('/api/ai/chat', {
+      // Call Next.js API route (proxies to AI service) - Using ai-proxy to bypass Nginx route catching
+      const res = await fetch('/ai-proxy/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
@@ -118,21 +118,19 @@ export function AIChatButton() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
-                    msg.role === 'assistant'
+                  <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${msg.role === 'assistant'
                       ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20'
                       : 'bg-primary/10 border border-primary/20'
-                  }`}>
+                    }`}>
                     {msg.role === 'assistant'
                       ? <Bot className="w-3.5 h-3.5 text-[#f0b90b]" />
                       : <User className="w-3.5 h-3.5 text-primary" />}
                   </div>
                   <div className={`max-w-[78%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                    <div className={`px-3 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                      msg.role === 'assistant'
+                    <div className={`px-3 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'assistant'
                         ? 'bg-muted text-foreground rounded-tl-sm'
                         : 'bg-[#f0b90b] text-black font-medium rounded-tr-sm'
-                    }`}>
+                      }`}>
                       {msg.content}
                     </div>
                     <span className="text-[10px] text-muted-foreground px-1">

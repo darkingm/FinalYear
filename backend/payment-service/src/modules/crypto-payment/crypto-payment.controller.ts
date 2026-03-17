@@ -29,6 +29,30 @@ export async function generateQuote(req: Request, res: Response, next: NextFunct
   }
 }
 
+export async function generateQuoteBatch(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { order_ids, token_symbol, preferred_chain_id, buyer_wallet } = req.body;
+
+    if (!order_ids || !Array.isArray(order_ids) || order_ids.length === 0 || !token_symbol) {
+      return res.status(400).json({
+        success: false,
+        message: 'order_ids (array) and token_symbol are required',
+      });
+    }
+
+    const chainId = preferred_chain_id ? parseInt(preferred_chain_id, 10) : undefined;
+    const quote = await cryptoPaymentService.generateQuoteBatch(order_ids, token_symbol, chainId, buyer_wallet);
+
+    res.json({
+      success: true,
+      quote,
+    });
+  } catch (error: any) {
+    logger.error('Generate quote batch error:', error);
+    next(error);
+  }
+}
+
 export async function submitTransaction(req: Request, res: Response, next: NextFunction) {
   try {
     const { order_id, tx_hash } = req.body;

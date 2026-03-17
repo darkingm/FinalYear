@@ -122,13 +122,17 @@ export default function WalletPage() {
         apiClient.get('/api/wallets/deposits'),
       ]);
       if (walletsRes.status === 'fulfilled') {
-        const ws: UserWallet[] = walletsRes.value.data.wallets || walletsRes.value.data || [];
+        const raw = walletsRes.value.data;
+        const ws: UserWallet[] = Array.isArray(raw) ? raw
+          : Array.isArray(raw?.wallets) ? raw.wallets
+            : [];
         setWallets(ws);
         const primary = ws.find(w => w.is_primary) || ws[0];
         if (primary && !selectedQRWallet) setSelectedQRWallet(primary);
       }
       if (depositsRes.status === 'fulfilled') {
-        setDeposits(depositsRes.value.data.deposits || depositsRes.value.data || []);
+        const raw = depositsRes.value.data;
+        setDeposits(Array.isArray(raw) ? raw : Array.isArray(raw?.deposits) ? raw.deposits : []);
       }
     } catch { /* silent */ } finally {
       setLoading(false);
@@ -301,8 +305,8 @@ export default function WalletPage() {
                         key={w.wallet_db_id}
                         onClick={() => { setSelectedQRWallet(w); setActiveTab('qr'); }}
                         className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${qrWallet?.wallet_db_id === w.wallet_db_id
-                            ? 'border-[#f0b90b]/60 bg-[#f0b90b]/5'
-                            : 'border-border hover:border-[#f0b90b]/30'
+                          ? 'border-[#f0b90b]/60 bg-[#f0b90b]/5'
+                          : 'border-border hover:border-[#f0b90b]/30'
                           }`}
                       >
                         <div className="flex items-start justify-between gap-2">

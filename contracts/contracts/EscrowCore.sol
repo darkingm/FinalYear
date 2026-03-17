@@ -233,6 +233,94 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
     }
     
     /**
+     * @dev Deposit ERC20 tokens for multiple orders at once (Cart Checkout)
+     */
+    function depositBatch(
+        bytes32[] calldata orderIds,
+        address token,
+        uint256[] calldata amounts,
+        address[] calldata sellers
+    ) external nonReentrant whenNotPaused {
+        require(orderIds.length > 0, "Empty orders");
+        require(orderIds.length == amounts.length && orderIds.length == sellers.length, "Length mismatch");
+        require(token != address(0), "Use depositNativeBatch for native coin");
+
+        uint256 totalAmount = 0;
+        uint256 feeBps = getEffectiveFee(msg.sender);
+
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            bytes32 orderId = orderIds[i];
+            require(orderId != bytes32(0), "Empty order ID");
+            require(orders[orderId].buyer == address(0), "Order exists");
+            require(sellers[i] != address(0), "Invalid seller");
+            require(amounts[i] > 0, "Invalid amount");
+
+            uint256 amount = amounts[i];
+            uint256 fee = (amount * feeBps) / 10000;
+            uint256 sellerAmount = amount - fee;
+
+            orders[orderId] = Order({
+                buyer: msg.sender,
+                seller: sellers[i],
+                token: token,
+                amount: sellerAmount,
+                fee: fee,
+                status: OrderStatus.Paid,
+                createdAt: block.timestamp,
+                expiresAt: block.timestamp + ORDER_TIMEOUT
+            });
+
+            totalAmount += amount;
+            emit OrderCreated(orderId, msg.sender, sellers[i], token, sellerAmount, fee);
+        }
+
+        IERC20(token).safeTransferFrom(msg.sender, address(this), totalAmount);
+    }
+
+    /**
+     * @dev Deposit Native coins (ETH/MATIC/BNB) for multiple orders (Cart Checkout)
+     */
+    function depositNativeBatch(
+        bytes32[] calldata orderIds,
+        address[] calldata sellers,
+        uint256[] calldata amounts
+    ) external payable nonReentrant whenNotPaused {
+        require(orderIds.length > 0, "Empty orders");
+        require(orderIds.length == amounts.length && orderIds.length == sellers.length, "Length mismatch");
+
+        uint256 totalAmount = 0;
+        uint256 feeBps = getEffectiveFee(msg.sender);
+
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            bytes32 orderId = orderIds[i];
+            require(orderId != bytes32(0), "Empty order ID");
+            require(orders[orderId].buyer == address(0), "Order exists");
+            require(sellers[i] != address(0), "Invalid seller");
+            require(amounts[i] > 0, "Invalid amount");
+
+            uint256 amount = amounts[i];
+            uint256 fee = (amount * feeBps) / 10000;
+            uint256 sellerAmount = amount - fee;
+
+            orders[orderId] = Order({
+                buyer: msg.sender,
+                seller: sellers[i],
+                token: address(0),
+                amount: sellerAmount,
+                fee: fee,
+                status: OrderStatus.Paid,
+                createdAt: block.timestamp,
+                expiresAt: block.timestamp + ORDER_TIMEOUT
+            });
+
+            totalAmount += amount;
+            emit OrderCreated(orderId, msg.sender, sellers[i], address(0), sellerAmount, fee);
+        }
+
+        require(msg.value == totalAmount, "Incorrect ETH value sent");
+    }
+
+    /**
      * @dev Release payment to seller (admin only)
      */
     function releasePayment(bytes32 orderId) 

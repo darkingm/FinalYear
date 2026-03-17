@@ -11,11 +11,11 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  ShoppingBag, Shield, Zap, ArrowRight, Star, TrendingUp,
+  ShoppingBag, Shield, Zap, ArrowRight, Star, TrendingUp, TrendingDown,
   Users, Package, Timer, Flame, Tag, ChevronRight, Eye,
   BarChart3, Wallet, RefreshCw, Activity, Search,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { productService } from '@/services';
 import { useWallet } from '@/lib/hooks/useWallet';
 import { formatCurrency, formatCrypto } from '@/lib/utils/format';
@@ -26,6 +26,8 @@ import { toast } from 'sonner';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
 import { AIChatButton } from '@/components/ui/ai-chat-button';
+import { usePriceStore } from '@/store';
+
 
 /* ─── Types ──────────────────────────────────────── */
 type Product = ProductCardData & {
@@ -33,15 +35,6 @@ type Product = ProductCardData & {
   price_token?: string;  // legacy field alias
 };
 
-interface TickerData {
-  symbol: string;
-  lastPrice: string;
-  priceChangePercent: string;
-  volume: string;
-  highPrice: string;
-  lowPrice: string;
-  quoteVolume: string;
-}
 
 /* ─── Constants ──────────────────────────────────── */
 const PRODUCT_IMAGES = [
@@ -179,9 +172,98 @@ function WalletBalanceSection() {
   );
 }
 
+/* ─── Market Table Row with live flash ───────────── */
+function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof TOP_COINS[0] | undefined; idx: number }) {
+  const priceData = usePriceStore(s => s.prices[symbol]);
+  const prevRef = useRef<number>(0);
+  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+  const displaySymbol = symbol.replace('USDT', '');
+
+  useEffect(() => {
+    if (!priceData) return;
+    const curr = priceData.price;
+    if (prevRef.current !== 0 && curr !== prevRef.current) {
+      setFlash(curr > prevRef.current ? 'up' : 'down');
+      const t = setTimeout(() => setFlash(null), 700);
+      return () => clearTimeout(t);
+    }
+    prevRef.current = curr;
+  }, [priceData?.price]);
+
+  if (!priceData) {
+    return (
+      <tr className="border-b border-border/50">
+        {[1, 2, 3, 4, 5, 6].map(j => (
+          <td key={j} className="px-5 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></td>
+        ))}
+      </tr>
+    );
+  }
+
+  const isPos = priceData.change24h >= 0;
+  return (
+    <motion.tr
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: idx * 0.03 }}
+      className="border-b border-border/50 hover:bg-muted/50 transition-colors group cursor-pointer"
+    >
+      <td className="px-5 py-3.5">
+        <Link href={`/trading/${symbol}`} className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: `${coinInfo?.color}25`, border: `1px solid ${coinInfo?.color}40` }}>
+            <img src={getCoinLogo(displaySymbol)} alt={displaySymbol} className="w-5 h-5 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          </div>
+          <div>
+            <p className="font-bold text-foreground text-sm group-hover:text-[#f0b90b] transition-colors">{displaySymbol}</p>
+            <p className="text-xs text-muted-foreground">{coinInfo?.name || displaySymbol}</p>
+          </div>
+        </Link>
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        <Link href={`/trading/${symbol}`}>
+          <span className={`font-mono font-semibold text-sm transition-colors duration-500 ${flash === 'up' ? 'text-emerald-400' : flash === 'down' ? 'text-red-400' : 'text-foreground'
+            }`}>
+            ${priceData.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+          </span>
+        </Link>
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-xs font-bold ${isPos ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'
+          }`}>
+          {isPos ? '▲' : '▼'} {Math.abs(priceData.change24h).toFixed(2)}%
+        </span>
+      </td>
+      <td className="px-5 py-3.5 text-right text-xs text-muted-foreground hidden sm:table-cell font-mono">
+        {priceData.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0, notation: 'compact' })} {displaySymbol}
+      </td>
+      <td className="px-5 py-3.5 text-right hidden md:table-cell">
+        <div className="text-xs">
+          <p className="text-emerald-600 dark:text-emerald-400 font-mono">${priceData.high24h.toLocaleString()}</p>
+          <p className="text-red-600 dark:text-red-400 font-mono">${priceData.low24h.toLocaleString()}</p>
+        </div>
+      </td>
+      <td className="px-5 py-3.5 text-center">
+        <Link href={`/trading/${symbol}`}>
+          <Button size="sm" variant="ghost" className="h-7 px-3 text-xs text-[#f0b90b] hover:bg-[#f0b90b]/10 opacity-0 group-hover:opacity-100 transition-opacity">
+            <BarChart3 className="w-3.5 h-3.5 mr-1" /> Xem
+          </Button>
+        </Link>
+      </td>
+    </motion.tr>
+  );
+}
+
 /* ─── Market Table ───────────────────────────────── */
-function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boolean }) {
+function MarketTable({ symbols, search }: { symbols: string[]; search: string }) {
   const { t } = useClientTranslation();
+  const { isConnected } = usePriceStore();
+
+  const filtered = symbols.filter(sym =>
+    sym.toLowerCase().includes(search.toLowerCase()) ||
+    sym.replace('USDT', '').toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
@@ -191,8 +273,8 @@ function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boo
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1 text-xs text-emerald-400">
-            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse inline-block" />
-            Live
+            <span className={`w-1.5 h-1.5 rounded-full inline-block ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+            {isConnected ? 'Live' : 'Offline'}
           </span>
           <Link href="/trading/BTCUSDT">
             <Button variant="ghost" size="sm" className="text-[#f0b90b] hover:text-[#e6a800] hover:bg-[#f0b90b]/8 text-xs h-7 gap-1">
@@ -215,78 +297,10 @@ function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boo
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-border/50">
-                  {[1, 2, 3, 4, 5, 6].map(j => (
-                    <td key={j} className="px-5 py-3.5">
-                      <div className="h-4 bg-muted rounded animate-pulse" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : (
-              tickers.map((ticker, idx) => {
-                const isPos = parseFloat(ticker.priceChangePercent) >= 0;
-                const coinInfo = TOP_COINS.find(c => c.symbol === ticker.symbol);
-                const displaySymbol = ticker.symbol.replace('USDT', '');
-                return (
-                  <motion.tr
-                    key={ticker.symbol}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: idx * 0.04 }}
-                    className="border-b border-border/50 hover:bg-muted/50 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-5 py-3.5">
-                      <Link href={`/trading/${ticker.symbol}`} className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: `${coinInfo?.color}25`, border: `1px solid ${coinInfo?.color}40` }}>
-                          <Image
-                            src={getCoinLogo(displaySymbol)}
-                            alt={displaySymbol}
-                            width={24} height={24}
-                            className="w-5 h-5 object-contain"
-                          />
-                        </div>
-                        <div>
-                          <p className="font-bold text-foreground text-sm group-hover:text-[#f0b90b] transition-colors">{displaySymbol}</p>
-                          <p className="text-xs text-muted-foreground">{coinInfo?.name || displaySymbol}</p>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Link href={`/trading/${ticker.symbol}`}>
-                        <span className="font-mono font-semibold text-foreground text-sm">
-                          ${parseFloat(ticker.lastPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-xs font-bold ${isPos ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'}`}>
-                        {isPos ? '▲' : '▼'} {Math.abs(parseFloat(ticker.priceChangePercent)).toFixed(2)}%
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-xs text-muted-foreground hidden sm:table-cell font-mono">
-                      {parseFloat(ticker.quoteVolume).toLocaleString(undefined, { maximumFractionDigits: 0, notation: 'compact' })} USDT
-                    </td>
-                    <td className="px-5 py-3.5 text-right hidden md:table-cell">
-                      <div className="text-xs">
-                        <p className="text-emerald-600 dark:text-emerald-400 font-mono">${parseFloat(ticker.highPrice).toLocaleString()}</p>
-                        <p className="text-red-600 dark:text-red-400 font-mono">${parseFloat(ticker.lowPrice).toLocaleString()}</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-center">
-                      <Link href={`/trading/${ticker.symbol}`}>
-                        <Button size="sm" variant="ghost" className="h-7 px-3 text-xs text-[#f0b90b] hover:bg-[#f0b90b]/10 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <BarChart3 className="w-3.5 h-3.5 mr-1" /> Xem
-                        </Button>
-                      </Link>
-                    </td>
-                  </motion.tr>
-                );
-              })
-            )}
+            {filtered.map((sym, idx) => {
+              const coinInfo = TOP_COINS.find(c => c.symbol === sym);
+              return <MarketRow key={sym} symbol={sym} coinInfo={coinInfo} idx={idx} />;
+            })}
           </tbody>
         </table>
       </div>
@@ -294,17 +308,25 @@ function MarketTable({ tickers, loading }: { tickers: TickerData[]; loading: boo
   );
 }
 
+
 /* ─── Main Page ──────────────────────────────────── */
 export default function HomePage() {
   const { t } = useClientTranslation();
   const { isAuthenticated, isLoading } = useAuth();
   const [products, setProducts] = useState<ProductCardData[]>([]);
   const [prodLoading, setProdLoading] = useState(true);
-  const [tickers, setTickers] = useState<TickerData[]>([]);
-  const [tickerLoading, setTickerLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
   const [coinSearch, setCoinSearch] = useState('');
   const flashTimer = useFlashSaleTimer();
+
+  // Use shared live price store (1.5s polling, same as PriceTicker)
+  const { prices, connect, disconnect } = usePriceStore();
+  const TOP_SYMBOLS = TOP_COINS.map(c => c.symbol);
+
+  useEffect(() => {
+    connect(TOP_SYMBOLS);
+    return () => disconnect();
+  }, [connect, disconnect]);
 
   useEffect(() => {
     (async () => {
@@ -316,29 +338,22 @@ export default function HomePage() {
     })();
   }, []);
 
-  useEffect(() => {
-    const fetchTickers = async () => {
-      try {
-        const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
-        const data: TickerData[] = await res.json();
-        const filtered = TOP_COINS.map(c => data.find(d => d.symbol === c.symbol) || {
-          symbol: c.symbol, lastPrice: '0', priceChangePercent: '0', volume: '0', highPrice: '0', lowPrice: '0', quoteVolume: '0',
-        });
-        setTickers(filtered as TickerData[]);
-      } catch { }
-      finally { setTickerLoading(false); }
-    };
-    fetchTickers();
-    const iv = setInterval(fetchTickers, 10000);
-    return () => clearInterval(iv);
-  }, []);
-
-  const filteredTickers = tickers.filter(t =>
-    t.symbol.toLowerCase().includes(coinSearch.toLowerCase())
+  // Filter/sort helpers powered by store prices
+  const allPriceData = TOP_COINS.map(c => ({
+    ...c,
+    data: prices[c.symbol],
+  }));
+  const filteredCoins = allPriceData.filter(c =>
+    c.symbol.toLowerCase().includes(coinSearch.toLowerCase()) ||
+    c.name.toLowerCase().includes(coinSearch.toLowerCase())
   );
+  const gainers = filteredCoins.filter(c => (c.data?.change24h ?? 0) >= 0);
+  const losers = filteredCoins.filter(c => (c.data?.change24h ?? 0) < 0);
+  const displayedCoins = activeCategory === 'gainers' ? gainers
+    : activeCategory === 'losers' ? losers
+      : filteredCoins;
 
-  const flashProducts = products.slice(0, 6);
-  const featuredProducts = products.slice(6, 14);
+  const displayedSymbols = displayedCoins.map(c => c.symbol);
 
   if (isLoading) {
     return (
@@ -470,43 +485,39 @@ export default function HomePage() {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 className="hidden md:grid grid-cols-2 gap-3"
               >
-                {tickers.slice(0, 4).map((ticker, i) => {
-                  const isPos = parseFloat(ticker.priceChangePercent) >= 0;
-                  const coinInfo = TOP_COINS.find(c => c.symbol === ticker.symbol);
-                  const displaySymbol = ticker.symbol.replace('USDT', '');
-                  const vol24h = parseFloat(ticker.quoteVolume || '0');
-                  const high = parseFloat(ticker.highPrice || '0');
-                  const low = parseFloat(ticker.lowPrice || '0');
-                  const price = parseFloat(ticker.lastPrice || '0');
+                {TOP_COINS.slice(0, 4).map((coinInfo, i) => {
+                  const priceData = prices[coinInfo.symbol];
+                  const isPos = (priceData?.change24h ?? 0) >= 0;
+                  const displaySymbol = coinInfo.symbol.replace('USDT', '');
+                  const price = priceData?.price ?? 0;
+                  const high = priceData?.high24h ?? 0;
+                  const low = priceData?.low24h ?? 0;
+                  const vol24h = priceData?.volume24h ?? 0;
                   const priceRange = high - low;
                   const pricePosition = priceRange > 0 ? ((price - low) / priceRange) * 100 : 50;
 
                   return (
                     <motion.div
-                      key={ticker.symbol}
+                      key={coinInfo.symbol}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.4 + i * 0.1 }}
                       className={`h-full ${i % 2 === 1 ? 'mt-6' : ''}`}
                     >
-                      <Link href={`/trading/${ticker.symbol}`}>
+                      <Link href={`/trading/${coinInfo.symbol}`}>
                         <div
                           className="group h-full bg-card/80 backdrop-blur-md border border-border rounded-2xl p-4 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden"
                           style={{ ['--coin-color' as string]: coinInfo?.color }}
                         >
-                          {/* Glow effect on hover */}
                           <div
                             className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl"
                             style={{ boxShadow: `inset 0 0 30px ${coinInfo?.color}10, 0 4px 20px ${coinInfo?.color}08` }}
                           />
-                          {/* Top accent line */}
                           <div
                             className="absolute top-0 left-4 right-4 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                             style={{ background: `linear-gradient(90deg, transparent, ${coinInfo?.color}, transparent)` }}
                           />
-
                           <div className="relative z-10">
-                            {/* Coin Header */}
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-2.5">
                                 <div
@@ -520,17 +531,14 @@ export default function HomePage() {
                                   <p className="text-[10px] text-muted-foreground">{coinInfo?.name}</p>
                                 </div>
                               </div>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPos ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'}`}>
-                                {isPos ? '▲' : '▼'} {Math.abs(parseFloat(ticker.priceChangePercent)).toFixed(2)}%
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPos ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'
+                                }`}>
+                                {isPos ? '▲' : '▼'} {Math.abs(priceData?.change24h ?? 0).toFixed(2)}%
                               </span>
                             </div>
-
-                            {/* Price */}
                             <p className="text-xl font-bold text-foreground font-mono mb-1">
-                              ${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              {price > 0 ? `$${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-muted-foreground text-base">Loading...</span>}
                             </p>
-
-                            {/* Price range bar */}
                             <div className="mb-3">
                               <div className="flex justify-between text-[9px] text-muted-foreground mb-0.5">
                                 <span>L: ${low.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
@@ -539,13 +547,11 @@ export default function HomePage() {
                               <div className="h-1 bg-muted rounded-full overflow-hidden relative">
                                 <div className="h-full bg-gradient-to-r from-red-400 via-yellow-400 to-emerald-400 rounded-full" />
                                 <div
-                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-foreground rounded-full border border-background shadow-sm"
+                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-foreground rounded-full border border-background shadow-sm transition-all duration-300"
                                   style={{ left: `calc(${Math.min(Math.max(pricePosition, 5), 95)}% - 4px)` }}
                                 />
                               </div>
                             </div>
-
-                            {/* Extra indicators */}
                             <div className="grid grid-cols-2 gap-2">
                               <div className="bg-muted/50 rounded-lg px-2 py-1.5">
                                 <p className="text-[9px] text-muted-foreground">KL 24h</p>
@@ -605,14 +611,8 @@ export default function HomePage() {
             </div>
 
             <div className="grid lg:grid-cols-[1fr,320px] gap-6">
-              <MarketTable
-                tickers={activeCategory === 'gainers'
-                  ? filteredTickers.filter(t => parseFloat(t.priceChangePercent) >= 0)
-                  : activeCategory === 'losers'
-                    ? filteredTickers.filter(t => parseFloat(t.priceChangePercent) < 0)
-                    : filteredTickers}
-                loading={tickerLoading}
-              />
+              <MarketTable symbols={displayedSymbols} search={coinSearch} />
+
               <WalletBalanceSection />
             </div>
           </div>
@@ -639,9 +639,9 @@ export default function HomePage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
               {COIN_CATEGORIES.map((cat, i) => {
-                const ticker = tickers.find(t => t.symbol === cat.coin + 'USDT');
-                const price = ticker ? parseFloat(ticker.lastPrice) : 0;
-                const change = ticker ? parseFloat(ticker.priceChangePercent) : 0;
+                const priceData = prices[cat.coin + 'USDT'];
+                const price = priceData?.price ?? 0;
+                const change = priceData?.change24h ?? 0;
                 return (
                   <motion.div key={cat.coin} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }}>
                     <Link href={`/trading/${cat.coin}USDT`}>
@@ -670,6 +670,7 @@ export default function HomePage() {
                 );
               })}
             </div>
+
           </div>
         </section>
 
@@ -710,7 +711,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {flashProducts.map((product, i) => {
+                {products.slice(0, 6).map((product, i) => {
                   const discount = 10 + (i * 7 % 35);
                   const stockLeft = 15 + (product.product_id % 70);
                   return (
@@ -787,14 +788,14 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-            ) : featuredProducts.length === 0 ? (
+            ) : products.length === 0 ? (
               <div className="text-center py-16 bg-card rounded-2xl border border-border">
                 <ShoppingBag className="w-12 h-12 mx-auto text-gray-600 mb-3" />
                 <p className="text-gray-500">Chưa có sản phẩm nào</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {featuredProducts.map((product, i) => (
+                {products.map((product, i) => (
                   <ProductCard
                     key={product.product_id}
                     product={product}
