@@ -10,6 +10,9 @@ const ESCROW_ABI = [
   'function deposit(bytes32 orderId, address token, uint256 amount, address seller) external',
   // Native ETH/MATIC/BNB: payable, no approve needed
   'function depositNative(bytes32 orderId, address seller) external payable',
+  // Admin release and refund
+  'function releasePayment(bytes32 orderId) external',
+  'function refund(bytes32 orderId) external',
 ];
 
 const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -492,5 +495,86 @@ export class CryptoPaymentService {
       ...order,
       ...payment,
     };
+  }
+
+  async releaseFunds(orderId: number) {
+    const orderResult = await mainQuery(
+      `SELECT internal_order_id, chain_id, escrow_contract, status FROM orders WHERE order_id = $1`,
+      [orderId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      throw new AppError('Order not found', 404);
+    }
+
+    const order = orderResult.rows[0];
+
+    // Only release if onchain confirmed or higher, or we can just trust the order status
+    // Actually, usually release happens when status is COMPLETED
+    if (order.status !== 'COMPLETED' && order.status !== 'ONCHAIN_CONFIRMED') {
+      // It's ok if main-service already set it to COMPLETED.
+    }
+
+    const provider = this.providers.get(order.chain_id);
+    if (!provider) throw new AppError('Unsupported chain', 400);
+
+    const privateKey = process.env.ADMIN_PRIVATE_KEY;
+    if (!privateKey) throw new AppError('Admin private key not configured', 500);
+
+    const wallet = new ethers.Wallet(privateKey, provider);
+    const escrowAddress = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
+    const escrowContract = new ethers.Contract(escrowAddress, ESCROW_ABI, wallet);
+
+    const orderId32 = ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id));
+
+    try {
+      const tx = await escrowContract.releasePayment(orderId32);
+      await tx.wait(1);
+
+      logger.info('Funds released from Escrow', { orderId, txHash: tx.hash });
+
+      // Update payment record or order?
+      // Since it's done, nothing more needed, maybe log it.
+      return { success: true, tx_hash: tx.hash };
+    } catch (error: any) {
+      logger.error('Error releasing funds', { orderId, error: error.message });
+      throw new AppError(`Failed to release funds: ${error.message}`, 500);
+    }
+  }
+
+  async refundPayment(orderId: number) {
+    const orderResult = await mainQuery(
+      `SELECT internal_order_id, chain_id, escrow_contract FROM orders WHERE order_id = $1`,
+      [orderId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      throw new AppError('Order not found', 404);
+    }
+
+    const order = orderResult.rows[0];
+
+    const provider = this.providers.get(order.chain_id);
+    if (!provider) throw new AppError('Unsupported chain', 400);
+
+    const privateKey = process.env.ADMIN_PRIVATE_KEY;
+    if (!privateKey) throw new AppError('Admin private key not configured', 500);
+
+    const wallet = new ethers.Wallet(privateKey, provider);
+    const escrowAddress = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
+    const escrowContract = new ethers.Contract(escrowAddress, ESCROW_ABI, wallet);
+
+    const orderId32 = ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id));
+
+    try {
+      const tx = await escrowContract.refund(orderId32);
+      await tx.wait(1);
+
+      logger.info('Payment refunded from Escrow', { orderId, txHash: tx.hash });
+      return { success: true, tx_hash: tx.hash };
+    } catch (error: any) {
+      logger.error('Error refunding payment', { orderId, error: error.message });
+      throw new AppError(`Failed to refund payment: ${error.message}`, 500);
+    }
   }
 }

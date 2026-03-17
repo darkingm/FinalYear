@@ -39,3 +39,15 @@ export const capturePaypalPaymentSchema = z.object({
     paypal_order_id: z.string().min(1, 'paypal_order_id is required'),
   }),
 });
+
+export const releaseFundsSchema = z.object({
+  body: z.object({
+    order_id: z.number().positive('order_id must be a positive number'),
+  }),
+});
+
+export const refundPaymentSchema = z.object({
+  body: z.object({
+    order_id: z.number().positive('order_id must be a positive number'),
+  }),
+});

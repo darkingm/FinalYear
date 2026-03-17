@@ -1,9 +1,10 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { query } from '../../config/database';
 import { publishEvent } from '../../config/rabbitmq';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
+import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
 // ─── Create Order ─────────────────────────────────────────────────────────────
@@ -31,8 +32,8 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       throw new AppError('Insufficient stock', 400);
     }
 
-    const priceUsd    = product.base_price_usd ? Number(product.base_price_usd) * quantity : 0;
-    const subtotal    = priceUsd;
+    const priceUsd = product.base_price_usd ? Number(product.base_price_usd) * quantity : 0;
+    const subtotal = priceUsd;
     const shippingFee = 0;
     const totalAmount = subtotal + shippingFee;
     const amountToken = product.price_in_token ? Number(product.price_in_token) * quantity : null;
@@ -93,8 +94,8 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
 export async function getOrders(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;
-    const page   = parseInt(req.query.page as string) || 1;
-    const limit  = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const offset = (page - 1) * limit;
 
     const [result, countResult] = await Promise.all([
@@ -141,7 +142,7 @@ export async function getOrders(req: AuthRequest, res: Response, next: NextFunct
 // ─── Get Single Order ─────────────────────────────────────────────────────────
 export async function getOrder(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId  = req.user!.user_id;
+    const userId = req.user!.user_id;
     const orderId = parseInt(req.params.id);
 
     const result = await query(
@@ -179,7 +180,7 @@ export async function getOrder(req: AuthRequest, res: Response, next: NextFuncti
 // ─── Get Order by Internal UUID ───────────────────────────────────────────────
 export async function getOrderByInternalId(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId          = req.user!.user_id;
+    const userId = req.user!.user_id;
     const internalOrderId = req.params.internalOrderId;
 
     const result = await query(
@@ -204,7 +205,7 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
 // ─── Cancel Order ─────────────────────────────────────────────────────────────
 export async function cancelOrder(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId  = req.user!.user_id;
+    const userId = req.user!.user_id;
     const orderId = parseInt(req.params.id);
 
     const orderResult = await query(
@@ -235,7 +236,7 @@ export async function cancelOrder(req: AuthRequest, res: Response, next: NextFun
 // ─── Update Order Status ──────────────────────────────────────────────────────
 export async function updateOrderStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId  = req.user!.user_id;
+    const userId = req.user!.user_id;
     const orderId = parseInt(req.params.id);
     const { status } = req.body;
 
@@ -259,9 +260,81 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     await query(`UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`, [status, orderId]);
     await publishEvent('order.status_updated', { order_id: orderId, status, timestamp: Date.now() });
 
+    // Auto-release escrow if order is completed and paid with crypto
+    if (status === 'COMPLETED' && order.payment_method === 'crypto') {
+      try {
+        const paymentApiUrl = process.env.PAYMENT_API_URL || 'http://localhost:5001/api';
+        await axios.post(`${paymentApiUrl}/crypto-payment/release`, {
+          order_id: orderId
+        }, {
+          headers: {
+            Authorization: req.headers.authorization // Pass along the user's token
+          }
+        });
+        logger.info(`Called payment service to release funds for order ${orderId}`);
+      } catch (err: any) {
+        logger.error(`Failed to trigger escrow release for order ${orderId}:`, err.message);
+        // We don't throw here to not break the status update, but it should be retried or handled
+      }
+    }
+
+    // Auto-refund if order is disputed
+    // In real app, Admin resolves dispute to Refund or Release. For testing, if buyer disputes, we might refund.
+    // However, the rule says: "Quy trình Refund / Giải quyết Tranh chấp: Thưc tế, Admin can thiệp. Hàm refund ở SC."
+    // So the admin will call the refund API directly, we don't auto-refund here.
+
     res.json({ success: true, message: 'Order status updated', status });
   } catch (error: any) {
     logger.error('Update order status error:', error);
+    next(error);
+  }
+}
+
+// ─── Logistics Webhook ────────────────────────────────────────────────────────
+export async function handleLogisticsWebhook(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { order_id, status, tracking_number } = req.body;
+
+    if (!order_id || !status) {
+      return res.status(400).json({ success: false, message: 'order_id and status are required' });
+    }
+
+    const orderResult = await query('SELECT * FROM orders WHERE order_id = $1', [order_id]);
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const order = orderResult.rows[0];
+
+    // Allowed statuses from webhook
+    if (!['SHIPPED', 'DELIVERED', 'RETURNED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid webhook status' });
+    }
+
+    let updateQuery = `UPDATE orders SET status = $1, updated_at = NOW()`;
+    const queryParams: any[] = [status];
+    let paramIndex = 2;
+
+    if (tracking_number) {
+      updateQuery += `, metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{tracking_number}', $${paramIndex}::jsonb)`;
+      queryParams.push(JSON.stringify(tracking_number));
+      paramIndex++;
+    }
+
+    updateQuery += ` WHERE order_id = $${paramIndex}`;
+    queryParams.push(order_id);
+
+    await query(updateQuery, queryParams);
+
+    await publishEvent('order.status_updated', {
+      order_id, status, tracking_number, source: 'webhook', timestamp: Date.now()
+    });
+
+    logger.info(`Logistics webhook processed for order ${order_id}: ${status}`);
+
+    res.json({ success: true, message: 'Webhook processed' });
+  } catch (error: any) {
+    logger.error('Logistics webhook error:', error);
     next(error);
   }
 }

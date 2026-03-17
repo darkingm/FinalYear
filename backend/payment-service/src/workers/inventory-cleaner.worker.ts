@@ -45,7 +45,7 @@ export class InventoryCleanerWorker {
         try {
           await client.query('BEGIN');
           await client.query(
-            'UPDATE inventory SET available = available + $1, reserved = reserved - $1 WHERE inventory_id = $2',
+            'UPDATE inventory SET available = available + $1, reserved = GREATEST(0, reserved - $1) WHERE inventory_id = $2',
             [row.quantity, row.inventory_id]
           );
           await client.query(

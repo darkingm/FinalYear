@@ -95,3 +95,25 @@ export async function verifyTransaction(req: Request, res: Response, next: NextF
     next(error);
   }
 }
+
+export async function releaseFunds(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { order_id } = req.body;
+    const result = await cryptoPaymentService.releaseFunds(order_id);
+    res.json({ success: true, message: 'Funds released successfully', tx_hash: result.tx_hash });
+  } catch (error: any) {
+    logger.error('Release funds error:', error);
+    next(error);
+  }
+}
+
+export async function refundPayment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { order_id } = req.body;
+    const result = await cryptoPaymentService.refundPayment(order_id);
+    res.json({ success: true, message: 'Payment refunded successfully', tx_hash: result.tx_hash });
+  } catch (error: any) {
+    logger.error('Refund payment error:', error);
+    next(error);
+  }
+}
