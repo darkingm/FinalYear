@@ -607,7 +607,7 @@ export class CryptoPaymentService {
     );
 
     if (confirmations >= requiredConfirmations) {
-      // Transaction confirmed
+      // Mark on-chain confirmed
       await mainQuery(
         `UPDATE orders SET status = 'ONCHAIN_CONFIRMED', updated_at = NOW() 
          WHERE order_id = $1`,
@@ -620,7 +620,36 @@ export class CryptoPaymentService {
         confirmations,
       });
 
-      logger.info('Transaction verified', { txHash, confirmations });
+      logger.info('Transaction verified — triggering auto-release', { txHash, confirmations });
+
+      // ── AUTO-RELEASE: transfer funds from escrow → seller ──────────────────
+      // Fire-and-forget with error handling: if release fails, order stays
+      // ONCHAIN_CONFIRMED so admin can retry manually. Funds are never lost.
+      setImmediate(async () => {
+        try {
+          await this.releaseFunds(payment.order_id);
+
+          // After successful release, update order to PAID
+          await mainQuery(
+            `UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE order_id = $1`,
+            [payment.order_id]
+          );
+
+          await publishEvent('payment.released', {
+            order_id: payment.order_id,
+            tx_hash: txHash,
+          });
+
+          logger.info('Escrow auto-released successfully', { order_id: payment.order_id });
+        } catch (releaseErr: any) {
+          // Non-fatal: log and leave at ONCHAIN_CONFIRMED for admin to retry via
+          // POST /api/crypto-payment/release { order_id }
+          logger.error('Auto-release failed — order stays ONCHAIN_CONFIRMED for manual retry', {
+            order_id: payment.order_id,
+            error: releaseErr.message,
+          });
+        }
+      });
 
       return {
         verified: true,
@@ -702,8 +731,14 @@ export class CryptoPaymentService {
 
       logger.info('Funds released from Escrow', { orderId, txHash: tx.hash });
 
-      // Update payment record or order?
-      // Since it's done, nothing more needed, maybe log it.
+      // Mark order as PAID (funds transferred to seller)
+      await mainQuery(
+        `UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE order_id = $1`,
+        [orderId]
+      );
+
+      await publishEvent('payment.released', { order_id: orderId, tx_hash: tx.hash });
+
       return { success: true, tx_hash: tx.hash };
     } catch (error: any) {
       logger.error('Error releasing funds', { orderId, error: error.message });

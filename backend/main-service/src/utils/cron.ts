@@ -40,11 +40,11 @@ export function initCronJobs() {
                     );
 
                     if (lockDel.rowCount && lockDel.rowCount > 0) {
-                        // 3. Restore inventory — cap available at total to never violate
-                        //    the inventory_consistency check constraint (available <= total).
+                        // 3. Restore inventory — cap available at total_stock to never violate
+                        //    the inventory_consistency check constraint (available <= total_stock).
                         await query(
                             `UPDATE inventory
-                             SET available = LEAST(total, available + $1),
+                             SET available = LEAST(total_stock, available + $1),
                                  reserved  = GREATEST(0, reserved - $1)
                              WHERE product_id = $2`,
                             [order.quantity, order.product_id]

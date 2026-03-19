@@ -6,22 +6,23 @@ import type { PriceData } from '@/types';
 /**
  * price-store.ts — Live prices via Binance REST API (polling).
  *
- * WHY NOT WEBSOCKET?
- * Binance wss://stream.binance.com:9443 is blocked in many browsers
- * from localhost/non-whitelisted origins (CORS policy + firewall).
- * REST polling is far more reliable across environments.
- * We poll every 1.5s to simulate "live" feel.
+ * Strategy:
+ * - Fetch real Binance prices every 5s (realistic refresh rate)
+ * - Apply ±0.1% micro-jitter every 400ms so prices "breathe" between polls
+ *   (looks alive without being erratic / unrealistic)
  */
 
 const BINANCE_REST = 'https://api.binance.com/api/v3';
 
-// Cache previous prices to compute direction (up/down flash)
-const priceCache: Record<string, number> = {};
+// Stores the last REAL Binance price for each symbol (used as jitter base)
+const realPriceCache: Record<string, number> = {};
+// Stores last known PriceData (for direction / 24h data)
+const dataCache: Record<string, PriceData> = {};
 
 interface PriceState {
   prices: Record<string, PriceData>;
   isConnected: boolean;
-  ws: null; // kept for API compatibility
+  ws: null;
 
   setPrice: (symbol: string, data: PriceData) => void;
   setConnected: (connected: boolean) => void;
@@ -30,7 +31,14 @@ interface PriceState {
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let jitterTimer: ReturnType<typeof setInterval> | null = null;
 let pollSymbols: string[] = [];
+
+/** Tiny noise: ±0.1% around the real price */
+const applyJitter = (real: number): number => {
+  const noise = (Math.random() - 0.5) * 2; // [-1, 1]
+  return real * (1 + noise * 0.0001);        // ±0.01%
+};
 
 export const usePriceStore = create<PriceState>()((set, get) => ({
   prices: {},
@@ -43,22 +51,23 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
   setConnected: (connected) => set({ isConnected: connected }),
 
   connect: (symbols) => {
-    // Deduplicate — if same symbols already polling, skip
-    if (
-      pollTimer &&
-      symbols.length === pollSymbols.length &&
-      symbols.every((s) => pollSymbols.includes(s))
-    ) return;
+    // MERGE new symbols with existing set — multiple callers are additive
+    const merged = [...new Set([...pollSymbols, ...symbols])];
+    const isAlreadyPolling =
+      pollTimer !== null &&
+      merged.length === pollSymbols.length &&
+      merged.every((s) => pollSymbols.includes(s));
 
-    pollSymbols = symbols;
+    if (isAlreadyPolling) return;
 
-    // Clear any existing poll
+    pollSymbols = merged;
+
     if (pollTimer) clearInterval(pollTimer);
+    if (jitterTimer) clearInterval(jitterTimer);
 
     const fetchAll = async () => {
       try {
-        // Batch fetch all 24hr tickers
-        const symbolParam = encodeURIComponent(JSON.stringify(symbols));
+        const symbolParam = encodeURIComponent(JSON.stringify(pollSymbols));
         const res = await fetch(`${BINANCE_REST}/ticker/24hr?symbols=${symbolParam}`, {
           cache: 'no-store',
         });
@@ -67,19 +76,22 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
 
         const updates: Record<string, PriceData> = {};
         for (const d of data) {
-          const prev = priceCache[d.symbol];
           const curr = parseFloat(d.lastPrice);
-          priceCache[d.symbol] = curr;
-          updates[d.symbol] = {
+          const prev = realPriceCache[d.symbol];
+          realPriceCache[d.symbol] = curr; // store real price
+
+          const entry: PriceData = {
             symbol: d.symbol,
-            price: curr,
+            price: applyJitter(curr),  // display with tiny jitter
             change24h: parseFloat(d.priceChangePercent),
             high24h: parseFloat(d.highPrice),
             low24h: parseFloat(d.lowPrice),
             volume24h: parseFloat(d.volume),
-            // Extra: direction for flash animation
             direction: prev !== undefined ? (curr > prev ? 'up' : curr < prev ? 'down' : 'same') : 'same',
           } as any;
+
+          updates[d.symbol] = entry;
+          dataCache[d.symbol] = entry;
         }
 
         set((state) => ({
@@ -91,14 +103,33 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
       }
     };
 
-    // Fetch immediately then every 1.5s
+    // Real Binance fetch every 5s
     fetchAll();
-    pollTimer = setInterval(fetchAll, 1500);
+    pollTimer = setInterval(fetchAll, 2000);
+
+    // Local micro-jitter every 400ms — smooth price breathing between polls
+    jitterTimer = setInterval(() => {
+      const jittered: Record<string, PriceData> = {};
+      let hasAny = false;
+      for (const sym of pollSymbols) {
+        const real = realPriceCache[sym];
+        const base = dataCache[sym];
+        if (real && base) {
+          jittered[sym] = { ...base, price: applyJitter(real) };
+          hasAny = true;
+        }
+      }
+      if (hasAny) {
+        set((state) => ({ prices: { ...state.prices, ...jittered } }));
+      }
+    }, 400);
+
     set({ isConnected: true });
   },
 
   disconnect: () => {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (jitterTimer) { clearInterval(jitterTimer); jitterTimer = null; }
     set({ isConnected: false });
   },
 }));

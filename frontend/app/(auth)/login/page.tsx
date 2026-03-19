@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
@@ -13,50 +13,30 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Eye, EyeOff, Mail, Lock, Zap, Loader2, AlertCircle,
-  TrendingUp, TrendingDown, ArrowRight, Shield, Coins,
+  ArrowRight, Shield, Coins,
 } from 'lucide-react';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Header } from '@/components/layout/Header';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { usePriceStore } from '@/store';
 
 /* ─── Crypto Ticker Data ────────────────────────────────────── */
 const COINS = [
-  { symbol: 'BTC', name: 'Bitcoin', color: '#f7931a', base: 83421.5, vol: '28.4B' },
-  { symbol: 'ETH', name: 'Ethereum', color: '#627eea', base: 3218.7, vol: '14.2B' },
-  { symbol: 'BNB', name: 'BNB', color: '#f0b90b', base: 601.3, vol: '2.1B' },
-  { symbol: 'SOL', name: 'Solana', color: '#9945ff', base: 142.8, vol: '5.6B' },
-  { symbol: 'ARB', name: 'Arbitrum', color: '#12aaff', base: 0.892, vol: '0.8B' },
-  { symbol: 'MATIC', name: 'Polygon', color: '#8247e5', base: 0.641, vol: '0.5B' },
-  { symbol: 'LINK', name: 'Chainlink', color: '#375bd2', base: 13.42, vol: '0.9B' },
-  { symbol: 'AVAX', name: 'Avalanche', color: '#e84142', base: 28.74, vol: '1.3B' },
-  { symbol: 'OP', name: 'Optimism', color: '#ff0420', base: 1.784, vol: '0.6B' },
-  { symbol: 'UNI', name: 'Uniswap', color: '#ff007a', base: 7.92, vol: '0.7B' },
+  { symbol: 'BTC', name: 'Bitcoin', color: '#f7931a', base: 84000 },
+  { symbol: 'ETH', name: 'Ethereum', color: '#627eea', base: 3200 },
+  { symbol: 'BNB', name: 'BNB', color: '#f0b90b', base: 600 },
+  { symbol: 'SOL', name: 'Solana', color: '#9945ff', base: 145 },
+  { symbol: 'ARB', name: 'Arbitrum', color: '#12aaff', base: 0.90 },
+  { symbol: 'MATIC', name: 'Polygon', color: '#8247e5', base: 0.64 },
+  { symbol: 'LINK', name: 'Chainlink', color: '#375bd2', base: 13.5 },
+  { symbol: 'AVAX', name: 'Avalanche', color: '#e84142', base: 29 },
+  { symbol: 'OP', name: 'Optimism', color: '#ff0420', base: 1.78 },
+  { symbol: 'UNI', name: 'Uniswap', color: '#ff007a', base: 7.9 },
 ];
 
-function useLivePrices() {
-  const [prices, setPrices] = useState<Record<string, number>>(
-    Object.fromEntries(COINS.map(c => [c.symbol, c.base]))
-  );
-  const [changes, setChanges] = useState<Record<string, number>>(
-    Object.fromEntries(COINS.map(c => [c.symbol, (Math.random() - 0.48) * 6]))
-  );
+const COIN_BINANCE = COINS.map(c => c.symbol + 'USDT');
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setPrices(prev => {
-        const next: Record<string, number> = {};
-        COINS.forEach(c => {
-          const drift = (Math.random() - 0.499) * c.base * 0.0008;
-          next[c.symbol] = Math.max(0.001, prev[c.symbol] + drift);
-        });
-        return next;
-      });
-    }, 600);
-    return () => clearInterval(iv);
-  }, []);
-
-  return { prices, changes };
-}
 
 /* ─── Floating Particle ─────────────────────────────────────── */
 function Particle({ delay, size, x, y, color }: { delay: number; size: number; x: string; y: string; color: string }) {
@@ -72,7 +52,11 @@ function Particle({ delay, size, x, y, color }: { delay: number; size: number; x
 
 /* ─── Left Panel ────────────────────────────────────────────── */
 function LeftPanel() {
-  const { prices, changes } = useLivePrices();
+  const { prices: storePrices, connect: priceConnect } = usePriceStore();
+  useEffect(() => { priceConnect(COIN_BINANCE); }, []);
+  // Map store prices: { BTCUSDT: { price, change24h } } → { BTC: price }
+  const prices = Object.fromEntries(COINS.map(c => [c.symbol, storePrices[c.symbol + 'USDT']?.price ?? c.base]));
+  const changes = Object.fromEntries(COINS.map(c => [c.symbol, storePrices[c.symbol + 'USDT']?.change24h ?? 0]));
 
   const particles = [
     { delay: 0, size: 6, x: '10%', y: '20%', color: '#f0b90b33' },
@@ -167,9 +151,18 @@ function LeftPanel() {
                 className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors group"
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black"
-                    style={{ background: `${coin.color}22`, color: coin.color }}>
-                    {coin.symbol.slice(0, 2)}
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
+                    style={{ background: `${coin.color}22` }}>
+                    <img
+                      src={getCoinLogo(coin.symbol)}
+                      alt={coin.symbol}
+                      className="w-5 h-5 object-contain"
+                      onError={(e) => {
+                        const t = e.target as HTMLImageElement;
+                        t.style.display = 'none';
+                        t.parentElement!.innerHTML = `<span style="color:${coin.color};font-size:9px;font-weight:900">${coin.symbol.slice(0, 2)}</span>`;
+                      }}
+                    />
                   </div>
                   <div>
                     <p className="text-xs font-bold text-white/90">{coin.symbol}</p>
@@ -205,6 +198,7 @@ function LeftPanel() {
               const change = changes[coin.symbol] ?? 0;
               return (
                 <span key={i} className="flex items-center gap-1.5 text-[11px] font-mono flex-shrink-0">
+                  <img src={getCoinLogo(coin.symbol)} alt={coin.symbol} className="w-3.5 h-3.5 object-contain rounded-full" />
                   <span className="font-bold text-white/60">{coin.symbol}</span>
                   <span className="text-white/90">${price < 10 ? price.toFixed(3) : price.toFixed(2)}</span>
                   <span className={change >= 0 ? 'text-emerald-400' : 'text-red-400'}>

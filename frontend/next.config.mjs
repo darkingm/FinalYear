@@ -1,27 +1,23 @@
 /** @type {import('next').NextConfig} */
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3001';
+
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   output: 'standalone',
 
-  // Skip ESLint during production Docker builds (warnings not errors)
-  // All actual errors are fixed in source. Warnings are from exhaustive-deps
-  // which are intentionally suppressed for stable auth/router/fetch deps.
   eslint: {
     ignoreDuringBuilds: true,
   },
 
-  // Optimize production builds
   productionBrowserSourceMaps: false,
 
-  // Reduce bundle size
   modularizeImports: {
     'lucide-react': {
       transform: 'lucide-react/dist/esm/icons/{{kebabCase member}}',
     },
   },
 
-  // Image optimization
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cryptologos.cc' },
@@ -34,8 +30,23 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'plus.unsplash.com' },
       { protocol: 'https', hostname: 's3.amazonaws.com' },
+      { protocol: 'https', hostname: 'cdn.jsdelivr.net' },
     ],
     formats: ['image/webp', 'image/avif'],
+  },
+
+  // Proxy /api/* → Express backend (skip /api/auth which is NextAuth)
+  async rewrites() {
+    return [
+      {
+        source: '/api/auth/:path*',
+        destination: '/api/auth/:path*', // handled by NextAuth — no proxy
+      },
+      {
+        source: '/api/:path*',
+        destination: `${BACKEND_URL}/api/:path*`,
+      },
+    ];
   },
 
   experimental: {
@@ -44,12 +55,9 @@ const nextConfig = {
       '@rainbow-me/rainbowkit',
       'framer-motion',
     ],
-    // Suppress CSR-bailout errors for pages using Web3/Wagmi hooks
-    // These pages are always client-rendered (auth-gated) so SSR fallback is expected
     missingSuspenseWithCSRBailout: false,
   },
 
-  // Webpack optimizations
   webpack: (config, { isServer }) => {
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
 
@@ -75,4 +83,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-

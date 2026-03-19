@@ -44,7 +44,7 @@ export async function getProducts(req: AuthRequest, res: Response, next: NextFun
       maxPrice: parseFloat(req.query.maxPrice as string),
       search: req.query.search as string | undefined,
       acceptsCrypto: req.query.acceptsCrypto === 'true',
-      tokenSymbol: req.query.token as string | undefined,
+      tokenSymbol: (req.query.token || req.query.token_symbol) as string | undefined,
     };
     const result = await productService.getProducts(filters);
     res.json({ success: true, data: result.products, pagination: result.pagination });
@@ -155,6 +155,17 @@ export async function getMyProducts(req: AuthRequest, res: Response, next: NextF
       [sellerId]
     );
     res.json({ success: true, data: result.rows });
+  } catch (error: any) {
+    next(error);
+  }
+}
+
+export async function getHomepageProducts(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const coins = (req.query.coins as string)?.split(',').map(c => c.trim().toUpperCase())
+      || ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'MATIC', 'DOGE'];
+    const products = await productService.getHomepageProducts(coins);
+    res.json({ success: true, data: products });
   } catch (error: any) {
     next(error);
   }

@@ -76,6 +76,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       success: true,
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken, // also in body for server-side clients (e.g. NextAuth)
     });
   } catch (error: any) {
     logger.error('Login error:', error);
@@ -94,6 +95,7 @@ export async function walletLogin(req: Request, res: Response, next: NextFunctio
       success: true,
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken, // also in body for server-side clients (e.g. NextAuth)
     });
   } catch (error: any) {
     logger.error('Wallet login error:', error);
@@ -124,6 +126,7 @@ export async function oauthLogin(req: Request, res: Response, next: NextFunction
       success: true,
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken, // also in body for server-side clients (e.g. NextAuth)
     });
   } catch (error: any) {
     logger.error('OAuth login error:', error);
@@ -145,6 +148,7 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
     res.json({
       success: true,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken, // also in body for server-side clients (e.g. NextAuth)
     });
   } catch (error: any) {
     logger.error('Refresh token error:', error);

@@ -3,7 +3,7 @@ import multer from 'multer';
 import { authenticate } from '../../middleware/auth.middleware';
 import {
   getProducts, getProduct, createProduct, updateProduct,
-  deleteProduct, uploadImages, getTokens, getMyProducts,
+  deleteProduct, uploadImages, getTokens, getMyProducts, getHomepageProducts,
 } from './products.controller';
 
 const router = Router();
@@ -20,6 +20,7 @@ const upload = multer({
 });
 
 router.get('/', getProducts);
+router.get('/homepage', getHomepageProducts);
 router.get('/tokens', getTokens);
 router.get('/my', authenticate, getMyProducts);
 router.get('/:id', getProduct);

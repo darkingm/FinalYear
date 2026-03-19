@@ -63,17 +63,18 @@ export default function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, id]);
 
-  // Auto poll order status if waiting for blockchain confirmation
+  // Auto poll order status while waiting for blockchain confirmation
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (order?.status === 'TX_SUBMITTED') {
-      interval = setInterval(() => {
-        fetchOrder();
-      }, 5000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_CONFIRMED'];
+    const terminalStatuses = ['PAID', 'CANCELLED', 'TX_FAILED', 'REFUNDED', 'COMPLETED', 'SHIPPED', 'DELIVERED', 'DISPUTED'];
+
+    if (!order?.status || terminalStatuses.includes(order.status)) return;
+    if (!pollingStatuses.includes(order.status)) return;
+
+    const interval = setInterval(() => {
+      fetchOrder();
+    }, 4000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.status, id]);
 
@@ -145,6 +146,10 @@ export default function OrderDetailPage() {
       case 'PAID':
       case 'COMPLETED':
         return <CheckCircle className="w-6 h-6 text-green-500" />;
+      case 'ONCHAIN_CONFIRMED':
+        return <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />;
+      case 'TX_SUBMITTED':
+        return <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />;
       case 'CANCELLED':
       case 'REFUNDED':
       case 'TX_FAILED':
@@ -159,6 +164,10 @@ export default function OrderDetailPage() {
       case 'PAID':
       case 'COMPLETED':
         return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
+      case 'ONCHAIN_CONFIRMED':
+        return 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200';
+      case 'TX_SUBMITTED':
+        return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200';
       case 'CANCELLED':
       case 'REFUNDED':
       case 'TX_FAILED':
@@ -214,6 +223,28 @@ export default function OrderDetailPage() {
               <p className="text-gray-500 font-mono text-sm mt-1">Order #{order.order_id}</p>
             </div>
           </div>
+
+          {/* ONCHAIN_CONFIRMED = escrow releasing funds */}
+          {order.status === 'ONCHAIN_CONFIRMED' && (
+            <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-amber-400 animate-spin flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-300 text-sm">Đang giải ngân từ escrow...</p>
+                <p className="text-xs text-amber-400/70 mt-0.5">Thanh toán đã xác nhận on-chain. Hệ thống đang chuyển tiền cho người bán.</p>
+              </div>
+            </div>
+          )}
+
+          {/* TX_FAILED banner */}
+          {order.status === 'TX_FAILED' && (
+            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3">
+              <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-red-300 text-sm">Giao dịch thất bại trên blockchain</p>
+                <p className="text-xs text-red-400/70 mt-0.5">Tiền chưa bị trừ. Vui lòng thử thanh toán lại.</p>
+              </div>
+            </div>
+          )}
 
           {success && order.status === 'TX_SUBMITTED' && order.paypal_order_id && (
             <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex items-center gap-3">

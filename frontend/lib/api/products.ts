@@ -7,6 +7,7 @@ export interface ProductListParams {
   search?: string;
   payment_crypto?: boolean;
   payment_paypal?: boolean;
+  token_symbol?: string;
 }
 
 export const productsApi = {
@@ -22,4 +23,12 @@ export const productsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   delete: (id: number) => apiClient.delete(`/api/products/${id}`),
+
+  /** Homepage: max 5 per coin, up to 20 total */
+  homepage: (coins?: string) =>
+    apiClient.get('/api/products/homepage', { params: coins ? { coins } : undefined }),
+
+  /** Coin tab: products filtered by accepted token symbol */
+  listByCoin: (symbol: string, limit = 5) =>
+    apiClient.get('/api/products', { params: { token_symbol: symbol, limit } }),
 };

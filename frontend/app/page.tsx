@@ -4,29 +4,31 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 import { useAuth } from '@/lib/hooks/useAuth';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  ShoppingBag, Shield, Zap, ArrowRight, Star, TrendingUp, TrendingDown,
-  Users, Package, Timer, Flame, Tag, ChevronRight, Eye,
-  BarChart3, Wallet, RefreshCw, Activity, Search,
+  ShoppingBag, Shield, Zap, ArrowRight, TrendingUp,
+  Package, ChevronRight, BarChart3, Wallet, RefreshCw, Activity, Search,
 } from 'lucide-react';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { productService } from '@/services';
+import { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@/lib/hooks/useWallet';
 import { formatCurrency, formatCrypto } from '@/lib/utils/format';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
-import { getProductGallery } from '@/lib/utils/product-images';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
 import { AIChatButton } from '@/components/ui/ai-chat-button';
 import { usePriceStore } from '@/store';
+import { productsApi } from '@/lib/api/products';
+import { CoinPriceStrip } from '@/components/home/CoinPriceStrip';
+import {
+  Laptop, Shirt, Home as HomeIcon, Dumbbell, BookOpen, Gamepad2, Car, Diamond, Sparkles,
+} from 'lucide-react';
 
 
 /* ─── Types ──────────────────────────────────────── */
@@ -52,39 +54,22 @@ const TOP_COINS = [
   { symbol: 'ADAUSDT', name: 'Cardano', short: 'ADA', color: '#0033ad' },
   { symbol: 'DOGEUSDT', name: 'Dogecoin', short: 'DOGE', color: '#c3a634' },
   { symbol: 'AVAXUSDT', name: 'Avalanche', short: 'AVAX', color: '#e84142' },
+  { symbol: 'MATICUSDT', name: 'Polygon', short: 'MATIC', color: '#8247e5' },
+  { symbol: 'DOTUSDT', name: 'Polkadot', short: 'DOT', color: '#e6007a' },
+  { symbol: 'LINKUSDT', name: 'Chainlink', short: 'LINK', color: '#2a5ada' },
+  { symbol: 'ATOMUSDT', name: 'Cosmos', short: 'ATOM', color: '#6f7390' },
+  { symbol: 'LTCUSDT', name: 'Litecoin', short: 'LTC', color: '#bfbbbb' },
+  { symbol: 'TRXUSDT', name: 'TRON', short: 'TRX', color: '#ef0027' },
+  { symbol: 'TONUSDT', name: 'TON', short: 'TON', color: '#0098ea' },
+  { symbol: 'NEARUSDT', name: 'NEAR', short: 'NEAR', color: '#00c08b' },
+  { symbol: 'APTUSDT', name: 'Aptos', short: 'APT', color: '#00c2a8' },
+  { symbol: 'OPUSDT', name: 'Optimism', short: 'OP', color: '#ff0420' },
+  { symbol: 'ARBUSDT', name: 'Arbitrum', short: 'ARB', color: '#28a0f0' },
+  { symbol: 'SUIUSDT', name: 'Sui', short: 'SUI', color: '#4ca3ff' },
 ];
 
-const COIN_CATEGORIES = [
-  { coin: 'BTC', name: 'Bitcoin', color: '#f7931a', desc: 'Thanh toán bằng Bitcoin', products: '2.5K+' },
-  { coin: 'ETH', name: 'Ethereum', color: '#627eea', desc: 'Sản phẩm chấp nhận ETH', products: '1.8K+' },
-  { coin: 'BNB', name: 'BNB', color: '#f0b90b', desc: 'Hệ sinh thái BNB Chain', products: '1.2K+' },
-  { coin: 'SOL', name: 'Solana', color: '#9945ff', desc: 'NFT & Digital trên Solana', products: '900+' },
-  { coin: 'USDT', name: 'Tether', color: '#26a17b', desc: 'Stablecoin phổ biến nhất', products: '3K+' },
-  { coin: 'USDC', name: 'USD Coin', color: '#2775ca', desc: 'Stablecoin uy tín', products: '2K+' },
-  { coin: 'MATIC', name: 'Polygon', color: '#8247e5', desc: 'Phí thấp với Polygon', products: '800+' },
-  { coin: 'DOGE', name: 'Dogecoin', color: '#c3a634', desc: 'Mua sắm bằng DOGE', products: '500+' },
-];
 
-/* ─── Flash Sale Timer ───────────────────────────── */
-function useFlashSaleTimer() {
-  const [timeLeft, setTimeLeft] = useState({ h: 5, m: 47, s: 23 });
-  useEffect(() => {
-    const t = setInterval(() => {
-      setTimeLeft(prev => {
-        let { h, m, s } = prev;
-        s--;
-        if (s < 0) { s = 59; m--; }
-        if (m < 0) { m = 59; h--; }
-        if (h < 0) { h = 23; m = 59; s = 59; }
-        return { h, m, s };
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
-  return timeLeft;
-}
-
-/* ─── Wallet Balance Section ─────────────────────── */
+/* ─── Main Page ──────────────────────────────────────── */
 function WalletBalanceSection() {
   const { isConnected, tokenBalances, totalUSDT, isLoading, refetch } = useWallet();
   const { t } = useClientTranslation();
@@ -136,13 +121,8 @@ function WalletBalanceSection() {
                   className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted border border-border/50 hover:border-border transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-muted p-1 flex-shrink-0">
-                      <Image
-                        src={getCoinLogo(token.symbol)}
-                        alt={token.symbol}
-                        width={32} height={32}
-                        className="w-full h-full object-contain"
-                      />
+                    <div className="w-8 h-8 rounded-full bg-muted p-1 flex-shrink-0 flex items-center justify-center">
+                      <CoinImage symbol={token.symbol} size={28} className="rounded-full" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-foreground">{token.symbol}</p>
@@ -212,7 +192,7 @@ function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof
         <Link href={`/trading/${symbol}`} className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: `${coinInfo?.color}25`, border: `1px solid ${coinInfo?.color}40` }}>
-            <img src={getCoinLogo(displaySymbol)} alt={displaySymbol} className="w-5 h-5 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <CoinImage symbol={displaySymbol} size={20} />
           </div>
           <div>
             <p className="font-bold text-foreground text-sm group-hover:text-[#f0b90b] transition-colors">{displaySymbol}</p>
@@ -309,7 +289,63 @@ function MarketTable({ symbols, search }: { symbols: string[]; search: string })
 }
 
 
-/* ─── Main Page ──────────────────────────────────── */
+/* ─── Category definitions ───────────────────────── */
+const HOME_CATEGORIES = [
+  { id: 'all', label: 'Tất cả', icon: Sparkles, color: '#f0b90b', slug: undefined },
+  { id: 'electronics', label: 'Electronics', icon: Laptop, color: '#3b82f6', slug: 'electronics' },
+  { id: 'fashion', label: 'Fashion', icon: Shirt, color: '#ec4899', slug: 'fashion' },
+  { id: 'home', label: 'Home', icon: HomeIcon, color: '#10b981', slug: 'home' },
+  { id: 'sports', label: 'Sports', icon: Dumbbell, color: '#f97316', slug: 'sports' },
+  { id: 'books', label: 'Books', icon: BookOpen, color: '#8b5cf6', slug: 'books' },
+  { id: 'gaming', label: 'Gaming', icon: Gamepad2, color: '#ef4444', slug: 'toys' },
+  { id: 'automotive', label: 'Automotive', icon: Car, color: '#6b7280', slug: 'automotive' },
+  { id: 'jewelry', label: 'Jewelry', icon: Diamond, color: '#f59e0b', slug: 'jewelry' },
+];
+
+const TARGET_COUNT = 12;
+
+type ProductWithSource = ProductCardData & { _borrowedFrom?: string };
+
+/** Fill `primary` up to `count` by taking extras from `allPool` (different category). */
+function fillToCount(
+  primary: ProductCardData[],
+  primaryCategoryId: string,
+  allPool: ProductCardData[],
+  count = TARGET_COUNT,
+): { products: ProductWithSource[]; borrowedCategories: Set<string> } {
+  const needed = count - primary.length;
+  const borrowedCategories = new Set<string>();
+  if (needed <= 0) {
+    return { products: primary.slice(0, count) as ProductWithSource[], borrowedCategories };
+  }
+  // Pool = everything NOT already in primary, deduplicated by product_id
+  const usedIds = new Set(primary.map(p => p.product_id));
+  const extras: ProductWithSource[] = allPool
+    .filter(p => !usedIds.has(p.product_id))
+    .slice(0, needed)
+    .map(p => {
+      const cat = p.category || 'other';
+      if (cat !== primaryCategoryId) borrowedCategories.add(cat);
+      return { ...p, _borrowedFrom: cat };
+    });
+  return {
+    products: [...(primary as ProductWithSource[]), ...extras],
+    borrowedCategories,
+  };
+}
+
+/* ─── Coin tab filter constants ──────────────────── */
+const COIN_TABS = [
+  { symbol: 'BTC', name: 'Bitcoin', color: '#f7931a' },
+  { symbol: 'ETH', name: 'Ethereum', color: '#627eea' },
+  { symbol: 'BNB', name: 'BNB', color: '#f0b90b' },
+  { symbol: 'SOL', name: 'Solana', color: '#9945ff' },
+  { symbol: 'USDT', name: 'Tether', color: '#26a17b' },
+  { symbol: 'USDC', name: 'USD Coin', color: '#2775ca' },
+  { symbol: 'MATIC', name: 'Polygon', color: '#8247e5' },
+  { symbol: 'DOGE', name: 'Dogecoin', color: '#c3a634' },
+];
+
 export default function HomePage() {
   const { t } = useClientTranslation();
   const { isAuthenticated, isLoading } = useAuth();
@@ -317,26 +353,53 @@ export default function HomePage() {
   const [prodLoading, setProdLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
   const [coinSearch, setCoinSearch] = useState('');
-  const flashTimer = useFlashSaleTimer();
+  const [activeCoinFilter, setActiveCoinFilter] = useState<string | null>(null);
 
   // Use shared live price store (1.5s polling, same as PriceTicker)
-  const { prices, connect, disconnect } = usePriceStore();
+  const { prices, connect } = usePriceStore();
   const TOP_SYMBOLS = TOP_COINS.map(c => c.symbol);
 
   useEffect(() => {
     connect(TOP_SYMBOLS);
-    return () => disconnect();
-  }, [connect, disconnect]);
+    // Don't disconnect so CoinPriceStrip can keep polling
+  }, [connect]);
 
+
+
+
+  // ── Featured products state (12-product guarantee) ────────────────────
+  const [featuredCategory, setFeaturedCategory] = useState('all');
+  const [categoryProductCache, setCategoryProductCache] = useState<Record<string, ProductCardData[]>>({});
+  const [featuredLoading, setFeaturedLoading] = useState(false);
+
+  // Load all/homepage products (pool for filling)
   useEffect(() => {
-    (async () => {
-      try {
-        const { products: list } = await productService.list({ limit: 16 });
+    productsApi.homepage()
+      .then(res => {
+        const list = res.data?.data ?? res.data?.products ?? [];
         setProducts(Array.isArray(list) ? list : []);
-      } catch { setProducts([]); }
-      finally { setProdLoading(false); }
-    })();
+      })
+      .catch(() => setProducts([]))
+      .finally(() => setProdLoading(false));
   }, []);
+
+  // Fetch products for selected featured category (fetch more for coin filtering)
+  useEffect(() => {
+    if (categoryProductCache[featuredCategory]) return;
+    setFeaturedLoading(true);
+    const cat = HOME_CATEGORIES.find(c => c.id === featuredCategory);
+    const params = cat?.slug
+      ? { limit: 60, category: cat.slug }
+      : { limit: 60 };
+    productsApi.list(params)
+      .then(res => {
+        const list = res.data?.data ?? res.data?.products ?? [];
+        setCategoryProductCache(prev => ({ ...prev, [featuredCategory]: Array.isArray(list) ? list : [] }));
+      })
+      .catch(() => setCategoryProductCache(prev => ({ ...prev, [featuredCategory]: [] })))
+      .finally(() => setFeaturedLoading(false));
+  }, [featuredCategory]);
+
 
   // Filter/sort helpers powered by store prices
   const allPriceData = TOP_COINS.map(c => ({
@@ -369,7 +432,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      {/* Floating AI Chat Button */}
       <AIChatButton />
 
       <main>
@@ -524,7 +586,7 @@ export default function HomePage() {
                                   className="w-10 h-10 rounded-full flex items-center justify-center shadow-md group-hover:scale-110 transition-transform"
                                   style={{ backgroundColor: `${coinInfo?.color}20`, border: `2px solid ${coinInfo?.color}35` }}
                                 >
-                                  <Image src={getCoinLogo(displaySymbol)} alt={displaySymbol} width={24} height={24} className="object-contain" />
+                                  <CoinImage symbol={displaySymbol} size={24} />
                                 </div>
                                 <div>
                                   <p className="text-sm font-bold text-foreground">{displaySymbol}</p>
@@ -577,59 +639,21 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Market + Wallet Section ── */}
-        <section className="relative py-10 bg-background border-b border-border transition-colors duration-300 overflow-hidden">
-          {/* Section decoration */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#f0b90b]/15 to-transparent" />
-            <div className="absolute -top-32 right-0 w-[300px] h-[300px] bg-gradient-to-bl from-[#f0b90b]/3 to-transparent rounded-full blur-3xl" />
-          </div>
-          <div className="container mx-auto px-4 max-w-7xl">
-            {/* Coin search */}
-            <div className="flex items-center gap-4 mb-6">
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder={t('home.searchCoin')}
-                  value={coinSearch}
-                  onChange={e => setCoinSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-xl text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary transition-all"
-                />
-              </div>
-              <div className="flex items-center gap-1 p-1 bg-muted border border-border rounded-xl">
-                {['all', 'gainers', 'losers'].map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveCategory(tab)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeCategory === tab ? 'bg-[#f0b90b] text-black' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    {tab === 'all' ? t('home.all') : tab === 'gainers' ? '▲ ' + t('home.gainers') : '▼ ' + t('home.losers')}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid lg:grid-cols-[1fr,320px] gap-6">
-              <MarketTable symbols={displayedSymbols} search={coinSearch} />
-
-              <WalletBalanceSection />
-            </div>
-          </div>
-        </section>
-
-        {/* ── Coin Categories ── */}
+        {/* ── Sản phẩm nổi bật — 12 sản phẩm cố định, lọc theo danh mục + coin ── */}
         <section className="relative py-12 bg-background overflow-hidden">
-          {/* Section decoration */}
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute -bottom-20 -left-20 w-[350px] h-[350px] bg-gradient-to-tr from-purple-500/4 to-transparent rounded-full blur-3xl" />
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/15 to-transparent" />
+            <div className="absolute -bottom-20 -left-20 w-[350px] h-[350px] bg-gradient-to-tr from-[#f0b90b]/4 to-transparent rounded-full blur-3xl" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#f0b90b]/15 to-transparent" />
           </div>
+
           <div className="container mx-auto px-4 max-w-7xl">
-            <div className="flex items-center justify-between mb-8">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Mua sắm theo Coin</h2>
-                <p className="text-muted-foreground text-sm mt-1">Chọn loại coin bạn muốn thanh toán. Swap coin trực tiếp khi giao dịch.</p>
+                <h2 className="text-2xl font-bold text-foreground">Sản phẩm nổi bật</h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Khám phá {TARGET_COUNT} sản phẩm — chọn danh mục và coin thanh toán.
+                </p>
               </div>
               <Link href="/products">
                 <Button variant="ghost" size="sm" className="text-[#f0b90b] hover:text-[#e6a800] hover:bg-[#f0b90b]/8 gap-1 text-sm">
@@ -637,175 +661,222 @@ export default function HomePage() {
                 </Button>
               </Link>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-              {COIN_CATEGORIES.map((cat, i) => {
-                const priceData = prices[cat.coin + 'USDT'];
-                const price = priceData?.price ?? 0;
+
+            {/* ── Row 1: Category tabs ── */}
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-3">
+              {(() => {
+                const primaryProducts = categoryProductCache[featuredCategory] ?? [];
+                const coinFiltered = activeCoinFilter
+                  ? primaryProducts.filter(p =>
+                    p.accepted_tokens?.some((t: any) => t.symbol?.toUpperCase() === activeCoinFilter) ||
+                    (p.metadata?.pricing && activeCoinFilter in p.metadata.pricing) ||
+                    p.token_symbol?.toUpperCase() === activeCoinFilter
+                  )
+                  : primaryProducts;
+                const { borrowedCategories } = fillToCount(coinFiltered, featuredCategory, products);
+                return HOME_CATEGORIES.map((cat, i) => {
+                  const isActive = featuredCategory === cat.id;
+                  const isBorrowed = borrowedCategories.has(cat.slug ?? cat.id);
+                  const CatIcon = cat.icon;
+                  return (
+                    <motion.button
+                      key={cat.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      onClick={() => { setFeaturedCategory(cat.id); setActiveCoinFilter(null); }}
+                      title={isBorrowed ? `Đang mượn sản phẩm từ danh mục này` : cat.label}
+                      className={[
+                        'flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-semibold transition-all duration-200',
+                        isActive
+                          ? 'text-black shadow-md'
+                          : isBorrowed
+                            ? 'bg-card border-amber-500/50 text-foreground ring-1 ring-amber-500/40'
+                            : 'bg-card border-border text-foreground hover:border-primary/40 hover:bg-muted',
+                      ].join(' ')}
+                      style={isActive ? { backgroundColor: cat.color, borderColor: cat.color } : {}}
+                    >
+                      <CatIcon
+                        className="w-3.5 h-3.5 flex-shrink-0"
+                        style={{ color: isActive ? 'black' : isBorrowed ? '#f59e0b' : cat.color }}
+                      />
+                      <span>{cat.label}</span>
+                      {isBorrowed && !isActive && (
+                        <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 rounded px-1">↗</span>
+                      )}
+                    </motion.button>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* ── Row 2: Coin filter ── */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-hide mb-6">
+              <span className="text-xs text-muted-foreground flex-shrink-0 mr-1">Coin:</span>
+              {/* All coins button */}
+              <button
+                onClick={() => setActiveCoinFilter(null)}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${activeCoinFilter === null
+                  ? 'bg-foreground text-background border-foreground shadow-sm'
+                  : 'bg-card border-border text-muted-foreground hover:border-primary/40 hover:bg-muted'
+                  }`}
+              >
+                Tất cả
+              </button>
+              {COIN_TABS.map((tab) => {
+                const priceData = prices[tab.symbol + 'USDT'];
                 const change = priceData?.change24h ?? 0;
+                const isActive = activeCoinFilter === tab.symbol;
                 return (
-                  <motion.div key={cat.coin} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04 }}>
-                    <Link href={`/trading/${cat.coin}USDT`}>
-                      <div className="group bg-card border border-border rounded-xl p-3.5 text-center hover:shadow-lg transition-all cursor-pointer hover:-translate-y-1 duration-300"
-                        style={{ borderColor: undefined }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = cat.color + '60'; (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 25px ${cat.color}15`; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = ''; (e.currentTarget as HTMLElement).style.boxShadow = ''; }}
-                      >
-                        <div className="w-12 h-12 rounded-full mx-auto mb-2.5 flex items-center justify-center p-1.5" style={{ backgroundColor: cat.color + '18', border: `2px solid ${cat.color}30` }}>
-                          <Image src={getCoinLogo(cat.coin)} alt={cat.coin} width={28} height={28} className="object-contain" />
-                        </div>
-                        <h3 className="text-xs font-bold text-foreground group-hover:text-[#f0b90b] transition-colors">{cat.coin}</h3>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{cat.name}</p>
-                        {price > 0 && (
-                          <div className="mt-1.5">
-                            <p className="text-[10px] font-mono font-semibold text-foreground">${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                            <p className={`text-[9px] font-bold ${change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-                            </p>
-                          </div>
-                        )}
-                        <p className="text-[9px] text-muted-foreground mt-1">{cat.products} products</p>
-                      </div>
-                    </Link>
-                  </motion.div>
+                  <button
+                    key={tab.symbol}
+                    onClick={() => setActiveCoinFilter(isActive ? null : tab.symbol)}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${isActive
+                      ? 'text-black shadow-sm'
+                      : 'bg-card border-border text-foreground hover:border-primary/40 hover:bg-muted'
+                      }`}
+                    style={isActive ? { backgroundColor: tab.color, borderColor: tab.color } : {}}
+                  >
+                    <CoinImage symbol={tab.symbol} size={14} className="rounded-full" />
+                    <span>{tab.symbol}</span>
+                    {priceData && (
+                      <span className={`hidden sm:inline ${isActive ? 'text-black/70' : change >= 0 ? 'text-emerald-500' : 'text-red-500'
+                        }`}>
+                        {change >= 0 ? '+' : ''}{change.toFixed(1)}%
+                      </span>
+                    )}
+                  </button>
                 );
               })}
             </div>
 
-          </div>
-        </section>
+            {/* ── Product Grid — always 12 slots ── */}
+            {(() => {
+              const primaryProducts = categoryProductCache[featuredCategory] ?? [];
+              // Apply coin filter first
+              const coinFiltered = activeCoinFilter
+                ? primaryProducts.filter(p =>
+                  p.accepted_tokens?.some((t: any) => t.symbol?.toUpperCase() === activeCoinFilter) ||
+                  (p.metadata?.pricing && activeCoinFilter in p.metadata.pricing) ||
+                  p.token_symbol?.toUpperCase() === activeCoinFilter
+                )
+                : primaryProducts;
 
-        {/* ── Flash Sale Section ── */}
-        <section className="py-12">
-          <div className="container mx-auto px-4 max-w-7xl">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl shadow-lg shadow-red-500/30">
-                  <Flame className="w-5 h-5 fill-white" />
-                  <span className="font-bold text-lg">FLASH SALE</span>
-                </div>
-                <div className="flex items-center gap-1 bg-card border border-border px-3 py-2 rounded-xl">
-                  <Timer className="w-4 h-4 text-[#f0b90b]" />
-                  <span className="font-mono font-bold text-foreground text-lg">
-                    {String(flashTimer.h).padStart(2, '0')}:{String(flashTimer.m).padStart(2, '0')}:{String(flashTimer.s).padStart(2, '0')}
-                  </span>
-                </div>
-              </div>
-              <Link href="/products">
-                <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-500/8 gap-1 text-sm">
-                  Xem tất cả <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
-            </div>
+              const isLoading = featuredLoading || (primaryProducts.length === 0 && prodLoading);
+              const { products: displayList, borrowedCategories } = fillToCount(
+                coinFiltered, featuredCategory, products
+              );
 
-            {prodLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {[1, 2, 3, 4, 5, 6].map(i => (
-                  <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border animate-pulse">
-                    <div className="h-48 bg-muted" />
-                    <div className="p-4 space-y-2">
-                      <div className="h-3 bg-muted rounded w-3/4" />
-                      <div className="h-4 bg-muted rounded w-1/2" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {products.slice(0, 6).map((product, i) => {
-                  const discount = 10 + (i * 7 % 35);
-                  const stockLeft = 15 + (product.product_id % 70);
-                  return (
-                    <ProductCard
-                      key={product.product_id}
-                      product={{
-                        ...product,
-                        // inject flash-sale discount as metadata
-                        metadata: { ...product.metadata, flash_discount: discount, stock_left: stockLeft }
-                      }}
-                      index={i}
-                      variant="grid"
-                      showAddToCart
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* ── Deal of Day Banner ── */}
-        <section className="py-4">
-          <div className="container mx-auto px-4 max-w-7xl">
-            <div className="grid sm:grid-cols-3 gap-4">
-              {[
-                { icon: '🎉', title: 'Giảm đến 50%', sub: 'Sản phẩm nổi bật', color: 'from-blue-600/20 to-blue-800/20', border: 'border-blue-500/20', badge: 'HOT DEAL' },
-                { icon: '🚀', title: 'Freeship toàn quốc', sub: 'Đơn từ $10 trở lên', color: 'from-emerald-600/20 to-emerald-800/20', border: 'border-emerald-500/20', badge: 'FREE SHIP' },
-                { icon: '💎', title: 'Thanh toán Crypto', sub: 'BTC, ETH, BNB & more', color: 'from-yellow-600/20 to-amber-800/20', border: 'border-yellow-500/20', badge: 'WEB3' },
-              ].map((item, i) => (
-                <motion.div key={i} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}>
-                  <div className={`bg-gradient-to-r ${item.color} border ${item.border} rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:-translate-y-1 transition-all duration-300`}>
-                    <span className="text-4xl">{item.icon}</span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold px-2 py-0.5 bg-black/10 dark:bg-white/10 text-foreground rounded-full">{item.badge}</span>
+              if (isLoading) {
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {Array.from({ length: TARGET_COUNT }).map((_, i) => (
+                      <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border animate-pulse">
+                        <div className="h-44 bg-muted" />
+                        <div className="p-4 space-y-2">
+                          <div className="h-3 bg-muted rounded w-3/4" />
+                          <div className="h-4 bg-muted rounded w-1/2" />
+                          <div className="h-8 bg-muted rounded mt-4" />
+                        </div>
                       </div>
-                      <h3 className="font-bold text-foreground">{item.title}</h3>
-                      <p className="text-xs text-muted-foreground">{item.sub}</p>
-                    </div>
-                    <Tag className="w-5 h-5 text-gray-500" />
+                    ))}
                   </div>
-                </motion.div>
-              ))}
-            </div>
+                );
+              }
+
+              if (displayList.length === 0) {
+                return (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="text-center py-20 bg-card rounded-2xl border border-border">
+                    {activeCoinFilter
+                      ? <CoinImage symbol={activeCoinFilter} size={48} className="opacity-30 mx-auto mb-3" />
+                      : <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />}
+                    <p className="text-muted-foreground text-sm">
+                      {activeCoinFilter
+                        ? `Chưa có sản phẩm thanh toán bằng ${activeCoinFilter}`
+                        : 'Chưa có sản phẩm nào'}
+                    </p>
+                    {activeCoinFilter && (
+                      <button onClick={() => setActiveCoinFilter(null)}
+                        className="mt-3 text-xs text-[#f0b90b] hover:underline">
+                        Xóa bộ lọc coin →
+                      </button>
+                    )}
+                    <Link href="/products" className="mt-2 block text-xs text-muted-foreground hover:underline">
+                      Xem tất cả sản phẩm →
+                    </Link>
+                  </motion.div>
+                );
+              }
+
+              return (
+                <>
+                  {/* Borrowed notice */}
+                  {borrowedCategories.size > 0 && featuredCategory !== 'all' && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                      className="text-xs text-amber-500 mb-4 flex items-center gap-1.5"
+                    >
+                      <span>✦</span>
+                      Chưa đủ {TARGET_COUNT} sản phẩm — đang hiển thị thêm từ:{' '}
+                      <span className="font-semibold capitalize">
+                        {Array.from(borrowedCategories).join(', ')}
+                      </span>
+                    </motion.p>
+                  )}
+                  <motion.div
+                    key={`${featuredCategory}-${activeCoinFilter}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22 }}
+                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+                  >
+                    {displayList.map((product, i) => (
+                      <div key={product.product_id} className="relative">
+                        {product._borrowedFrom && (
+                          <span className="absolute top-2.5 left-2.5 z-10 text-[9px] font-bold
+                            bg-amber-500/90 text-black px-1.5 py-0.5 rounded-full shadow">
+                            {product._borrowedFrom}
+                          </span>
+                        )}
+                        <ProductCard product={product} index={i} variant="grid" showAddToCart />
+                      </div>
+                    ))}
+                  </motion.div>
+                </>
+              );
+            })()}
           </div>
         </section>
 
-        {/* ── Featured Products ── */}
-        <section className="py-12">
+        {/* ── Market + Wallet Section ── */}
+        <section className="relative py-10 bg-background border-b border-border transition-colors duration-300 overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#f0b90b]/15 to-transparent" />
+            <div className="absolute -top-32 right-0 w-[300px] h-[300px] bg-gradient-to-bl from-[#f0b90b]/3 to-transparent rounded-full blur-3xl" />
+          </div>
           <div className="container mx-auto px-4 max-w-7xl">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Featured Products</h2>
-                <p className="text-muted-foreground text-sm mt-1">Handpicked from our verified sellers</p>
+            <div className="flex items-center gap-4 mb-6">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input type="text" placeholder={t('home.searchCoin')} value={coinSearch}
+                  onChange={e => setCoinSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-xl text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary transition-all" />
               </div>
-              <Link href="/products">
-                <Button variant="ghost" size="sm" className="text-[#f0b90b] hover:text-[#e6a800] hover:bg-[#f0b90b]/8 gap-1">
-                  View All <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
+              <div className="flex items-center gap-1 p-1 bg-muted border border-border rounded-xl">
+                {['all', 'gainers', 'losers'].map(tab => (
+                  <button key={tab} onClick={() => setActiveCategory(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeCategory === tab ? 'bg-[#f0b90b] text-black' : 'text-muted-foreground hover:text-foreground'
+                      }`}>
+                    {tab === 'all' ? t('home.all') : tab === 'gainers' ? '▲ ' + t('home.gainers') : '▼ ' + t('home.losers')}
+                  </button>
+                ))}
+              </div>
             </div>
-
-            {prodLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                  <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border animate-pulse">
-                    <div className="h-44 bg-white/5" />
-                    <div className="p-4 space-y-2">
-                      <div className="h-3 bg-white/5 rounded w-3/4" />
-                      <div className="h-3 bg-white/5 rounded w-1/2" />
-                      <div className="h-4 bg-white/5 rounded w-1/3" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : products.length === 0 ? (
-              <div className="text-center py-16 bg-card rounded-2xl border border-border">
-                <ShoppingBag className="w-12 h-12 mx-auto text-gray-600 mb-3" />
-                <p className="text-gray-500">Chưa có sản phẩm nào</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {products.map((product, i) => (
-                  <ProductCard
-                    key={product.product_id}
-                    product={product}
-                    index={i}
-                    variant="grid"
-                    showAddToCart
-                  />
-                ))}
-              </div>
-            )}
+            <div className="grid lg:grid-cols-[1fr,320px] gap-6">
+              <MarketTable symbols={displayedSymbols} search={coinSearch} />
+              <WalletBalanceSection />
+            </div>
           </div>
         </section>
 

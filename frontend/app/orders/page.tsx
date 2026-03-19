@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
 
 /* ─── Types ───────────────────────────────────────────────────── */
 interface Order {
@@ -177,9 +178,16 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
 
               {/* Bottom row: price + arrow */}
               <div className="flex items-end justify-between mt-2">
-                <span className={`text-xl font-black font-mono ${priceIsToken ? 'text-[#f0b90b]' : 'text-[#8247e5]'}`}>
-                  {priceLabel}
-                </span>
+                {priceIsToken ? (
+                  <span className={`text-xl font-black font-mono text-[#f0b90b] flex items-center gap-1.5`}>
+                    <img src={getCoinLogo(order.token_symbol!)} alt={order.token_symbol!} className="w-5 h-5 object-contain rounded-full" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    {Number(tokenAmount).toFixed(['ETH', 'WBTC', 'BTC'].includes(order.token_symbol!) ? 6 : 4)} {order.token_symbol}
+                  </span>
+                ) : (
+                  <span className="text-xl font-black font-mono text-[#8247e5]">
+                    ${Number(order.price_usd ?? order.total_amount ?? 0).toFixed(2)}
+                  </span>
+                )}
                 <span className="text-[#8247e5] opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-bold transition-all -translate-x-2 group-hover:translate-x-0">
                   Chi tiết <ArrowRight className="w-3.5 h-3.5" />
                 </span>
@@ -352,8 +360,8 @@ export default function OrdersPage() {
                 key={tab.value}
                 onClick={() => setFilter(tab.value)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${filter === tab.value
-                    ? 'bg-[#8247e5] text-white shadow-md shadow-purple-500/20'
-                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                  ? 'bg-[#8247e5] text-white shadow-md shadow-purple-500/20'
+                  : 'bg-muted text-muted-foreground hover:text-foreground'
                   }`}
               >
                 {tab.label}

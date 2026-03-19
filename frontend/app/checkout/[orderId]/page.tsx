@@ -22,7 +22,7 @@ import {
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseUnits, formatUnits, erc20Abi, type Address } from 'viem';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
@@ -192,6 +192,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [redirectIn, setRedirectIn] = useState<number | null>(null);
 
   // Quote timer
   const [timeLeft, setTimeLeft] = useState(0);
@@ -359,6 +360,17 @@ export default function CheckoutPage() {
           if (status === 'ONCHAIN_CONFIRMED' || status === 'PAID') {
             setConfirmed(true);
             toast.success('✅ Thanh toán xác nhận on-chain!', { duration: 6000 });
+            // Auto-redirect to order page after 3 seconds
+            let countdown = 3;
+            setRedirectIn(countdown);
+            const iv = setInterval(() => {
+              countdown -= 1;
+              setRedirectIn(countdown);
+              if (countdown <= 0) {
+                clearInterval(iv);
+                router.push(`/orders/${orderId}`);
+              }
+            }, 1000);
             return;
           }
         } catch { }
@@ -585,7 +597,7 @@ export default function CheckoutPage() {
                           onClick={() => { setSelectedToken(token); setQuote(null); }}
                           className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all ${selectedToken === token ? 'border-[#f0b90b] bg-[#f0b90b]/10 text-[#f0b90b]' : 'border-border hover:border-[#f0b90b]/40'}`}
                         >
-                          <img src={getCoinLogo(token)} alt={token} className="w-5 h-5 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder-coin.png'; }} />
+                          <CoinImage symbol={token} size={20} className="object-contain" />
                           <span className="text-sm font-bold">{token}</span>
                         </button>
                       ))}
@@ -741,7 +753,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  {/* Pay / confirmed buttons */}
+                  {/* Pay / confirmed / pending buttons */}
                   {confirmed && txHash ? (
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                       className="text-center space-y-4 py-2">
@@ -750,13 +762,18 @@ export default function CheckoutPage() {
                       </div>
                       <div>
                         <h3 className="text-xl font-black text-emerald-400">Thanh toán thành công! 🎉</h3>
-                        <p className="text-xs text-muted-foreground mt-1">Giao dịch đã xác nhận on-chain</p>
+                        <p className="text-xs text-muted-foreground mt-1">Giao dịch đã xác nhận — tiền đang chuyển cho người bán</p>
+                        {redirectIn !== null && (
+                          <p className="text-xs text-[#f0b90b] mt-2 font-semibold">
+                            Chuyển về đơn hàng sau {redirectIn}s...
+                          </p>
+                        )}
                       </div>
                       <div className="p-3 bg-background border border-border rounded-xl text-left">
                         <p className="text-[10px] text-muted-foreground mb-1 font-semibold">TX HASH</p>
                         <div className="flex items-center gap-2">
                           <p className="font-mono text-xs flex-1 break-all">{txHash}</p>
-                          <button onClick={() => copyText(txHash, 'Tx Hash')} className="text-muted-foreground hover:text-foreground">
+                          <button onClick={() => copyText(txHash!, 'Tx Hash')} className="text-muted-foreground hover:text-foreground">
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -795,7 +812,7 @@ export default function CheckoutPage() {
                       >
                         {submitting
                           ? <><Loader2 className="w-5 h-5 animate-spin" />Đang xử lý...</>
-                          : <><Wallet className="w-5 h-5" />Ký & Thanh toán qua MetaMask</>}
+                          : <><Wallet className="w-5 h-5" />Ký &amp; Thanh toán qua MetaMask</>}
                       </button>
                     )
                   )}
@@ -807,6 +824,7 @@ export default function CheckoutPage() {
                       ← Đổi mạng / token, lấy báo giá mới
                     </button>
                   )}
+
                 </motion.div>
               )}
 
@@ -907,9 +925,9 @@ export default function CheckoutPage() {
 
           </div>
         </div>
-      </main>
+      </main >
 
       <Footer />
-    </div>
+    </div >
   );
 }

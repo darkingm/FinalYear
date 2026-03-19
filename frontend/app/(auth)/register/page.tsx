@@ -19,39 +19,21 @@ import {
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Header } from '@/components/layout/Header';
+import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { usePriceStore } from '@/store';
 
 /* ─── Live Price Hook ───────────────────────────────────────── */
 const COINS = [
-  { symbol: 'BTC', base: 83421.5, color: '#f7931a' },
-  { symbol: 'ETH', base: 3218.7, color: '#627eea' },
-  { symbol: 'BNB', base: 601.3, color: '#f0b90b' },
-  { symbol: 'SOL', base: 142.8, color: '#9945ff' },
-  { symbol: 'ARB', base: 0.892, color: '#12aaff' },
-  { symbol: 'MATIC', base: 0.641, color: '#8247e5' },
+  { symbol: 'BTC', name: 'Bitcoin', color: '#f7931a', base: 84000 },
+  { symbol: 'ETH', name: 'Ethereum', color: '#627eea', base: 3200 },
+  { symbol: 'BNB', name: 'BNB', color: '#f0b90b', base: 600 },
+  { symbol: 'SOL', name: 'Solana', color: '#9945ff', base: 145 },
+  { symbol: 'ARB', name: 'Arbitrum', color: '#12aaff', base: 0.90 },
+  { symbol: 'MATIC', name: 'Polygon', color: '#8247e5', base: 0.64 },
 ];
 
-function useLivePrices() {
-  const [prices, setPrices] = useState<Record<string, number>>(
-    Object.fromEntries(COINS.map(c => [c.symbol, c.base]))
-  );
-  const changes: Record<string, number> = Object.fromEntries(
-    COINS.map(c => [c.symbol, (Math.random() - 0.47) * 5])
-  );
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setPrices(prev => {
-        const next: Record<string, number> = {};
-        COINS.forEach(c => {
-          const drift = (Math.random() - 0.499) * c.base * 0.001;
-          next[c.symbol] = Math.max(0.001, prev[c.symbol] + drift);
-        });
-        return next;
-      });
-    }, 700);
-    return () => clearInterval(iv);
-  }, []);
-  return { prices, changes };
-}
+const COIN_BINANCE = COINS.map(c => c.symbol + 'USDT');
+
 
 /* ─── Password Strength ─────────────────────────────────────── */
 function PasswordStrengthBar({ password }: { password: string }) {
@@ -85,7 +67,10 @@ function PasswordStrengthBar({ password }: { password: string }) {
 
 /* ─── Left Panel ────────────────────────────────────────────── */
 function LeftPanel() {
-  const { prices, changes } = useLivePrices();
+  const { prices: storePrices, connect: priceConnect } = usePriceStore();
+  useEffect(() => { priceConnect(COIN_BINANCE); }, []);
+  const prices = Object.fromEntries(COINS.map(c => [c.symbol, storePrices[c.symbol + 'USDT']?.price ?? c.base]));
+  const changes = Object.fromEntries(COINS.map(c => [c.symbol, storePrices[c.symbol + 'USDT']?.change24h ?? 0]));
 
   const perks = [
     { icon: Shield, title: 'Escrow thông minh', desc: 'Tiền được giữ an toàn trong Smart Contract cho đến khi giao dịch hoàn tất' },
@@ -168,6 +153,7 @@ function LeftPanel() {
               const chg = changes[coin.symbol] ?? 0;
               return (
                 <span key={i} className="flex items-center gap-1.5 text-[11px] font-mono flex-shrink-0">
+                  <img src={getCoinLogo(coin.symbol)} alt={coin.symbol} className="w-3.5 h-3.5 object-contain rounded-full" />
                   <span className="font-bold" style={{ color: coin.color }}>{coin.symbol}</span>
                   <span className="text-white/80">${price < 10 ? price.toFixed(3) : price.toFixed(2)}</span>
                   <span className={chg >= 0 ? 'text-emerald-400' : 'text-red-400'}>

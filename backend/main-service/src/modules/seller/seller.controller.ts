@@ -8,7 +8,7 @@ import { logger } from '../../utils/logger';
 export async function getSellerOverview(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;
-    const days   = parseInt(req.query.days as string) || 30;
+    const days = parseInt(req.query.days as string) || 30;
 
     // Get seller_id from user
     const spResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
@@ -108,12 +108,12 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
     res.json({
       success: true,
       data: {
-        revenue:      revenueResult.rows[0],
-        orders:       ordersResult.rows[0],
-        topProducts:  topProductsResult.rows,
+        revenue: revenueResult.rows[0],
+        orders: ordersResult.rows[0],
+        topProducts: topProductsResult.rows,
         dailyRevenue: dailyRevenueResult.rows,
-        reviews:      reviewStatsResult.rows[0],
-        conversion:   conversionResult.rows[0],
+        reviews: reviewStatsResult.rows[0],
+        conversion: conversionResult.rows[0],
         sellerId,
         period: days,
       },
@@ -128,8 +128,8 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
 export async function getSellerProducts(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;
-    const page   = parseInt(req.query.page as string) || 1;
-    const limit  = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const offset = (page - 1) * limit;
 
     const spResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
@@ -173,8 +173,8 @@ export async function getSellerProducts(req: AuthRequest, res: Response, next: N
 export async function getSellerOrders(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;
-    const page   = parseInt(req.query.page as string) || 1;
-    const limit  = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
     const offset = (page - 1) * limit;
     const status = req.query.status as string | undefined;
 
@@ -221,3 +221,7 @@ export async function getSellerOrders(req: AuthRequest, res: Response, next: Nex
     next(error);
   }
 }
+
+// ─── /api/seller/stats — alias of getSellerOverview ───────────────────────────
+// Some clients (AI-chat, external tools) call /stats instead of /overview.
+export const getSellerStats = getSellerOverview;

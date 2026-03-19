@@ -19,6 +19,7 @@ import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import { useTranslation } from 'react-i18next';
 import { getCoinLogo } from '@/lib/utils/coin-logos';
 import { useCartStore } from '@/store/cart-store';
+import { usePriceStore } from '@/store';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -36,7 +37,12 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [scrolled, setScrolled] = useState(false);
-  const [tickers, setTickers] = useState<any[]>([]);
+
+  // Shared price store — same feed as homepage/CoinPriceStrip
+  const TICKER_SYMBOLS = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
+  const TICKER_BINANCE = TICKER_SYMBOLS.map(s => s + 'USDT');
+  const { prices: storePrices, connect: priceConnect } = usePriceStore();
+  useEffect(() => { priceConnect(TICKER_BINANCE); }, []);
   const [, setLang] = useState(i18n.language);
   const [addrCopied, setAddrCopied] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -59,32 +65,6 @@ export function Header() {
     return () => { i18n.off('languageChanged', handler); };
   }, [i18n]);
 
-  useEffect(() => {
-    const fetchTickers = async () => {
-      if (document.hidden) return;
-      try {
-        const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
-        if (!res.ok) return;
-        const data = await res.json();
-        const topSymbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
-        const filtered = topSymbols.map(s => {
-          const t = data.find((d: any) => d.symbol === s + 'USDT');
-          if (!t) return null;
-          return {
-            s, p: Number(t.lastPrice).toLocaleString(undefined, { maximumFractionDigits: 4 }),
-            c: (Number(t.priceChangePercent) > 0 ? '+' : '') + Number(t.priceChangePercent).toFixed(2) + '%',
-            pos: Number(t.priceChangePercent) >= 0
-          };
-        }).filter(Boolean);
-        setTickers(filtered);
-      } catch { }
-    };
-    fetchTickers();
-    const interval = setInterval(fetchTickers, 60000);
-    const onVisible = () => { if (!document.hidden) fetchTickers(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
-  }, []);
 
   const handleLogout = () => { disconnect(); signOut({ callbackUrl: '/' }); };
 
@@ -108,33 +88,45 @@ export function Header() {
   return (
     <TooltipProvider delayDuration={300}>
       <>
-        {/* Ticker bar */}
+        {/* Ticker bar — driven by shared usePriceStore */}
         <div className="bg-background border-b border-border text-muted-foreground text-xs py-1.5 overflow-hidden hidden md:block">
           <div className="flex items-center gap-8 animate-marquee whitespace-nowrap w-max pr-8 hover:[animation-play-state:paused]">
-            {tickers.length > 0 ? tickers.concat(tickers).map((coin, idx) => (
-              <Link key={`${coin.s}-${idx}`} href={`/trading/${coin.s}USDT`}
-                className="flex items-center gap-1.5 hover:text-foreground transition-colors">
-                <img src={getCoinLogo(coin.s)} alt={coin.s} className="w-4 h-4 object-contain" />
-                <span className="font-semibold text-foreground">{coin.s}/USDT</span>
-                <span>${coin.p}</span>
-                <span className={coin.pos ? 'text-emerald-500 bg-emerald-500/10 px-1 py-0.5 rounded' : 'text-red-500 bg-red-500/10 px-1 py-0.5 rounded'}>
-                  {coin.c}
-                </span>
-              </Link>
-            )) : (
-              <div className="flex items-center gap-8">
-                {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-border animate-pulse" />
-                    <div className="w-12 h-3 rounded bg-border animate-pulse" />
-                    <div className="w-16 h-3 rounded bg-border animate-pulse" />
-                  </div>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const tickers = TICKER_SYMBOLS.map(s => {
+                const d = storePrices[s + 'USDT'];
+                if (!d) return null;
+                return {
+                  s,
+                  p: d.price.toLocaleString(undefined, { maximumFractionDigits: d.price > 100 ? 2 : 4 }),
+                  c: (d.change24h > 0 ? '+' : '') + d.change24h.toFixed(2) + '%',
+                  pos: d.change24h >= 0,
+                };
+              }).filter(Boolean);
+              const items = tickers.length > 0 ? tickers.concat(tickers) : null;
+              return items ? items.map((coin: any, idx: number) => (
+                <Link key={`${coin.s}-${idx}`} href={`/trading/${coin.s}USDT`}
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                  <img src={getCoinLogo(coin.s)} alt={coin.s} className="w-4 h-4 object-contain" />
+                  <span className="font-semibold text-foreground">{coin.s}/USDT</span>
+                  <span>${coin.p}</span>
+                  <span className={coin.pos ? 'text-emerald-500 bg-emerald-500/10 px-1 py-0.5 rounded' : 'text-red-500 bg-red-500/10 px-1 py-0.5 rounded'}>
+                    {coin.c}
+                  </span>
+                </Link>
+              )) : (
+                <div className="flex items-center gap-8">
+                  {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-border animate-pulse" />
+                      <div className="w-12 h-3 rounded bg-border animate-pulse" />
+                      <div className="w-16 h-3 rounded bg-border animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
-
         <header className={`sticky top-0 z-50 w-full transition-all duration-300 ${headerBg} border-b border-border`}>
           <div className="container mx-auto px-4">
             <div className="flex h-16 items-center justify-between gap-4">

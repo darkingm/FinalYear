@@ -31,45 +31,68 @@ export class ProductService {
       params.push(`%${search}%`);
       paramIndex++;
     }
-
     if (acceptsCrypto) {
-      whereConditions.push(`p.token_id IS NOT NULL`);
+      whereConditions.push(`(p.token_id IS NOT NULL OR EXISTS (
+        SELECT 1 FROM product_accepted_tokens _pat WHERE _pat.product_id = p.product_id
+      ))`);
     }
+    // Filter by accepted token — check BOTH new product_accepted_tokens table AND legacy token_id column
     if (tokenSymbol) {
-      whereConditions.push(`tw.symbol ILIKE $${paramIndex++}`);
+      whereConditions.push(`(
+        EXISTS (
+          SELECT 1 FROM product_accepted_tokens _pat2
+          JOIN token_whitelist _tw2 ON _tw2.token_id = _pat2.token_id
+          WHERE _pat2.product_id = p.product_id AND _tw2.symbol ILIKE $${paramIndex}
+        )
+        OR (p.token_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM token_whitelist _tw3
+          WHERE _tw3.token_id = p.token_id AND _tw3.symbol ILIKE $${paramIndex}
+        ))
+      )`);
       params.push(tokenSymbol);
+      paramIndex++;
     }
 
     const whereClause = whereConditions.join(' AND ');
 
-    // Count total — use same params (no limit/offset yet)
-    // Note: Have to join token_whitelist here too if we're filtering by tokenSymbol
-    const countQueryJoin = tokenSymbol ? 'LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id' : '';
     const countResult = await query(
-      `SELECT COUNT(*) FROM products p ${countQueryJoin} WHERE ${whereClause}`,
+      `SELECT COUNT(*) FROM products p WHERE ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].count);
 
-    // ⚠️  FIX: capture index values BEFORE pushing to params array
-    const limitIdx = paramIndex++;   // e.g. $5
-    const offsetIdx = paramIndex;     // e.g. $6
+    const limitIdx = paramIndex++;
+    const offsetIdx = paramIndex;
     params.push(limitNum, offset);
 
-    const acceptedTokensSelect = `
-      CASE WHEN p.token_id IS NOT NULL THEN
-        json_build_array(
-          json_build_object(
-            'token_id', p.token_id,
-            'symbol', tw.symbol,
-            'price_in_token', p.price_in_token,
-            'is_primary', true,
-            'chain_id', tw.chain_id,
-            'decimals', tw.decimals,
-            'token_address', tw.token_address
-          )
-        )
-      ELSE NULL END
+    // accepted_tokens: aggregate from product_accepted_tokens JOIN table (primary)
+    // Also falls back to legacy p.token_id if no rows in product_accepted_tokens
+    const acceptedTokensSubquery = `
+      (SELECT CASE
+        WHEN COUNT(pat.token_id) > 0 THEN
+          json_agg(json_build_object(
+            'token_id',      tw_acc.token_id,
+            'symbol',        tw_acc.symbol,
+            'price_in_token',pat.price_in_token,
+            'is_primary',    pat.is_primary,
+            'chain_id',      tw_acc.chain_id,
+            'decimals',      tw_acc.decimals,
+            'token_address', tw_acc.token_address
+          ) ORDER BY pat.is_primary DESC)
+        WHEN p.token_id IS NOT NULL THEN
+          json_build_array(json_build_object(
+            'token_id',      tw_leg.token_id,
+            'symbol',        tw_leg.symbol,
+            'price_in_token',p.price_in_token,
+            'is_primary',    true,
+            'chain_id',      tw_leg.chain_id,
+            'decimals',      tw_leg.decimals,
+            'token_address', tw_leg.token_address
+          ))
+        ELSE NULL END
+       FROM product_accepted_tokens pat
+       JOIN token_whitelist tw_acc ON tw_acc.token_id = pat.token_id
+       WHERE pat.product_id = p.product_id)
     `;
 
     const result = await query(
@@ -87,15 +110,17 @@ export class ProductService {
           WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image,
          (SELECT json_agg(image_url ORDER BY sort_order)
           FROM product_images WHERE product_id = p.product_id)           AS images,
-         ${acceptedTokensSelect}                                         AS accepted_tokens
+         ${acceptedTokensSubquery}                                        AS accepted_tokens,
+         tw_leg.symbol                                                    AS token_symbol
        FROM products p
        LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
        LEFT JOIN users u            ON sp.user_id = u.user_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+       LEFT JOIN token_whitelist tw_leg ON p.token_id = tw_leg.token_id
        LEFT JOIN inventory i        ON p.product_id = i.product_id
        WHERE ${whereClause}
        GROUP BY p.product_id, sp.display_name, sp.logo_url, sp.slug, sp.rating_avg,
-                u.avatar_url, u.username, tw.symbol, tw.chain_id, tw.decimals, tw.token_address
+                u.avatar_url, u.username, tw_leg.symbol, tw_leg.token_id, tw_leg.chain_id,
+                tw_leg.decimals, tw_leg.token_address
        ORDER BY p.created_at DESC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
@@ -106,6 +131,83 @@ export class ProductService {
       pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
     };
   }
+
+  /**
+   * Homepage products: max 5 per coin × coins list, up to 20 total.
+   * If a coin has < 5 products, fills the gap with products from other coins.
+   */
+  async getHomepageProducts(coins: string[] = ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'MATIC', 'DOGE']) {
+    const PER_COIN = 5;
+    const MAX_TOTAL = 20;
+
+    // Fetch all products that have an accepted token, ordered newest first
+    const result = await query(
+      `SELECT
+         p.product_id, p.name, p.description, p.base_price_usd, p.category, p.status,
+         p.metadata, p.created_at,
+         COALESCE(SUM(i.available), 0) AS stock,
+         sp.display_name AS seller_name,
+         sp.slug AS seller_slug,
+         sp.rating_avg AS seller_rating,
+         (SELECT image_url FROM product_images
+          WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image,
+         json_agg(json_build_object(
+           'token_id',      tw.token_id,
+           'symbol',        tw.symbol,
+           'price_in_token',pat.price_in_token,
+           'is_primary',    pat.is_primary,
+           'chain_id',      tw.chain_id,
+           'decimals',      tw.decimals,
+           'token_address', tw.token_address
+         ) ORDER BY pat.is_primary DESC) AS accepted_tokens
+       FROM products p
+       JOIN product_accepted_tokens pat ON pat.product_id = p.product_id
+       JOIN token_whitelist tw ON tw.token_id = pat.token_id
+       LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.status = 'active'
+       GROUP BY p.product_id, sp.display_name, sp.slug, sp.rating_avg
+       ORDER BY p.created_at DESC`,
+      []
+    );
+
+    const allProducts = result.rows;
+
+    // Group by coin (each product may appear in multiple coins — take primary token)
+    const bySymbol: Record<string, any[]> = {};
+    for (const p of allProducts) {
+      const primaryToken = p.accepted_tokens?.find((t: any) => t.is_primary) || p.accepted_tokens?.[0];
+      if (!primaryToken) continue;
+      const sym = primaryToken.symbol;
+      if (!bySymbol[sym]) bySymbol[sym] = [];
+      bySymbol[sym].push(p);
+    }
+
+    // Build result: max PER_COIN per requested coin, then fill remaining slots
+    const selected: any[] = [];
+    const usedIds = new Set<number>();
+
+    // First pass — take up to PER_COIN per coin in requested order
+    for (const coin of coins) {
+      const coinProds = (bySymbol[coin] || []).filter(p => !usedIds.has(p.product_id)).slice(0, PER_COIN);
+      for (const p of coinProds) { selected.push(p); usedIds.add(p.product_id); }
+      if (selected.length >= MAX_TOTAL) break;
+    }
+
+    // Second pass — fill remaining slots from any coin (if total < MAX_TOTAL)
+    if (selected.length < MAX_TOTAL) {
+      for (const p of allProducts) {
+        if (!usedIds.has(p.product_id)) {
+          selected.push(p);
+          usedIds.add(p.product_id);
+          if (selected.length >= MAX_TOTAL) break;
+        }
+      }
+    }
+
+    return selected.slice(0, MAX_TOTAL);
+  }
+
 
   async getProductById(productId: number) {
     const cacheKey = `product:${productId}`;
@@ -184,19 +286,19 @@ export class ProductService {
       // If no pricing is provided by seller but they accept crypto, auto-generate it (best effort for backward compat)
       if (Object.keys(pricing).length === 0 && acceptedCrypto.length > 0) {
         for (const token of acceptedCrypto) {
-           if (['USDT', 'USDC', 'DAI', 'BUSD'].includes(token)) {
-              pricing[token] = baseUsd;
-           } else {
-             try {
-               const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${token}USDT`);
-               if (res.ok) {
-                 const data: any = await res.json();
-                 pricing[token] = baseUsd / parseFloat(data.price);
-               }
-             } catch (e) {
-               console.warn(`Could not fetch price for ${token}`);
-             }
-           }
+          if (['USDT', 'USDC', 'DAI', 'BUSD'].includes(token)) {
+            pricing[token] = baseUsd;
+          } else {
+            try {
+              const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${token}USDT`);
+              if (res.ok) {
+                const data: any = await res.json();
+                pricing[token] = baseUsd / parseFloat(data.price);
+              }
+            } catch (e) {
+              console.warn(`Could not fetch price for ${token}`);
+            }
+          }
         }
       }
 

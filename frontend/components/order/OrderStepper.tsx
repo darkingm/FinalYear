@@ -6,6 +6,7 @@ import { Check, Circle, Loader2 } from 'lucide-react';
 export type OrderStatus =
     | 'UNPAID'
     | 'TX_SUBMITTED'
+    | 'TX_FAILED'
     | 'ONCHAIN_PENDING'
     | 'ONCHAIN_CONFIRMED'
     | 'PAYMENT_VALIDATED'
@@ -32,7 +33,7 @@ const orderSteps = [
     { status: ['DELIVERED', 'COMPLETED'], label: 'Completed', description: 'Order delivered' },
 ];
 
-const cancelledStatuses = ['CANCELLED', 'REFUNDED', 'DISPUTED'];
+const cancelledStatuses = ['CANCELLED', 'REFUNDED', 'DISPUTED', 'TX_FAILED'];
 
 export function OrderStepper({ currentStatus, className }: OrderStepperProps) {
     const isCancelled = cancelledStatuses.includes(currentStatus);
@@ -98,10 +99,10 @@ export function OrderStepper({ currentStatus, className }: OrderStepperProps) {
                                     animate={{ scale: 1 }}
                                     transition={{ delay: index * 0.1 }}
                                     className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-colors ${isCompleted
-                                            ? 'bg-green-500 text-white'
-                                            : isCurrent
-                                                ? 'bg-blue-500 text-white'
-                                                : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+                                        ? 'bg-green-500 text-white'
+                                        : isCurrent
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
                                         }`}
                                 >
                                     {isCompleted ? (
@@ -148,10 +149,10 @@ export function OrderStepper({ currentStatus, className }: OrderStepperProps) {
                                 }`}
                         >
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isCompleted
-                                    ? 'bg-green-500 text-white'
-                                    : isCurrent
-                                        ? 'bg-blue-500 text-white'
-                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+                                ? 'bg-green-500 text-white'
+                                : isCurrent
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
                                 }`}>
                                 {isCompleted ? (
                                     <Check className="w-4 h-4" />
@@ -190,6 +191,7 @@ export function OrderStatusIndicator({ status, showLabel = true }: OrderStatusIn
     const statusConfig: Record<OrderStatus, { color: string; bgColor: string; label: string }> = {
         UNPAID: { color: 'text-yellow-600', bgColor: 'bg-yellow-100 dark:bg-yellow-900/20', label: 'Unpaid' },
         TX_SUBMITTED: { color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/20', label: 'Tx Submitted' },
+        TX_FAILED: { color: 'text-red-600', bgColor: 'bg-red-100 dark:bg-red-900/20', label: 'Tx Failed' },
         ONCHAIN_PENDING: { color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/20', label: 'Pending' },
         ONCHAIN_CONFIRMED: { color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/20', label: 'Confirmed' },
         PAYMENT_VALIDATED: { color: 'text-green-600', bgColor: 'bg-green-100 dark:bg-green-900/20', label: 'Validated' },

@@ -86,6 +86,7 @@ export const authOptions: NextAuthOptions = {
               image: data.user.avatar_url,
               role: data.user.role,
               accessToken: data.accessToken,
+              refreshToken: data.refreshToken, // backend now returns this in body
             };
           }
           return null;
@@ -126,6 +127,7 @@ export const authOptions: NextAuthOptions = {
               role: data.user.role,
               walletAddress: credentials.address,
               accessToken: data.accessToken,
+              refreshToken: data.refreshToken, // backend now returns this in body
             };
           }
           return null;
@@ -152,6 +154,7 @@ export const authOptions: NextAuthOptions = {
 
           if (response.data?.accessToken) {
             user.accessToken = response.data.accessToken;
+            user.refreshToken = response.data.refreshToken; // from body
             user.id = String(response.data.user.user_id);
             user.role = response.data.user.role;
           }
@@ -185,10 +188,11 @@ export const authOptions: NextAuthOptions = {
       if (shouldRefresh && token.refreshToken) {
         try {
           const res = await serverApi.post('/api/auth/refresh', {
-            refreshToken: token.refreshToken,
+            refreshToken: token.refreshToken, // send in body (server-to-server, no cookies)
           });
           if (res.data?.accessToken) {
             token.accessToken = res.data.accessToken;
+            // update refreshToken if server rotated it
             token.refreshToken = res.data.refreshToken ?? token.refreshToken;
             try {
               const decoded: any = JSON.parse(
