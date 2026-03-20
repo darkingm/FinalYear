@@ -4,8 +4,8 @@ import './globals.css';
 import { Providers } from '@/components/providers';
 import dynamic from 'next/dynamic';
 
-const ParticleBackground = dynamic(
-  () => import('@/components/ui/ParticleBackground').then(m => ({ default: m.ParticleBackground })),
+const GlobeBackground = dynamic(
+  () => import('@/components/ui/GlobeBackground').then(m => ({ default: m.GlobeBackground })),
   { ssr: false }
 );
 
@@ -25,7 +25,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          <ParticleBackground />
+          <GlobeBackground />
           {children}
         </Providers>
       </body>

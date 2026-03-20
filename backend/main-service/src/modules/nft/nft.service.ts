@@ -5,8 +5,8 @@ import { AppError } from '../../middleware/error-handler';
 
 // ─── IPFS via Pinata (free tier) ───────────────────────────────────────────
 // Fallback to IPFS public gateway if Pinata not configured
-const PINATA_JWT  = process.env.PINATA_JWT ?? '';
-const PINATA_URL  = 'https://api.pinata.cloud';
+const PINATA_JWT = process.env.PINATA_JWT ?? '';
+const PINATA_URL = 'https://api.pinata.cloud';
 
 async function pinataUpload(data: object, name: string): Promise<string> {
   if (!PINATA_JWT) {
@@ -119,13 +119,13 @@ export class NFTService {
       image: product.primary_image || 'ipfs://QmPlaceholderImage',
       external_url: `${process.env.FRONTEND_URL}/products/${productId}`,
       attributes: [
-        { trait_type: 'Category',       value: product.category },
-        { trait_type: 'Seller',         value: product.seller_name || 'Unknown' },
+        { trait_type: 'Category', value: product.category },
+        { trait_type: 'Seller', value: product.seller_name || 'Unknown' },
         { trait_type: 'Base Price USD', value: Number(product.base_price_usd) },
-        { trait_type: 'Stock',          value: product.stock },
-        { trait_type: 'NFC Verified',   value: hasNFC ? 'Yes' : 'No' },
-        { trait_type: 'Listing Date',   value: new Date(product.created_at).toISOString().split('T')[0] },
-        { trait_type: 'Physical Hash',  value: physicalHash }, // Proof of physical authenticity
+        { trait_type: 'Stock', value: product.stock },
+        { trait_type: 'NFC Verified', value: hasNFC ? 'Yes' : 'No' },
+        { trait_type: 'Listing Date', value: new Date(product.created_at).toISOString().split('T')[0] },
+        { trait_type: 'Physical Hash', value: physicalHash }, // Proof of physical authenticity
       ],
       // Custom fields for Physical-Digital Link
       physical_hash: physicalHash,
@@ -200,15 +200,15 @@ export class NFTService {
       if (process.env.PRODUCT_NFT_ADDRESS) {
         const contract = getProductNFTContract(false);
         const tokenId = await contract.getTokenByProduct(productId);
-        const meta    = await contract.productMeta(tokenId);
+        const meta = await contract.productMeta(tokenId);
         return {
           ...nft,
-          tokenId:    tokenId.toString(),
+          tokenId: tokenId.toString(),
           nfcVerified: meta[4],
           openSeaUrl: `https://opensea.io/assets/matic/${process.env.PRODUCT_NFT_ADDRESS}/${tokenId}`,
         };
       }
-    } catch {}
+    } catch { }
     return nft;
   }
 
@@ -240,25 +240,27 @@ export class NFTService {
       return { score: 0, tier: 'BRONZE', hasSBT: false, tierFee: 2.5, canInstallment: false };
     }
     const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'DIAMOND'];
-    const FEES  = [2.5, 2.0, 1.5, 1.0];
+    const FEES = [2.5, 2.0, 1.5, 1.0];
     try {
-      const contract  = getCreditSBTContract(false);
-      const score     = await contract.getScore(wallet);
+      const contract = getCreditSBTContract(false);
+      const score = await contract.getScore(wallet);
       const tierIndex = Number(await contract.getTier(wallet));
-      const tokenId   = await contract.walletToToken(wallet);
+      const tokenId = await contract.walletToToken(wallet);
       return {
-        score:        Number(score),
-        tier:         TIERS[tierIndex] ?? 'BRONZE',
+        score: Number(score),
+        tier: TIERS[tierIndex] ?? 'BRONZE',
         tierIndex,
-        hasSBT:       tokenId > 0,
-        tierFee:      FEES[tierIndex],
+        hasSBT: tokenId > 0,
+        tierFee: FEES[tierIndex],
         canInstallment: tierIndex >= 2, // GOLD+
         openSeaUrl: tokenId > 0
           ? `https://opensea.io/assets/matic/${process.env.CREDIT_SBT_ADDRESS}/${tokenId}`
           : null,
       };
     } catch (e: any) {
-      logger.error(`SBT: getCreditInfo error: ${e.message}`);
+      // Expected on dev/VPS: SBT contract not deployed on mainnet Polygon yet
+      // Graceful fallback is returned — no action needed
+      logger.warn(`SBT: getCreditInfo unavailable for ${wallet} (contract may not be deployed): ${e.code ?? e.message}`);
       return { score: 0, tier: 'BRONZE', hasSBT: false, tierFee: 2.5, canInstallment: false };
     }
   }
