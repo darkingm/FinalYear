@@ -243,12 +243,11 @@ jobs:
             wait
             echo "✓ All images pulled"
 
-            # ── Step 2: Remove old migrator (restart: no containers don't auto-remove)
+            # ── Step 2: Run DB migrations ────────────────────────────────
             echo ""
             echo "[2/3] Running DB migrations..."
             docker rm -f marketplace-db-migrator 2>/dev/null || true
 
-            # Up migrator only first, wait for it
             docker compose -f docker-compose.prod.yml --env-file .env \
               up -d --no-deps db-migrator
 
@@ -269,10 +268,21 @@ jobs:
             # ── Step 3: Restart all services ────────────────────────────
             echo ""
             echo "[3/3] Restarting all services..."
+
+            # CRITICAL: Stop+remove orphaned containers before compose up.
+            # Prevents "container name already in use" conflict when containers
+            # were started manually (outside docker compose) on the VPS.
+            for svc in marketplace-main-api marketplace-payment-api marketplace-frontend marketplace-ai; do
+              docker stop "$svc" 2>/dev/null || true
+              docker rm   "$svc" 2>/dev/null || true
+            done
+
+            # Remove manual override file — CI always uses proper db-migrator image
+            rm -f /root/services/FinalYear/docker/docker-compose.override.yml
+
             docker compose -f docker-compose.prod.yml --env-file .env \
               up -d --remove-orphans
 
-            # Wait for services to be healthy
             sleep 20
 
             # ── Health checks ─────────────────────────────────────────────
