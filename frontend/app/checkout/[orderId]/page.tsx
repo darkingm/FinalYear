@@ -25,6 +25,28 @@ import { parseUnits, formatUnits, erc20Abi, type Address } from 'viem';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
 
+/* ─── Block Explorers per chain ─────────────────────────────────────────── */
+export const CHAIN_EXPLORERS: Record<number, { name: string; tx: string; address: string }> = {
+  31337: { name: 'Hardhat — No Explorer', tx: '', address: '' },
+  80002: { name: 'Polygon Amoy Scan', tx: 'https://amoy.polygonscan.com/tx/', address: 'https://amoy.polygonscan.com/address/' },
+  97: { name: 'BscScan Testnet', tx: 'https://testnet.bscscan.com/tx/', address: 'https://testnet.bscscan.com/address/' },
+  421614: { name: 'Arbiscan Sepolia', tx: 'https://sepolia.arbiscan.io/tx/', address: 'https://sepolia.arbiscan.io/address/' },
+  84532: { name: 'BaseScan Sepolia', tx: 'https://sepolia.basescan.org/tx/', address: 'https://sepolia.basescan.org/address/' },
+  137: { name: 'PolygonScan', tx: 'https://polygonscan.com/tx/', address: 'https://polygonscan.com/address/' },
+  42161: { name: 'Arbiscan', tx: 'https://arbiscan.io/tx/', address: 'https://arbiscan.io/address/' },
+  1: { name: 'Etherscan', tx: 'https://etherscan.io/tx/', address: 'https://etherscan.io/address/' },
+  56: { name: 'BscScan', tx: 'https://bscscan.com/tx/', address: 'https://bscscan.com/address/' },
+};
+
+function explorerTxUrl(chainId: number, hash: string): string {
+  const base = CHAIN_EXPLORERS[chainId]?.tx;
+  return base ? `${base}${hash}` : '';
+}
+function explorerAddrUrl(chainId: number, addr: string): string {
+  const base = CHAIN_EXPLORERS[chainId]?.address;
+  return base ? `${base}${addr}` : '';
+}
+
 /* ─── Types ────────────────────────────────────────────────────────────── */
 interface Order {
   order_id: number; internal_order_id: string; product_id: number;
@@ -172,6 +194,8 @@ export default function CheckoutPage() {
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [productImage, setProductImage] = useState<string | null>(null);
+  const [resumeBanner, setResumeBanner] = useState(false); // order was TX_SUBMITTED
 
   // Payment mode: 'crypto' | 'paypal'
   const [payMode, setPayMode] = useState<'crypto' | 'paypal'>('crypto');
@@ -254,12 +278,30 @@ export default function CheckoutPage() {
       apiClient.get(`/api/orders/${orderId}`)
         .then(res => {
           const o = res.data.order;
-          if (o.status !== 'UNPAID') {
+          // Allow re-entry for UNPAID, TX_SUBMITTED, TX_FAILED
+          const resumable = ['UNPAID', 'TX_SUBMITTED', 'TX_FAILED'].includes(o.status);
+          if (!resumable) {
             toast.info('Đơn hàng đã xử lý'); router.push(`/orders/${o.order_id}`); return;
           }
           setOrder(o);
+          // Show resume banner if payment already submitted on-chain
+          if (o.status === 'TX_SUBMITTED') {
+            setResumeBanner(true);
+            setStep(3);
+          }
           const tokens = o.product_metadata?.accepted_tokens?.crypto;
           if (tokens?.length) setSelectedToken(tokens[0]);
+
+          // Fetch product image if metadata has none
+          const hasImg = o.product_metadata?.images?.length > 0;
+          if (!hasImg && o.product_id) {
+            apiClient.get(`/api/products/${o.product_id}`)
+              .then(pr => {
+                const imgs = pr.data?.product?.images || pr.data?.product?.product_metadata?.images;
+                if (imgs?.length) setProductImage(imgs[0]);
+              })
+              .catch(() => { });
+          }
         })
         .catch(() => toast.error('Không tìm thấy đơn hàng'))
         .finally(() => setLoading(false));
@@ -473,6 +515,25 @@ export default function CheckoutPage() {
             {/* ─── LEFT ──────────────────────────────────────────────── */}
             <div className="space-y-5">
 
+              {/* Resume banner — payment already submitted */}
+              {resumeBanner && (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+                  <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                    <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-amber-300">Giao dịch đang chờ xác nhận</p>
+                    <p className="text-xs text-amber-400/70 mt-0.5">Thanh toán đã được gửi lên blockchain. Bạn có thể theo dõi hoặc tiếp tục chờ.</p>
+                  </div>
+                  <Link href={`/orders/${orderId}`}>
+                    <button className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400 flex-shrink-0">
+                      Xem đơn
+                    </button>
+                  </Link>
+                </motion.div>
+              )}
+
               {/* Steps */}
               <Steps current={step} />
 
@@ -482,8 +543,8 @@ export default function CheckoutPage() {
                 onClick={() => step > 1 && setStep(1)}
               >
                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
-                  {order.product_metadata?.images?.[0]
-                    ? <Image src={order.product_metadata.images[0]} alt={order.product_name} width={64} height={64} className="w-full h-full object-cover" unoptimized />
+                  {(order.product_metadata?.images?.[0] || productImage)
+                    ? <img src={order.product_metadata?.images?.[0] || productImage!} alt={order.product_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
                     : <div className="w-full h-full flex items-center justify-center"><Package className="w-6 h-6 text-muted-foreground" /></div>}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -723,30 +784,48 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
-                  {/* Escrow info (collapsible) */}
-                  <details className="group">
-                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1 select-none">
-                      <ChevronDown className="w-3.5 h-3.5 group-open:rotate-180 transition-transform" />
-                      Chi tiết địa chỉ & hợp đồng
-                    </summary>
-                    <div className="mt-2 space-y-2">
-                      {[
-                        { label: 'Escrow Contract', val: quote.escrow_contract },
-                        !isNative ? { label: `Token ${selectedToken}`, val: quote.token_address } : null,
-                        { label: 'Ví của bạn', val: address || '' },
-                      ].filter(Boolean).map(item => (
-                        <div key={item!.label} className="p-2.5 bg-background/50 border border-border rounded-lg">
-                          <p className="text-[10px] text-muted-foreground mb-1">{item!.label}</p>
-                          <div className="flex items-center gap-2">
-                            <p className="font-mono text-xs flex-1 break-all text-foreground">{item!.val}</p>
-                            <button onClick={() => copyText(item!.val, item!.label)} className="flex-shrink-0 text-muted-foreground hover:text-foreground">
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                  {/* Smart Contract Info — always visible */}
+                  <div className="p-3 bg-background border border-border rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Smart Contract Escrow</p>
+                      {explorerAddrUrl(quote.chain_id, quote.escrow_contract) && (
+                        <a
+                          href={explorerAddrUrl(quote.chain_id, quote.escrow_contract)}
+                          target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Xem trên {CHAIN_EXPLORERS[quote.chain_id]?.name}
+                        </a>
+                      )}
                     </div>
-                  </details>
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-[11px] flex-1 break-all text-emerald-300">{quote.escrow_contract}</p>
+                      <button onClick={() => copyText(quote.escrow_contract, 'Escrow Contract')} className="flex-shrink-0 text-muted-foreground hover:text-emerald-400">
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {!isNative && (
+                      <div className="border-t border-border pt-2">
+                        <p className="text-[10px] text-muted-foreground mb-1">Token {selectedToken}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono text-[11px] flex-1 break-all text-foreground">{quote.token_address}</p>
+                          <button onClick={() => copyText(quote.token_address, `Token ${selectedToken}`)} className="flex-shrink-0 text-muted-foreground hover:text-foreground">
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="border-t border-border pt-2">
+                      <p className="text-[10px] text-muted-foreground mb-1">Ví của bạn</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono text-[11px] flex-1 break-all text-foreground">{address}</p>
+                        <button onClick={() => copyText(address || '', 'Wallet address')} className="flex-shrink-0 text-muted-foreground hover:text-foreground">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Wrong chain warning */}
                   {isWrongChain && (
@@ -892,9 +971,11 @@ export default function CheckoutPage() {
                           <button onClick={() => copyText(txHash, 'TX Hash')} className="flex-shrink-0">
                             <Copy className="w-3 h-3 text-muted-foreground hover:text-foreground" />
                           </button>
-                          <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                            <ExternalLink className="w-3 h-3 text-muted-foreground hover:text-blue-400" />
-                          </a>
+                          {explorerTxUrl(quote.chain_id, txHash) && (
+                            <a href={explorerTxUrl(quote.chain_id, txHash)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                              <ExternalLink className="w-3 h-3 text-muted-foreground hover:text-emerald-400" />
+                            </a>
+                          )}
                         </div>
                       )}
                     </motion.div>
@@ -988,14 +1069,26 @@ export default function CheckoutPage() {
 
                 {/* Product image */}
                 <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-muted">
-                  {order.product_metadata?.images?.[0]
-                    ? <Image src={order.product_metadata.images[0]} alt={order.product_name} fill className="object-cover" unoptimized />
-                    : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted-foreground" /></div>}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <p className="font-bold text-white text-xs leading-tight line-clamp-2">{order.product_name}</p>
-                    <p className="text-[10px] text-white/70 mt-0.5">{order.seller_name}</p>
-                  </div>
+                  {(order.product_metadata?.images?.[0] || productImage) ? (
+                    <>
+                      <img
+                        src={order.product_metadata?.images?.[0] || productImage!}
+                        alt={order.product_name}
+                        className="w-full h-full object-cover"
+                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      <div className="absolute bottom-3 left-3 right-3">
+                        <p className="font-bold text-white text-xs leading-tight line-clamp-2">{order.product_name}</p>
+                        <p className="text-[10px] text-white/70 mt-0.5">{order.seller_name}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                      <Package className="w-10 h-10 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground truncate px-2 text-center">{order.product_name}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Invoice */}
@@ -1016,13 +1109,31 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Escrow info */}
-                <div className="p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl">
-                  <div className="flex items-center gap-2 mb-1">
+                {/* Escrow info + contract explorer */}
+                <div className="p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-emerald-400" />
                     <span className="text-sm font-bold text-emerald-400">Escrow bảo vệ</span>
                   </div>
                   <p className="text-xs text-emerald-400/70">Tiền giữ trong Smart Contract đến khi bạn xác nhận nhận hàng.</p>
+                  {/* Contract explorer link — show when quote available */}
+                  {quote && explorerAddrUrl(quote.chain_id, quote.escrow_contract) && (
+                    <a
+                      href={explorerAddrUrl(quote.chain_id, quote.escrow_contract)}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold mt-1 w-fit"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Xem Smart Contract trên Explorer
+                    </a>
+                  )}
+                  {/* Fallback: show contract address for Hardhat (no explorer) */}
+                  {quote && !explorerAddrUrl(quote.chain_id, quote.escrow_contract) && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60 font-mono break-all mt-1">
+                      <Lock className="w-3 h-3 flex-shrink-0" />
+                      {quote.escrow_contract}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}
