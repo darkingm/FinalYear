@@ -11,7 +11,7 @@ coverage
 vps*.env
 vps*.txt
 !*.env.example
-!*.env.local.example
+!*.env.example.*
 
 # ── Private keys & certificates ──────────────────────────────
 *.pem
@@ -28,6 +28,7 @@ vps*.txt
 result.txt
 query.sql
 *.sql.tmp
+scripts/insert_migrations.sql
 
 # ── Debug / diagnostic output files in scripts/ ───────────────
 scripts/*-out.txt
@@ -46,3 +47,4 @@ scripts/vps-restart*.txt
 *.swp
 *.swo
 *.log
+
