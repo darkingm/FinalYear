@@ -25,13 +25,13 @@ add_if_missing() {
 }
 
 add_if_missing "DOCKERHUB_USERNAME"       "kiendzpro"
-add_if_missing "INTERNAL_SERVICE_KEY"     "internal-service-key-w3market-2026"
+add_if_missing "INTERNAL_SERVICE_KEY"     "FILL_IN_YOUR_SECRET_HERE"
 add_if_missing "PAYMENT_SERVICE_URL"      "http://payment-api:3002"
-add_if_missing "REDIS_PASSWORD"           "Kien29092004"
+add_if_missing "REDIS_PASSWORD"           "FILL_IN_YOUR_REDIS_PASSWORD"
 add_if_missing "RABBITMQ_USER"            "kaitojpla"
-add_if_missing "RABBITMQ_PASSWORD"        "Kien29092004"
+add_if_missing "RABBITMQ_PASSWORD"        "FILL_IN_YOUR_RABBITMQ_PASSWORD"
 add_if_missing "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME" "deyjlti3v"
-add_if_missing "PAYPAL_CLIENT_ID"         "AYxcD1jBUgx2LMY2eoXyM7lhcTpzrR3X"
+add_if_missing "PAYPAL_CLIENT_ID"         "FILL_IN_PAYPAL_CLIENT_ID"
 add_if_missing "PAYPAL_MODE"              "sandbox"
 
 echo "  .env patched OK"

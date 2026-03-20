@@ -216,13 +216,23 @@ docker compose ... up -d --no-deps main-api payment-api frontend
 ### 5. VPS .env minimum required keys
 ```env
 DOCKERHUB_USERNAME=kiendzpro
-INTERNAL_SERVICE_KEY=internal-service-key-w3market-2026  # CRITICAL
-PAYMENT_SERVICE_URL=http://payment-api:3002              # CRITICAL
-POSTGRES_PASSWORD=Kien29092004
-REDIS_PASSWORD=Kien29092004
-RABBITMQ_PASSWORD=Kien29092004
-JWT_SECRET=fyp_jwt_Kien29092004_marketplace_2024_prod
-JWT_REFRESH_SECRET=fyp_refresh_Kien29092004_marketplace_2024_prod
-NEXTAUTH_SECRET=qo/QS42PzUNj0lFF9JbxXhD2S247Yf5ZMCoar3leqaw=
+INTERNAL_SERVICE_KEY=<your-secret>   # CRITICAL — must match in both services
+PAYMENT_SERVICE_URL=http://payment-api:3002
+POSTGRES_PASSWORD=<your-db-password>
+REDIS_PASSWORD=<your-redis-password>
+RABBITMQ_PASSWORD=<your-rabbitmq-password>
+JWT_SECRET=<min-32-chars>
+JWT_REFRESH_SECRET=<min-32-chars>
+NEXTAUTH_SECRET=<nextauth-secret>
+CLOUDINARY_CLOUD_NAME=deyjlti3v
+CLOUDINARY_API_KEY=<cloudinary-api-key>
+CLOUDINARY_API_SECRET=<cloudinary-api-secret>
 NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=deyjlti3v
+CLOUDINARY_EVIDENCE_PRESET=marketplace_evidence
+GOOGLE_CLIENT_SECRET=<google-oauth-secret>
+FACEBOOK_CLIENT_SECRET=<facebook-secret>
+PAYPAL_SECRET=<paypal-secret>
+SMTP_PASSWORD=<gmail-app-password>
+HCAPTCHA_SECRET=<hcaptcha-secret>
+BLOCKCHAIN_PRIVATE_KEY=<wallet-private-key>
 ```
