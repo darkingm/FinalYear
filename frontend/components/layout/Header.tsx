@@ -11,7 +11,7 @@ import {
   Menu, X, ShoppingBag, Wallet, Package,
   LogOut, User, Shield, Bell,
   TrendingUp, Zap, BarChart3, ChevronDown, Copy, Check,
-  Gem, Brain,
+  Building, Brain,
 } from 'lucide-react';
 import { useState, useEffect, memo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -152,9 +152,8 @@ export function Header() {
     { href: '/wallet', label: 'Ví', authRequired: true },
   ];
 
-  // These always show in nav — redirect to login if not authenticated
   const specialNavLinks = [
-    { href: '/nfts', label: 'NFT', icon: Gem, authRequired: true },
+    { href: '/assets', label: 'RWA', icon: Building, authRequired: false },
     { href: '/profile/credit', label: 'AI Credit', icon: Brain, authRequired: true },
   ];
 
