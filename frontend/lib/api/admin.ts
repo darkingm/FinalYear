@@ -11,6 +11,9 @@ export const adminApi = {
         getById: (id: number) => apiClient.get(`/api/admin/orders/${id}`),
         updateStatus: (id: number, status: string, notes?: string) =>
             apiClient.patch(`/api/admin/orders/${id}/status`, { status, notes }),
+        // On-chain dispute resolution — uses ADMIN_PRIVATE_KEY on server (no MetaMask needed)
+        resolveDispute: (id: number, winner: 'BUYER' | 'SELLER', notes?: string) =>
+            apiClient.post(`/api/admin/orders/${id}/resolve-dispute`, { winner, notes }),
     },
 
     // Users
