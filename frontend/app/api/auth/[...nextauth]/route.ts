@@ -201,15 +201,24 @@ export const authOptions: NextAuthOptions = {
               token.accessTokenExpiry = (decoded.exp ?? 0) * 1000;
             } catch { token.accessTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; }
           }
-        } catch (err) {
-          // Refresh failed — let the token expire naturally; client will see 401
-          console.error('[NextAuth] Failed to refresh backend token:', err);
+        } catch (err: any) {
+          // Refresh failed (expired / rotated / server restarted with different JWT secret).
+          // Mark token as expired so the client gets a proper "sign in again" instead of
+          // an infinite 401 loop. The session callback will see refreshError and return null.
+          console.error('[NextAuth] Refresh token rejected by backend:', err?.response?.data?.message || err.message);
+          token.refreshError = true;
+          token.accessToken = undefined;
+          token.refreshToken = undefined;
         }
       }
 
       return token;
     },
     async session({ session, token }) {
+      // If refresh failed, return an empty session so client shows login page
+      if ((token as any).refreshError) {
+        return { ...session, user: undefined as any, accessToken: undefined, error: 'RefreshTokenExpired' };
+      }
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;

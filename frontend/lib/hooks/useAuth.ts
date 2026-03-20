@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useEffect } from 'react';
 
 export function useAuth() {
@@ -16,12 +16,21 @@ export function useAuth() {
     }
   }, [session, status]);
 
+  // Auto sign-out when refresh token expires / is rejected by backend
+  // This happens when JWT_REFRESH_SECRET changes or session is too old
+  useEffect(() => {
+    if ((session as any)?.error === 'RefreshTokenExpired') {
+      localStorage.removeItem('auth_token');
+      signOut({ callbackUrl: '/login?reason=session_expired' });
+    }
+  }, [session]);
+
   return {
     user: session?.user,
     session,
     status,
     accessToken: session?.accessToken as string | undefined,
-    isAuthenticated: status === 'authenticated',
+    isAuthenticated: status === 'authenticated' && !(session as any)?.error,
     isLoading: status === 'loading',
   };
 }
