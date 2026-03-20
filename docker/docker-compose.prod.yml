@@ -282,7 +282,7 @@ services:
       - hardhat_node_modules:/app/node_modules
     depends_on:
       hardhat-node:
-        condition: service_healthy
+        condition: service_started # healthcheck disabled — bootstrap uses sleep 10 to wait for RPC
     networks:
       - marketplace-network
     restart: "no"
