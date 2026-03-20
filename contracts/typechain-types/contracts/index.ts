@@ -3,5 +3,9 @@
 /* eslint-disable */
 import type * as escrowCoreSol from "./EscrowCore.sol";
 export type { escrowCoreSol };
+export type { ComplianceRegistry } from "./ComplianceRegistry";
 export type { CreditScoreSBT } from "./CreditScoreSBT";
 export type { ProductNFT } from "./ProductNFT";
+export type { ProfitDistributor } from "./ProfitDistributor";
+export type { RWAFactory } from "./RWAFactory";
+export type { RWAToken } from "./RWAToken";

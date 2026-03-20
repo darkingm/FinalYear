@@ -2,5 +2,9 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as escrowCoreSol from "./EscrowCore.sol";
+export { ComplianceRegistry__factory } from "./ComplianceRegistry__factory";
 export { CreditScoreSBT__factory } from "./CreditScoreSBT__factory";
 export { ProductNFT__factory } from "./ProductNFT__factory";
+export { ProfitDistributor__factory } from "./ProfitDistributor__factory";
+export { RWAFactory__factory } from "./RWAFactory__factory";
+export { RWAToken__factory } from "./RWAToken__factory";

@@ -50,6 +50,14 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ERC2981__factory>;
     getContractFactory(
+      name: "ERC20",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ERC20__factory>;
+    getContractFactory(
+      name: "IERC20Metadata",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IERC20Metadata__factory>;
+    getContractFactory(
       name: "IERC20",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IERC20__factory>;
@@ -102,6 +110,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Strings__factory>;
     getContractFactory(
+      name: "ComplianceRegistry",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ComplianceRegistry__factory>;
+    getContractFactory(
       name: "CreditScoreSBT",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.CreditScoreSBT__factory>;
@@ -121,6 +133,18 @@ declare module "hardhat/types/runtime" {
       name: "ProductNFT",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ProductNFT__factory>;
+    getContractFactory(
+      name: "ProfitDistributor",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ProfitDistributor__factory>;
+    getContractFactory(
+      name: "RWAFactory",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.RWAFactory__factory>;
+    getContractFactory(
+      name: "RWAToken",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.RWAToken__factory>;
 
     getContractAt(
       name: "AccessControl",
@@ -167,6 +191,16 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.ERC2981>;
+    getContractAt(
+      name: "ERC20",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ERC20>;
+    getContractAt(
+      name: "IERC20Metadata",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IERC20Metadata>;
     getContractAt(
       name: "IERC20",
       address: string | ethers.Addressable,
@@ -233,6 +267,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.Strings>;
     getContractAt(
+      name: "ComplianceRegistry",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ComplianceRegistry>;
+    getContractAt(
       name: "CreditScoreSBT",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -257,6 +296,21 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.ProductNFT>;
+    getContractAt(
+      name: "ProfitDistributor",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ProfitDistributor>;
+    getContractAt(
+      name: "RWAFactory",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.RWAFactory>;
+    getContractAt(
+      name: "RWAToken",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.RWAToken>;
 
     deployContract(
       name: "AccessControl",
@@ -294,6 +348,14 @@ declare module "hardhat/types/runtime" {
       name: "ERC2981",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ERC2981>;
+    deployContract(
+      name: "ERC20",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ERC20>;
+    deployContract(
+      name: "IERC20Metadata",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IERC20Metadata>;
     deployContract(
       name: "IERC20",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -347,6 +409,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Strings>;
     deployContract(
+      name: "ComplianceRegistry",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ComplianceRegistry>;
+    deployContract(
       name: "CreditScoreSBT",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.CreditScoreSBT>;
@@ -366,6 +432,18 @@ declare module "hardhat/types/runtime" {
       name: "ProductNFT",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ProductNFT>;
+    deployContract(
+      name: "ProfitDistributor",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ProfitDistributor>;
+    deployContract(
+      name: "RWAFactory",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.RWAFactory>;
+    deployContract(
+      name: "RWAToken",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.RWAToken>;
 
     deployContract(
       name: "AccessControl",
@@ -412,6 +490,16 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ERC2981>;
+    deployContract(
+      name: "ERC20",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ERC20>;
+    deployContract(
+      name: "IERC20Metadata",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IERC20Metadata>;
     deployContract(
       name: "IERC20",
       args: any[],
@@ -478,6 +566,11 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Strings>;
     deployContract(
+      name: "ComplianceRegistry",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ComplianceRegistry>;
+    deployContract(
       name: "CreditScoreSBT",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -502,6 +595,21 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ProductNFT>;
+    deployContract(
+      name: "ProfitDistributor",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ProfitDistributor>;
+    deployContract(
+      name: "RWAFactory",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.RWAFactory>;
+    deployContract(
+      name: "RWAToken",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.RWAToken>;
 
     // default types
     getContractFactory(
