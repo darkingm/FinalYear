@@ -75,6 +75,33 @@
   }
 }
 
+/* ── Globe background: make homepage sections reveal the globe canvas ─────────── */
+/* Canvas is at z-index:0 with alpha:true — transparent areas show page, */
+/* Earth/stars show ON TOP of page bg. Sections with bg-background cover globe. */
+/* Fix: make the page wrapper + hero section transparent so globe shows through. */
+
+/* Page-level full-height wrappers: transparent in dark mode */
+.dark .min-h-screen.bg-background,
+.dark .min-h-screen.flex.flex-col.bg-background {
+  background-color: transparent !important;
+}
+
+/* Hero and top-level page sections: transparent + subtle hover glow */
+.dark main>section {
+  background-color: transparent !important;
+  transition: background-color 0.4s ease;
+}
+
+.dark main>section:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Ensure foreground text stays bright (white) when bg is transparent */
+/* Dark mode foreground is already near-white (210 20% 90%) — high contrast against space */
+
+/* Sections that stay opaque for readability: bg-card keeps its dark panel bg */
+/* bg-card = 225 12% 12% ~ #1a1d26, stays solid ✅ */
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
   width: 6px;

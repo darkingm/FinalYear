@@ -57,9 +57,14 @@ export function GlobeBackground() {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        /* Only run in dark mode — check DOM class directly (no next-themes) */
+        /* Only show in dark mode — check DOM class directly (avoids next-themes undefined) */
         const isDark = document.documentElement.classList.contains('dark');
-        if (!isDark) return;
+        if (!isDark) {
+            /* Light mode: clear canvas transparent so it's invisible */
+            const ctx = canvas.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            return;
+        }
 
         let dead = false;
 
@@ -243,8 +248,13 @@ export function GlobeBackground() {
     return (
         <canvas
             ref={canvasRef}
-            className="fixed inset-0 pointer-events-none"
-            style={{ zIndex: 0 }}  /* ← z-index:0 is what made it work in first version */
+            className="fixed inset-0"
+            style={{
+                zIndex: 0,
+                pointerEvents: 'none',     // CRITICAL: never block clicks
+                userSelect: 'none',
+                touchAction: 'none',
+            }}
             aria-hidden
         />
     );
