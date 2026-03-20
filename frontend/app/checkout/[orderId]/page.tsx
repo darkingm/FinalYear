@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import {
   useAccount, useWalletClient, useSwitchChain,
-  useReadContract, useWriteContract,
+  useReadContract, useWriteContract, usePublicClient,
 } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -191,6 +191,7 @@ export default function CheckoutPage() {
   const { data: walletClient } = useWalletClient();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -220,6 +221,8 @@ export default function CheckoutPage() {
   const [redirectIn, setRedirectIn] = useState<number | null>(null);
   const [confirmCount, setConfirmCount] = useState(0);    // live confirmation counter
   const [payError, setPayError] = useState<string | null>(null);
+  const [gasEstimate, setGasEstimate] = useState<{ gas: string; usd: string } | null>(null);
+  const [gasLoading, setGasLoading] = useState(false);
 
   // Quote timer
   const [timeLeft, setTimeLeft] = useState(0);
@@ -308,10 +311,10 @@ export default function CheckoutPage() {
     } else if (!authLoading) setLoading(false);
   }, [isAuthenticated, authLoading, orderId, router]);
 
-  /* ─── Get Quote ──────────────────────────────────────────────────────── */
+  /* ─── Get Quote ─────────────────────────────────────────────────────── */
   const handleGetQuote = async () => {
     if (!isConnected || !address) { toast.error('Kết nối ví MetaMask trước'); return; }
-    setQuote(null); setQuoteError(null); setQuoteLoading(true);
+    setQuote(null); setQuoteError(null); setQuoteLoading(true); setGasEstimate(null);
     try {
       const res = await paymentClient.post('/api/payments/crypto/quote', {
         order_id: orderId,
@@ -333,6 +336,54 @@ export default function CheckoutPage() {
         toast.warning(`Backend dùng chain ${q.chain_id} thay vì ${selectedNet}`, { duration: 5000 });
         setSelectedNet(q.chain_id);
       }
+
+      // ── Estimate gas in background after quote is ready ────────────────
+      const estimateGasInBackground = async () => {
+        if (!publicClient || !address) return;
+        setGasLoading(true);
+        try {
+          const isNativeToken = !q.token_address ||
+            q.token_address === '0x0000000000000000000000000000000000000000' ||
+            q.token_address === '0x0000000000000000000000000000000000001010';
+
+          const gasEst = await publicClient.estimateGas({
+            account: address as `0x${string}`,
+            to: q.escrow_contract as `0x${string}`,
+            data: q.calldata as `0x${string}`,
+            value: isNativeToken ? BigInt(q.amount_wei) : 0n,
+          });
+
+          const gasPrice = await publicClient.getGasPrice();
+          const gasCostWei = gasEst * gasPrice;
+          // Format gas cost in ETH/MATIC
+          const gasCostNative = Number(gasCostWei) / 1e18;
+
+          // Get native coin price to convert to USD
+          const nativeSym = CHAIN_META[q.chain_id]?.nativeSym || 'ETH';
+          const stables = new Set(['USDT', 'USDC', 'DAI']);
+          let nativePrice = 1;
+          if (!stables.has(nativeSym)) {
+            try {
+              const pr = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${nativeSym}USDT`);
+              const pd = await pr.json();
+              if (pd.price) nativePrice = parseFloat(pd.price);
+            } catch { /* ignore */ }
+          }
+
+          const gasCostUsd = gasCostNative * nativePrice;
+          setGasEstimate({
+            gas: `${gasCostNative.toFixed(6)} ${nativeSym}`,
+            usd: `~$${gasCostUsd.toFixed(4)} USD`,
+          });
+        } catch (e) {
+          // Gas estimation may fail if wrong chain — silently ignore
+          console.debug('Gas estimate failed:', e);
+        } finally {
+          setGasLoading(false);
+        }
+      };
+      estimateGasInBackground();
+
     } catch (e: any) {
       const msg = e.response?.data?.message || 'Lấy báo giá thất bại';
       setQuoteError(msg); toast.error(msg);
@@ -647,10 +698,31 @@ export default function CheckoutPage() {
                           </div>
                         </div>
                         <p className="text-[11px] text-emerald-400/80 font-bold">
-                          Bước 2: Import ví có 10,000 ETH test (MetaMask → Import Account)
+                          Bước 2: Nhận ETH test (nếu ví chưa có balance)
+                        </p>
+                        {isConnected ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await paymentClient.post('/api/faucet/hardhat', { wallet: address });
+                                toast.success(res.data.message || 'Đã gửi 1 ETH test!');
+                              } catch (e: any) {
+                                toast.error(e.response?.data?.message || 'Faucet thất bại');
+                              }
+                            }}
+                            className="w-full py-2 text-xs font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            Nhận 1 ETH test (Hardhat Faucet)
+                          </button>
+                        ) : (
+                          <p className="text-[10px] text-emerald-400/50">Kết nối MetaMask trước để nhận ETH test</p>
+                        )}
+                        <p className="text-[10px] text-emerald-400/40 pt-0.5">
+                          Hoặc import private key Hardhat #0 (có 10,000 ETH):
                         </p>
                         <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
-                          <code className="text-[9px] text-emerald-300/70 flex-1 break-all">0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80</code>
+                          <code className="text-[9px] text-emerald-300/60 flex-1 break-all">0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80</code>
                           <button
                             onClick={() => copyText('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80', 'private key')}
                             className="flex-shrink-0 p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-md transition-colors"
@@ -782,6 +854,27 @@ export default function CheckoutPage() {
                       <p>≈ ${totalUSD.toFixed(4)} USD</p>
                       {quote.token_price > 0 && <p>1 {selectedToken} = ${quote.token_price.toFixed(4)}</p>}
                     </div>
+                  </div>
+
+                  {/* Gas Fee Estimate */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-background/50 border border-border rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <p className="text-xs text-muted-foreground">Phí gas ước tính</p>
+                    </div>
+                    {gasLoading ? (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Đang tính...</span>
+                      </div>
+                    ) : gasEstimate ? (
+                      <div className="text-right">
+                        <p className="text-xs font-semibold text-amber-400">{gasEstimate.gas}</p>
+                        <p className="text-[10px] text-muted-foreground">{gasEstimate.usd}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">—</p>
+                    )}
                   </div>
 
                   {/* Smart Contract Info — always visible */}

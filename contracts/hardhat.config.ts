@@ -21,6 +21,12 @@ const config: HardhatUserConfig = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
     },
+    // Correct network name for Amoy testnet (80002)
+    amoy: {
+      url: process.env.POLYGON_AMOY_RPC_URL || "https://rpc-amoy.polygon.technology",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 80002,
+    },
     polygon: {
       url: process.env.POLYGON_RPC_URL || "https://polygon.drpc.org",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
@@ -69,6 +75,7 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: {
       polygonMumbai: process.env.POLYGONSCAN_API_KEY || "",
+      amoy: process.env.POLYGONSCAN_API_KEY || "",
       polygon: process.env.POLYGONSCAN_API_KEY || "",
       arbitrumOne: process.env.ARBISCAN_API_KEY || "",
       baseSepolia: process.env.BASESCAN_API_KEY || "",
@@ -83,6 +90,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://api-sepolia.basescan.org/api",
           browserURL: "https://sepolia.basescan.org"
+        }
+      },
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com"
         }
       }
     ]

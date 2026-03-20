@@ -1,6 +1,7 @@
 import { query, getClient } from '../../config/database';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
+import axios from 'axios';
 
 export class P2PService {
     // ── Offers ────────────────────────────────────────────────────────
@@ -449,5 +450,83 @@ export class P2PService {
         );
 
         logger.info('P2P dispute resolved', { dispute_id: disputeId, resolution, admin_id: adminId });
+    }
+
+    /**
+     * Resolve a product-order dispute (not P2P) and optionally trigger on-chain refund.
+     * Called by admin when a buyer wins a dispute on a regular order (crypto-paid).
+     */
+    async adminResolveOrderDispute(orderId: number, adminId: number, winner: 'BUYER' | 'SELLER', adminNotes: string) {
+        // Get order details
+        const orderRes = await query(
+            `SELECT o.order_id, o.internal_order_id, o.status, o.chain_id, o.escrow_contract,
+                    o.payment_method, o.tx_hash, d.dispute_id
+             FROM orders o
+             LEFT JOIN disputes d ON o.order_id = d.order_id AND d.status = 'OPEN'
+             WHERE o.order_id = $1`,
+            [orderId]
+        );
+
+        if (!orderRes.rows.length) throw new AppError('Order not found', 404);
+        const order = orderRes.rows[0];
+
+        const newStatus = winner === 'BUYER' ? 'REFUNDED' : 'COMPLETED';
+
+        // Update order & dispute
+        await query(
+            `UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`,
+            [newStatus, orderId]
+        );
+        if (order.dispute_id) {
+            await query(
+                `UPDATE disputes SET status = 'RESOLVED', resolution = $1, resolved_by = $2,
+                        admin_notes = $3, resolved_at = NOW()
+                 WHERE dispute_id = $4`,
+                [winner === 'BUYER' ? 'BUYER_WINS' : 'SELLER_WINS', adminId, adminNotes, order.dispute_id]
+            );
+        }
+
+        let onChainTxHash: string | null = null;
+        let onChainError: string | null = null;
+
+        // Trigger on-chain action if order was crypto-paid
+        const isCryptoPaid = order.payment_method === 'CRYPTO' || order.tx_hash;
+        if (isCryptoPaid && order.escrow_contract) {
+            const paymentUrl = process.env.PAYMENT_SERVICE_URL || 'http://payment-api:3002';
+            const endpoint = winner === 'BUYER'
+                ? `${paymentUrl}/api/payments/crypto/refund`
+                : `${paymentUrl}/api/payments/crypto/release`;
+
+            try {
+                const resp = await axios.post(
+                    endpoint,
+                    { order_id: orderId },
+                    {
+                        headers: { 'x-internal-service-key': process.env.INTERNAL_SERVICE_KEY },
+                        timeout: 30_000,
+                    }
+                );
+                onChainTxHash = resp.data?.tx_hash || null;
+                logger.info('On-chain dispute resolution completed', {
+                    orderId, winner, tx_hash: onChainTxHash,
+                });
+            } catch (err: any) {
+                // Log but don't fail — DB is already updated, on-chain can be retried manually
+                onChainError = err.response?.data?.message || err.message;
+                logger.error('On-chain dispute resolution failed (DB updated, retry manually)', {
+                    orderId, winner, error: onChainError,
+                });
+            }
+        }
+
+        return {
+            success: true,
+            order_id: orderId,
+            new_status: newStatus,
+            winner,
+            on_chain_tx_hash: onChainTxHash,
+            on_chain_error: onChainError,
+            notes: 'DB updated. On-chain refund/release triggered if crypto-paid.',
+        };
     }
 }

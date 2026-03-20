@@ -30,7 +30,8 @@ import {
     getSettings,
     updateSetting,
     getDisputeMessages,
-    addDisputeMessage
+    addDisputeMessage,
+    resolveOrderDisputeOnChain
 } from './admin.controller';
 
 const router = Router();
@@ -56,6 +57,9 @@ router.get('/disputes', getDisputes);
 router.patch('/disputes/:id/resolve', resolveDispute);
 router.get('/disputes/:id/messages', getDisputeMessages);
 router.post('/disputes/:id/messages', addDisputeMessage);
+
+// On-chain dispute resolution for product orders (triggers smart contract refund/release)
+router.post('/orders/:id/resolve-dispute', resolveOrderDisputeOnChain);
 
 // Refunds
 router.post('/refunds', initiateRefund);

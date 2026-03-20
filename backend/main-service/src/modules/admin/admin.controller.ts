@@ -1,9 +1,11 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { AdminService } from './admin.service';
+import { P2PService } from '../p2p/p2p.service';
 import { logger } from '../../utils/logger';
 
 const adminService = new AdminService();
+const p2pService = new P2PService();
 
 // ─── Dashboard ───────────────────────────────────────────────────
 
@@ -254,6 +256,35 @@ export async function getEscrowOrders(req: AuthRequest, res: Response, next: Nex
         res.json({ success: true, orders });
     } catch (error: any) {
         logger.error('Admin get escrow orders error:', error);
+        next(error);
+    }
+}
+
+/**
+ * POST /api/admin/orders/:id/resolve-dispute
+ * Resolves a product-order dispute with optional on-chain refund/release.
+ * Body: { winner: 'BUYER' | 'SELLER', notes: string }
+ * - BUYER wins → calls payment-service /refund (on-chain ETH back to buyer wallet)
+ * - SELLER wins → calls payment-service /release (on-chain ETH to seller wallet)
+ */
+export async function resolveOrderDisputeOnChain(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const orderId = parseInt(req.params.id);
+        const adminId = req.user!.user_id;
+        const { winner, notes } = req.body;
+
+        if (!winner || !['BUYER', 'SELLER'].includes(winner.toUpperCase())) {
+            return res.status(400).json({ success: false, message: "winner must be 'BUYER' or 'SELLER'" });
+        }
+
+        const result = await p2pService.adminResolveOrderDispute(
+            orderId, adminId, winner.toUpperCase() as 'BUYER' | 'SELLER', notes || ''
+        );
+
+        const { success: _s, ...rest } = result;
+        res.json({ success: true, ...rest });
+    } catch (error: any) {
+        logger.error('Admin resolve order dispute on-chain error:', error);
         next(error);
     }
 }
