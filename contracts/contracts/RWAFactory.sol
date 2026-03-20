@@ -88,7 +88,12 @@ contract RWAFactory is AccessControl {
         ProfitDistributor newDist = new ProfitDistributor(tokenAddr, platformAdmin, address(this));
         distAddr = address(newDist);
 
-        // ── 3. Grant ISSUER+OPERATOR to operator, then renounce factory's admin ─────
+        // ── 3. Wire token ↔ distributor ─────────────────────────────────
+        // RWAToken._update() calls distributor.settleOnTransfer() on every balance change.
+        // This must be set before renouncing factory's role (still holds OPERATOR_ROLE via admin).
+        newToken.setDistributor(distAddr);
+
+        // ── 4. Grant ISSUER+OPERATOR to operator, then renounce factory's admin ─────
         bytes32 ISSUER   = newToken.ISSUER_ROLE();
         bytes32 OPERATOR = newToken.OPERATOR_ROLE();
         bytes32 DIST_OP  = newDist.OPERATOR_ROLE();

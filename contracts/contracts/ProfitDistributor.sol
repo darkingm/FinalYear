@@ -82,14 +82,17 @@ contract ProfitDistributor is AccessControl, ReentrancyGuard, Pausable {
     /* ── Claim reward (called by token holders) ──────────────────── */
     /**
      * @notice Claim accumulated dividends. Callable any time.
+     *         Includes both live DPS rewards AND any credits saved during token transfers.
      */
     function claimReward() external nonReentrant whenNotPaused {
         uint256 pending = pendingReward(msg.sender);
         require(pending > 0, "ProfitDistributor: nothing to claim");
 
-        rewardDebt[msg.sender] = accRewardPerToken;
+        // Reset both DPS debt and saved credit
+        rewardDebt[msg.sender]   = accRewardPerToken;
+        pendingCredit[msg.sender] = 0;
         claimedTotal[msg.sender] += pending;
-        totalProfitClaimed += pending;
+        totalProfitClaimed       += pending;
 
         (bool ok,) = payable(msg.sender).call{value: pending}("");
         require(ok, "ProfitDistributor: ETH transfer failed");
@@ -100,28 +103,59 @@ contract ProfitDistributor is AccessControl, ReentrancyGuard, Pausable {
     /* ── View: pending reward ────────────────────────────────────── */
     /**
      * @param investor Address to query
-     * @return Claimable ETH in wei
+     * @return Total claimable ETH in wei (live DPS rewards + saved transfer credits)
      */
     function pendingReward(address investor) public view returns (uint256) {
-        uint256 balance = token.balanceOf(investor);
-        if (balance == 0) return 0;
-        uint256 unrealized = accRewardPerToken - rewardDebt[investor];
-        return (balance * unrealized) / PRECISION;
+        uint256 balance    = token.balanceOf(investor);
+        uint256 unrealized = balance > 0
+            ? (balance * (accRewardPerToken - rewardDebt[investor])) / PRECISION
+            : 0;
+        // Add any credits saved during token transfers
+        return unrealized + pendingCredit[investor];
     }
+
+    /* ── Pending credits (rewards preserved when debt is reset on transfer) */
+    mapping(address => uint256) public pendingCredit; // wei saved before debt reset
 
     /* ── Hook: update debt on token transfer ─────────────────────── */
     /**
-     * @notice Called by RWAToken on every transfer to settle debt for both parties.
-     *         Must be called before balance changes (pre-transfer hook).
+     * @notice Called by RWAToken._update() BEFORE every balance change.
+     *         Settles reward debt for both parties so DPS accounting stays correct.
+     *
+     *   Sender: compute pending with OLD balance → save as credit → reset debt
+     *   Receiver: set debt to current acc → they only earn from this point forward
+     *
+     * @dev Only callable by the linked RWAToken contract.
      */
     function settleOnTransfer(address from, address to) external {
         require(msg.sender == address(token), "ProfitDistributor: only token");
-        // Settle sender's pending so they don't lose unclaimed rewards
-        if (from != address(0) && token.balanceOf(from) > 0) {
+
+        // ── Settle sender's accrued reward with their CURRENT balance ──
+        if (from != address(0)) {
+            uint256 balance = token.balanceOf(from);
+            if (balance > 0) {
+                uint256 unrealized = accRewardPerToken - rewardDebt[from];
+                uint256 pending    = (balance * unrealized) / PRECISION;
+                if (pending > 0) {
+                    // Save as a claimable credit so it isn't lost after the transfer
+                    pendingCredit[from] += pending;
+                }
+            }
+            // Reset debt to current acc — after transfer their share changes
             rewardDebt[from] = accRewardPerToken;
         }
-        // Initialize receiver's debt so they only earn from this point forward
+
+        // ── Initialize receiver's debt so they earn only from this point ──
         if (to != address(0)) {
+            // First save any existing credit before resetting (handles repeat transfers)
+            uint256 existingBalance = token.balanceOf(to);
+            if (existingBalance > 0) {
+                uint256 unrealized = accRewardPerToken - rewardDebt[to];
+                uint256 pending    = (existingBalance * unrealized) / PRECISION;
+                if (pending > 0) {
+                    pendingCredit[to] += pending;
+                }
+            }
             rewardDebt[to] = accRewardPerToken;
         }
     }
