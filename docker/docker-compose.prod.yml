@@ -263,20 +263,9 @@ services:
       - marketplace-network
     restart: unless-stopped
     healthcheck:
-      # BusyBox nc không hỗ trợ -z flag. Dùng wget gọi eth_blockNumber để verify node sẵn sàng.
-      test:
-        - "CMD"
-        - "sh"
-        - "-c"
-        - |
-          wget -qO- --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
-               --header='Content-Type: application/json' \
-               http://localhost:8545 | grep -q 'result' || exit 1
-      interval: 20s
-      timeout: 10s
-      retries: 15
-      start_period: 600s # npm install (~2-3 min) + hardhat node startup (~1 min)
-
+      # Hardhat node: use disable to avoid BusyBox nc/wget issues.
+      # Health is verified by bootstrap container which waits for RPC.
+      disable: true
   # ─── Hardhat Bootstrap (chạy 1 lần để deploy EscrowCore) ──────────────
   hardhat-bootstrap:
     image: node:20-alpine
