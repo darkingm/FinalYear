@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 
 /* ─── Types ───────────────────────────────────────────────────── */
 interface Order {
@@ -180,7 +180,7 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
               <div className="flex items-end justify-between mt-2">
                 {priceIsToken ? (
                   <span className={`text-xl font-black font-mono text-[#f0b90b] flex items-center gap-1.5`}>
-                    <img src={getCoinLogo(order.token_symbol!)} alt={order.token_symbol!} className="w-5 h-5 object-contain rounded-full" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    <CoinImage symbol={order.token_symbol!} size={20} className="rounded-full" />
                     {Number(tokenAmount).toFixed(['ETH', 'WBTC', 'BTC'].includes(order.token_symbol!) ? 6 : 4)} {order.token_symbol}
                   </span>
                 ) : (

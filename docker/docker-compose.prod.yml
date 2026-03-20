@@ -18,6 +18,8 @@ services:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Only used on FIRST boot (when volume is empty)
+      # After that, db-migrator handles all schema changes
       - ../init_database.sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ../init_database.sql/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
@@ -29,6 +31,26 @@ services:
     networks:
       - marketplace-network
     restart: unless-stopped
+
+  # ─── DB Migrator ─────────────────────────────────────────────────────────────
+  # Chạy MỖI LẦN deploy — tự động apply các migration chưa áp dụng
+  # Sau khi xong thì thoát (restart: no) — không chiếm tài nguyên
+  db-migrator:
+    image: ${DOCKERHUB_USERNAME}/marketplace-db-migrator:latest
+    container_name: marketplace-db-migrator
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-marketplace_db}
+      MIGRATIONS_DIR: /migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+    restart: "no" # Chạy 1 lần rồi thoát
 
   postgres-payment:
     image: postgres:15-alpine
@@ -113,6 +135,8 @@ services:
       CLOUDINARY_API_KEY: 769799281583264
       CLOUDINARY_API_SECRET: FpgAWZCGduORuwPClfJXt5d6aas
       FRONTEND_URL: https://kienai.id.vn
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-internal-service-key}
+      PAYMENT_SERVICE_URL: http://payment-api:3002
     ports:
       - "127.0.0.1:3001:3001" # Chỉ localhost — nginx proxy vào
     depends_on:
@@ -124,6 +148,9 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      db-migrator:
+        # ← Chờ migration xong mới khởi động
+        condition: service_completed_successfully
     networks:
       - marketplace-network
     restart: unless-stopped
@@ -142,16 +169,12 @@ services:
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
-      # ─── Chain config: DUAL MODE (Hardhat local + Polygon Amoy) ──────
-      # Hardhat local chain (VPS) — test miễn phí, instant, không cần faucet
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-internal-service-key}
       LOCALHOST_RPC_URL: http://hardhat-node:8545
       ESCROW_CONTRACT_LOCALHOST: ${ESCROW_CONTRACT_LOCALHOST:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
-      # DEFAULT: Hardhat local (31337) — đổi sang 80002 khi test Amoy
       DEFAULT_CHAIN_ID: "31337"
-      # Polygon Amoy testnet (SECONDARY - khi có đủ MATIC)
       POLYGON_AMOY_RPC_URL: https://rpc-amoy.polygon.technology
       ESCROW_CONTRACT_POLYGON_AMOY: ${ESCROW_CONTRACT_POLYGON_AMOY:-0xCDE08Be0190482691b3288C27240378497d74E79}
-      # Polygon Mainnet (NOT active)
       POLYGON_RPC_URL: https://polygon.drpc.org
       ESCROW_CONTRACT_POLYGON: 0x0
       POLYGON_MUMBAI_RPC_URL: https://rpc-mumbai.maticvigil.com
@@ -171,8 +194,9 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      # NOTE: hardhat-node NOT a hard dependency — payment-api starts independently
-      # It will connect to hardhat when processing requests (lazy connection)
+      db-migrator:
+        # ← Chờ migration xong mới khởi động
+        condition: service_completed_successfully
     networks:
       - marketplace-network
     restart: unless-stopped

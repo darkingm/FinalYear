@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { getProductGallery } from '@/lib/utils/product-images';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -106,7 +106,7 @@ function CoinSidebar({ currentSymbol }: { currentSymbol: string }) {
                   <Star className={`w-3 h-3 flex-shrink-0 ${isCurrent ? 'text-[#f0b90b] fill-[#f0b90b]' : 'text-gray-700'}`} />
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="w-5 h-5 flex-shrink-0">
-                      <Image src={getCoinLogo(coin.short)} alt={coin.short} width={20} height={20} className="object-contain" />
+                      <CoinImage symbol={coin.short} size={20} />
                     </div>
                     <div className="min-w-0">
                       <p className={`text-xs font-bold truncate ${isCurrent ? 'text-[#f0b90b]' : 'text-foreground'}`}>{coin.short}</p>
@@ -468,7 +468,7 @@ function SwapCoinWidget({ coinName, currentPrice }: { coinName: string; currentP
         <label className="text-[9px] text-muted-foreground">Từ</label>
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-1.5">
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Image src={getCoinLogo(swapFrom)} alt={swapFrom} width={16} height={16} className="object-contain" />
+            <CoinImage symbol={swapFrom} size={16} />
             <span className="text-xs font-bold text-foreground">{swapFrom}</span>
           </div>
           <input
@@ -496,7 +496,7 @@ function SwapCoinWidget({ coinName, currentPrice }: { coinName: string; currentP
         <label className="text-[9px] text-muted-foreground">Đến</label>
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-1.5">
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Image src={getCoinLogo(swapTo)} alt={swapTo} width={16} height={16} className="object-contain" />
+            <CoinImage symbol={swapTo} size={16} />
             <span className="text-xs font-bold text-foreground">{swapTo}</span>
           </div>
           <span className="flex-1 text-right text-sm font-mono text-muted-foreground">
@@ -738,7 +738,7 @@ function FullSwapPanel({ coinName, currentPrice }: { coinName: string; currentPr
             {SWAP_COINS.map(c => <option key={c} value={c} className="bg-card text-foreground">{c}</option>)}
           </select>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Image src={getCoinLogo(fromCoin)} alt={fromCoin} width={24} height={24} className="object-contain" />
+            <CoinImage symbol={fromCoin} size={24} />
           </div>
           <input
             type="number"
@@ -775,7 +775,7 @@ function FullSwapPanel({ coinName, currentPrice }: { coinName: string; currentPr
             {SWAP_COINS.filter(c => c !== fromCoin).map(c => <option key={c} value={c} className="bg-card text-foreground">{c}</option>)}
           </select>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Image src={getCoinLogo(toCoin)} alt={toCoin} width={24} height={24} className="object-contain" />
+            <CoinImage symbol={toCoin} size={24} />
           </div>
           <span className="flex-1 text-right text-lg font-mono font-bold text-muted-foreground">
             ≈ {isNaN(toAmount) ? '0.00' : toAmount.toFixed(6)}
@@ -1002,7 +1002,7 @@ export default function TradingPage() {
               </Link>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-white/10 p-1">
-                  <Image src={getCoinLogo(coinName)} alt={coinName} width={32} height={32} className="object-contain" />
+                  <CoinImage symbol={coinName} size={32} className="rounded-full" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">

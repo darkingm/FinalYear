@@ -19,7 +19,7 @@ import {
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Header } from '@/components/layout/Header';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { usePriceStore } from '@/store';
 
 /* ─── Live Price Hook ───────────────────────────────────────── */
@@ -153,7 +153,7 @@ function LeftPanel() {
               const chg = changes[coin.symbol] ?? 0;
               return (
                 <span key={i} className="flex items-center gap-1.5 text-[11px] font-mono flex-shrink-0">
-                  <img src={getCoinLogo(coin.symbol)} alt={coin.symbol} className="w-3.5 h-3.5 object-contain rounded-full" />
+                  <CoinImage symbol={coin.symbol} size={14} className="rounded-full" />
                   <span className="font-bold" style={{ color: coin.color }}>{coin.symbol}</span>
                   <span className="text-white/80">${price < 10 ? price.toFixed(3) : price.toFixed(2)}</span>
                   <span className={chg >= 0 ? 'text-emerald-400' : 'text-red-400'}>

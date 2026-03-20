@@ -15,7 +15,7 @@ import { getProductGallery } from '@/lib/utils/product-images';
 import { toast } from 'sonner';
 import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
 import { useChainId } from 'wagmi';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 
 /* ─── Safe Chain Id Hook ─────────────────────────────────────── */
 // useChainId is called unconditionally at the top. If WagmiProvider is unavailable,
@@ -76,12 +76,7 @@ function TokenPill({ symbol, amount }: { symbol: string; amount: number }) {
   return (
     <span className="inline-flex items-center gap-1 bg-[#8247e5]/8 border border-[#8247e5]/20 rounded-lg px-2 py-0.5">
       <span className="font-black text-[#8247e5] text-sm leading-none">{formatted}</span>
-      <img
-        src={getCoinLogo(symbol)}
-        alt={symbol}
-        className="w-3.5 h-3.5 object-contain flex-shrink-0 rounded-full"
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-      />
+      <CoinImage symbol={symbol} size={14} className="flex-shrink-0" />
     </span>
   );
 }

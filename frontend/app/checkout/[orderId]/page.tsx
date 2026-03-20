@@ -188,11 +188,14 @@ export default function CheckoutPage() {
 
   // Payment steps
   const [step, setStep] = useState(1);
-  const [payStep, setPayStep] = useState<'idle' | 'approve' | 'sending' | 'done'>('idle');
+  type PayStep = 'idle' | 'signing' | 'submitted' | 'confirming' | 'done' | 'failed';
+  const [payStep, setPayStep] = useState<PayStep>('idle');
   const [submitting, setSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [redirectIn, setRedirectIn] = useState<number | null>(null);
+  const [confirmCount, setConfirmCount] = useState(0);    // live confirmation counter
+  const [payError, setPayError] = useState<string | null>(null);
 
   // Quote timer
   const [timeLeft, setTimeLeft] = useState(0);
@@ -304,7 +307,7 @@ export default function CheckoutPage() {
   /* ─── Approve ERC-20 ─────────────────────────────────────────────────── */
   const handleApprove = async () => {
     if (!quote || !address) return;
-    setPayStep('approve');
+    setPayStep('signing'); // reuse signing step for approve
     try {
       await writeContractAsync({
         address: quote.token_address as Address, abi: ERC20_ABI,
@@ -323,67 +326,88 @@ export default function CheckoutPage() {
     } finally { setPayStep('idle'); }
   };
 
-  /* ─── Pay ────────────────────────────────────────────────────────────── */
+  /* ─── Pay — 4-step state machine with live progress ─────────────────── */
   const handlePay = async () => {
     if (!quote || !walletClient || !address) { toast.error('Kết nối ví'); return; }
     if (isWrongChain) { await handleSwitchChain(); return; }
     if (timeLeft === 0) { toast.error('Báo giá đã hết hạn, lấy lại'); setQuote(null); setStep(2); return; }
 
-    setSubmitting(true); setPayStep('sending');
+    setPayError(null);
+    setSubmitting(true);
+    // Step 1: Waiting for MetaMask signature
+    setPayStep('signing');
     try {
-      let hash: string;
       const tx = await walletClient.sendTransaction({
         to: quote.escrow_contract as Address,
         data: quote.calldata as `0x${string}`,
         value: isNative ? BigInt(quote.amount_wei) : 0n,
         chainId: quote.chain_id,
       });
-      hash = typeof tx === 'string' ? tx : (tx as any).hash;
+      const hash: string = typeof tx === 'string' ? tx : (tx as any).hash;
 
-      toast.loading('Đợi xác nhận...', { id: 'tx' });
-      await paymentClient.post('/api/payments/crypto/submit', { order_id: orderId, tx_hash: hash });
-      toast.success('Giao dịch đã gửi!', { id: 'tx' });
+      // Step 2: TX in mempool
+      setPayStep('submitted');
       setTxHash(hash);
-      setPayStep('done');
+      toast.success('Giao dịch đã gửi lên blockchain!', { duration: 4000 });
 
-      // Poll for confirmation
+      await paymentClient.post('/api/payments/crypto/submit', { order_id: orderId, tx_hash: hash });
+
+      // Step 3: Waiting for on-chain confirmations — unlock UI so user sees progress
+      setPayStep('confirming');
+      setSubmitting(false);
+
+      const maxWaitMs = 120_000; // 2 minutes
       const pollStart = Date.now();
+      let pollCount = 0;
+
       const poll = async (): Promise<void> => {
-        if (Date.now() - pollStart > 90_000) {
-          toast.info('Đang xác nhận... Kiểm tra lại trong đơn hàng.');
-          router.push(`/orders/${orderId}`);
+        if (Date.now() - pollStart > maxWaitMs) {
+          setPayStep('idle');
+          toast.info('Vẫn đang xác nhận... Theo dõi trong trang đơn hàng.', { duration: 8000 });
+          setTimeout(() => router.push(`/orders/${orderId}`), 3000);
           return;
         }
         try {
           const statusRes = await paymentClient.get(`/api/payments/crypto/status/${orderId}`);
-          const status = statusRes.data?.status?.status || statusRes.data?.status;
-          if (status === 'ONCHAIN_CONFIRMED' || status === 'PAID') {
+          const orderStatus = statusRes.data?.status?.status || statusRes.data?.status;
+          const confs = Number(statusRes.data?.status?.confirmations ?? 0);
+          setConfirmCount(confs);
+
+          if (orderStatus === 'ONCHAIN_CONFIRMED' || orderStatus === 'PAID') {
+            // Step 4: Done!
+            setPayStep('done');
             setConfirmed(true);
-            toast.success('✅ Thanh toán xác nhận on-chain!', { duration: 6000 });
-            // Auto-redirect to order page after 3 seconds
-            let countdown = 3;
+            toast.success('✅ Thanh toán xác nhận on-chain! Tiền đang vào Escrow.', { duration: 6000 });
+            let countdown = 4;
             setRedirectIn(countdown);
             const iv = setInterval(() => {
               countdown -= 1;
               setRedirectIn(countdown);
-              if (countdown <= 0) {
-                clearInterval(iv);
-                router.push(`/orders/${orderId}`);
-              }
+              if (countdown <= 0) { clearInterval(iv); router.push(`/orders/${orderId}`); }
             }, 1000);
             return;
           }
-        } catch { }
-        await new Promise(r => setTimeout(r, 2000));
+        } catch { /* network hiccup — keep polling */ }
+
+        pollCount++;
+        const delay = Math.min(2000 + pollCount * 500, 8000); // 2s→...max 8s
+        await new Promise(r => setTimeout(r, delay));
         return poll();
       };
-      poll().catch(() => { });
+
+      poll().catch(() => setPayStep('idle'));
+
     } catch (e: any) {
       const msg = e.shortMessage || e.message || 'Giao dịch thất bại';
-      if (e.code === 4001 || msg.includes('rejected')) toast.info('Đã hủy giao dịch');
-      else toast.error(msg);
+      if (e.code === 4001 || msg.includes('rejected') || msg.includes('denied')) {
+        toast.info('Đã hủy giao dịch');
+      } else {
+        toast.error(msg);
+        setPayError(msg);
+      }
       setPayStep('idle');
-    } finally { setSubmitting(false); }
+      setSubmitting(false);
+    }
   };
 
   /* ─── Cancel ─────────────────────────────────────────────────────────── */
@@ -746,34 +770,40 @@ export default function CheckoutPage() {
                         Cho phép hợp đồng escrow sử dụng {quote.amount_token.toFixed(6)} {selectedToken} từ ví bạn.
                         Chỉ cần làm 1 lần cho mỗi token.
                       </p>
-                      <button onClick={handleApprove} disabled={payStep === 'approve'}
+                      <button onClick={handleApprove} disabled={payStep === 'signing'}
                         className="w-full py-2.5 bg-amber-500 text-black font-bold rounded-xl text-sm hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
-                        {payStep === 'approve' ? <><Loader2 className="w-4 h-4 animate-spin" />Đang Approve...</> : <>✅ Approve {selectedToken}</>}
+                        {payStep === 'signing'
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />Đang Approve...</>
+                          : <>✅ Approve {selectedToken}</>}
                       </button>
                     </div>
                   )}
 
-                  {/* Pay / confirmed / pending buttons */}
-                  {confirmed && txHash ? (
+                  {/* ── LIVE PAYMENT PROGRESS PANEL ── */}
+                  {payStep === 'done' && confirmed ? (
+                    /* ── SUCCESS ── */
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                       className="text-center space-y-4 py-2">
-                      <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center mx-auto">
-                        <CheckCircle className="w-8 h-8 text-emerald-400" />
+                      <div className="w-20 h-20 rounded-full bg-emerald-500/15 border-2 border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
+                        <CheckCircle className="w-10 h-10 text-emerald-400" />
                       </div>
                       <div>
                         <h3 className="text-xl font-black text-emerald-400">Thanh toán thành công! 🎉</h3>
-                        <p className="text-xs text-muted-foreground mt-1">Giao dịch đã xác nhận — tiền đang chuyển cho người bán</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          Tiền đã được khóa trong Smart Contract Escrow —<br />
+                          sẽ chuyển cho người bán sau khi bạn xác nhận nhận hàng.
+                        </p>
                         {redirectIn !== null && (
-                          <p className="text-xs text-[#f0b90b] mt-2 font-semibold">
+                          <p className="text-xs text-[#f0b90b] mt-2 font-semibold animate-pulse">
                             Chuyển về đơn hàng sau {redirectIn}s...
                           </p>
                         )}
                       </div>
                       <div className="p-3 bg-background border border-border rounded-xl text-left">
-                        <p className="text-[10px] text-muted-foreground mb-1 font-semibold">TX HASH</p>
+                        <p className="text-[10px] text-muted-foreground mb-1 font-semibold uppercase tracking-wider">TX Hash</p>
                         <div className="flex items-center gap-2">
-                          <p className="font-mono text-xs flex-1 break-all">{txHash}</p>
-                          <button onClick={() => copyText(txHash!, 'Tx Hash')} className="text-muted-foreground hover:text-foreground">
+                          <p className="font-mono text-xs flex-1 break-all text-emerald-300">{txHash}</p>
+                          <button onClick={() => copyText(txHash!, 'Tx Hash')} className="text-muted-foreground hover:text-foreground flex-shrink-0">
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -787,15 +817,104 @@ export default function CheckoutPage() {
                         </Link>
                       </div>
                     </motion.div>
-                  ) : txHash && !confirmed ? (
-                    <div className="flex items-center gap-3 p-4 bg-[#f0b90b]/8 border border-[#f0b90b]/20 rounded-xl">
-                      <Loader2 className="w-5 h-5 text-[#f0b90b] animate-spin flex-shrink-0" />
-                      <div>
-                        <p className="text-sm font-bold text-[#f0b90b]">Đang xác nhận on-chain...</p>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5 break-all">{txHash.slice(0, 20)}...{txHash.slice(-8)}</p>
+
+                  ) : payStep === 'signing' || payStep === 'submitted' || payStep === 'confirming' ? (
+                    /* ── IN PROGRESS — live steps ── */
+                    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                      className="space-y-3 p-4 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl">
+                      <p className="text-xs font-bold text-[#f0b90b] uppercase tracking-wider mb-3">Đang xử lý thanh toán</p>
+
+                      {/* Step row helper */}
+                      {([
+                        {
+                          id: 'signing',
+                          label: 'Ký giao dịch trong MetaMask',
+                          sub: 'Vui lòng xác nhận trong ví của bạn',
+                          done: payStep === 'submitted' || payStep === 'confirming',
+                          active: payStep === 'signing',
+                        },
+                        {
+                          id: 'submitted',
+                          label: 'Giao dịch gửi lên blockchain',
+                          sub: txHash ? `${txHash.slice(0, 12)}...${txHash.slice(-6)}` : 'Đang broadcast...',
+                          done: payStep === 'confirming',
+                          active: payStep === 'submitted',
+                        },
+                        {
+                          id: 'confirming',
+                          label: 'Đợi xác nhận on-chain',
+                          sub: payStep === 'confirming'
+                            ? confirmCount > 0
+                              ? `${confirmCount} xác nhận — đang chờ đủ...`
+                              : 'Đang chờ block miner xác nhận...'
+                            : 'Chờ đủ confirmations',
+                          done: false,
+                          active: payStep === 'confirming',
+                        },
+                      ] as const).map(s => (
+                        <div key={s.id} className={`flex items-start gap-3 p-3 rounded-lg transition-all ${s.active ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : s.done ? 'opacity-60' : 'opacity-30'}`}>
+                          <div className="flex-shrink-0 mt-0.5">
+                            {s.done ? (
+                              <CheckCircle className="w-4 h-4 text-emerald-400" />
+                            ) : s.active ? (
+                              <Loader2 className="w-4 h-4 text-[#f0b90b] animate-spin" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold ${s.active ? 'text-[#f0b90b]' : s.done ? 'text-emerald-400' : 'text-muted-foreground'}`}>{s.label}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{s.sub}</p>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Live confirmation bar */}
+                      {payStep === 'confirming' && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Confirmations</span>
+                            <span className="font-mono font-bold text-[#f0b90b]">{confirmCount} / 1</span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#f0b90b] to-emerald-400 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(confirmCount * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TX hash display while in flight */}
+                      {txHash && (
+                        <div className="flex items-center gap-2 p-2 bg-background/60 border border-border rounded-lg">
+                          <p className="font-mono text-[10px] text-muted-foreground flex-1 truncate">{txHash}</p>
+                          <button onClick={() => copyText(txHash, 'TX Hash')} className="flex-shrink-0">
+                            <Copy className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                          </button>
+                          <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                            <ExternalLink className="w-3 h-3 text-muted-foreground hover:text-blue-400" />
+                          </a>
+                        </div>
+                      )}
+                    </motion.div>
+
+                  ) : payError ? (
+                    /* ── ERROR state ── */
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl space-y-3">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                        <p className="text-sm font-bold text-red-400">Giao dịch thất bại</p>
                       </div>
+                      <p className="text-xs text-red-300/80 break-words">{payError}</p>
+                      <button onClick={() => { setPayError(null); setPayStep('idle'); }}
+                        className="w-full py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl text-sm font-medium transition-colors">
+                        Thử lại
+                      </button>
                     </div>
+
                   ) : (
+                    /* ── IDLE — main pay button ── */
                     isWrongChain ? (
                       <button onClick={handleSwitchChain}
                         className="w-full py-4 bg-amber-500 text-black font-black rounded-xl hover:bg-amber-400 flex items-center justify-center gap-2">
@@ -810,15 +929,13 @@ export default function CheckoutPage() {
                         disabled={submitting || !isConnected || !walletClient}
                         className="w-full py-4 bg-[#f0b90b] hover:bg-[#e6a800] text-black font-black rounded-xl text-base transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20"
                       >
-                        {submitting
-                          ? <><Loader2 className="w-5 h-5 animate-spin" />Đang xử lý...</>
-                          : <><Wallet className="w-5 h-5" />Ký &amp; Thanh toán qua MetaMask</>}
+                        <Wallet className="w-5 h-5" />Ký &amp; Thanh toán qua MetaMask
                       </button>
                     )
                   )}
 
-                  {/* Get new quote */}
-                  {!txHash && (
+                  {/* Back to change network/token */}
+                  {payStep === 'idle' && !txHash && (
                     <button onClick={() => { setQuote(null); setStep(2); }}
                       className="w-full text-xs text-muted-foreground hover:text-foreground py-2 hover:bg-muted rounded-xl transition-colors">
                       ← Đổi mạng / token, lấy báo giá mới

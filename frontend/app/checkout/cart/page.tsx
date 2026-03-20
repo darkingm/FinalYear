@@ -20,7 +20,7 @@ import {
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion } from 'framer-motion';
 import { type Address } from 'viem';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { PAYMENT_NETWORKS, CHAIN_TOKENS, CHAIN_META } from '@/lib/web3/config';
 import { useCartStore } from '@/store/cart-store';
 
@@ -481,12 +481,7 @@ export default function CartCheckoutPage() {
                             : 'border-border hover:border-[#8247e5]/40 text-foreground'
                             }`}
                         >
-                          <img
-                            src={getCoinLogo(token)}
-                            alt={token}
-                            className="w-5 h-5 object-contain"
-                            onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder-coin.png'; }}
-                          />
+                          <CoinImage symbol={token} size={20} />
                           <span className="text-sm font-bold">{token}</span>
                         </button>
                       ))}

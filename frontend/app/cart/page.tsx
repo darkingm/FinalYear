@@ -11,7 +11,7 @@ import {
 import { useCartStore } from '@/store/cart-store';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 
 export default function CartPage() {
     const router = useRouter();
@@ -100,7 +100,7 @@ export default function CartPage() {
                                                 </span>
                                                 {item.price_in_token && item.token_symbol && (
                                                     <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-accent/20 text-muted-foreground border border-border">
-                                                        <img src={getCoinLogo(item.token_symbol)} alt={item.token_symbol} className="w-3.5 h-3.5 object-contain rounded-full" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                                        <CoinImage symbol={item.token_symbol} size={14} className="rounded-full" />
                                                         {item.price_in_token} {item.token_symbol}
                                                     </span>
                                                 )}

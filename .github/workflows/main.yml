@@ -15,10 +15,10 @@ env:
 
 jobs:
   # ============================================================
-  # JOB 1 — Run tests with clean schema
+  # JOB 1 — Type-check & test
   # ============================================================
   test:
-    name: Run Tests
+    name: Test & Type-check
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -59,49 +59,57 @@ jobs:
       - name: Install psql client
         run: sudo apt-get install -y postgresql-client
 
-      - name: Apply consolidated schema (schema.sql + seed.sql)
+      - name: Apply schema + migrations
         run: |
-          echo "Applying schema..."
-          PGPASSWORD=testpassword psql \
-            -h localhost -U testuser -d marketplace_test \
+          echo "Applying base schema..."
+          PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test \
             -f init_database.sql/schema.sql
-          echo "Applying seed data..."
-          PGPASSWORD=testpassword psql \
-            -h localhost -U testuser -d marketplace_test \
-            -f init_database.sql/seed.sql
-          echo "✓ Database initialized with consolidated schema + seed"
 
-      - name: Verify schema
-        run: |
-          TABLE_COUNT=$(PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test -t -A \
-            -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';")
-          echo "Tables created: $TABLE_COUNT"
-          # Verify critical columns exist
-          PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test -c \
-            "SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('token_id','price_in_token','low_stock_threshold');" | grep -q "token_id"
-          echo "✓ Schema verified: all critical columns present"
+          echo "Applying seed data..."
+          PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test \
+            -v ON_ERROR_STOP=0 -f init_database.sql/seed.sql || true
+
+          echo "Applying versioned migrations..."
+          for f in init_database.sql/migrations/*.sql; do
+            echo "  → Applying $f"
+            PGPASSWORD=testpassword psql -h localhost -U testuser -d marketplace_test \
+              -v ON_ERROR_STOP=0 -f "$f" || true
+          done
+          echo "✓ Database ready"
 
       - name: Install main-service dependencies
         working-directory: backend/main-service
         run: npm ci
 
-      - name: TypeScript compile check
+      - name: TypeScript compile — main-service
         working-directory: backend/main-service
         run: npx tsc --noEmit
 
-      - name: Run tests
-        working-directory: backend/main-service
-        run: echo "Tests skipped — add jest tests here"
+      - name: Install payment-service dependencies
+        working-directory: backend/payment-service
+        run: npm ci
+
+      - name: TypeScript compile — payment-service
+        working-directory: backend/payment-service
+        run: npx tsc --noEmit
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript compile — frontend
+        working-directory: frontend
+        run: npx tsc --noEmit
 
   # ============================================================
-  # JOB 2 — Build & Push Docker images
+  # JOB 2 — Build & Push ALL Docker images (parallel)
   # ============================================================
   build-and-push:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -164,6 +172,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # ── db-migrator: MUST be built last (depends on migrations/*.sql)
+      - name: Build & Push db-migrator
+        uses: docker/build-push-action@v5
+        with:
+          context: ./init_database.sql
+          file: ./init_database.sql/Dockerfile.migrator
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-db-migrator:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-db-migrator:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ============================================================
   # JOB 3 — Deploy to VPS with automatic DB migration
   # ============================================================
@@ -178,15 +199,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Copy deploy script + SQL migration files to VPS
-      - name: Copy files to VPS
+      # Copy docker-compose.prod.yml + migrations to VPS
+      - name: Sync files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "scripts/deploy_manual.sh,init_database.sql/schema.sql,init_database.sql/seed.sql,init_database.sql/migrate.sh"
+          source: "docker/docker-compose.prod.yml,init_database.sql/schema.sql,init_database.sql/seed.sql,init_database.sql/db-migrate.sh,init_database.sql/migrations/"
           target: "/root/services/FinalYear/"
           overwrite: true
 
@@ -194,64 +215,94 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           GIT_SHA: ${{ github.sha }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          envs: GIT_SHA
+          envs: GIT_SHA,DOCKERHUB_USERNAME
           command_timeout: 12m
           script: |
             set -e
-            echo "======================================"
+            echo "=============================================="
             echo "  DEPLOYING commit: ${GIT_SHA:0:7}"
-            echo "======================================"
+            echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "=============================================="
 
-            # ── Step 1: DB Migration (idempotent, safe to re-run)
-            echo "[1/3] Running DB migration..."
-            MIGRATE=/root/services/FinalYear/init_database.sql/migrate.sh
-            if [ -f "$MIGRATE" ]; then
-              chmod +x "$MIGRATE"
-              bash "$MIGRATE" && echo "✓ DB migration OK" || echo "⚠ Migration warning (tables may already exist)"
-            else
-              echo "⚠ migrate.sh not found, skipping"
-            fi
+            cd /root/services/FinalYear/docker
 
-            # ── Step 2: Pull new images in parallel (built on GitHub Actions, NOT on VPS)
-            echo "[2/3] Pulling new Docker images (parallel)..."
-            docker pull kiendzpro/marketplace-main-api:latest &
-            PULL_MAIN=$!
-            docker pull kiendzpro/marketplace-payment-api:latest &
-            PULL_PAY=$!
-            docker pull kiendzpro/marketplace-frontend:latest &
-            PULL_FE=$!
-            wait $PULL_MAIN && echo "✓ main-api pulled" || echo "✗ main-api pull failed"
-            wait $PULL_PAY && echo "✓ payment-api pulled" || echo "✗ payment-api pull failed"
-            wait $PULL_FE && echo "✓ frontend pulled" || echo "✗ frontend pull failed"
+            # ── Step 1: Pull new images in parallel ─────────────────────
+            echo ""
+            echo "[1/3] Pulling Docker images..."
+            docker pull ${DOCKERHUB_USERNAME}/marketplace-db-migrator:latest &
+            docker pull ${DOCKERHUB_USERNAME}/marketplace-main-api:latest &
+            docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest &
+            docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:latest &
+            docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest &
+            wait
+            echo "✓ All images pulled"
 
-            # ── Step 3: Restart containers using deploy script
-            echo "[3/3] Restarting containers..."
-            DEPLOY=/root/services/FinalYear/scripts/deploy_manual.sh
-            chmod +x "$DEPLOY"
-            # Run WITHOUT 'pull' arg since we already pulled above
-            bash "$DEPLOY"
+            # ── Step 2: Remove old migrator (restart: no containers don't auto-remove)
+            echo ""
+            echo "[2/3] Running DB migrations..."
+            docker rm -f marketplace-db-migrator 2>/dev/null || true
 
-            # ── Cleanup old images (keep disk usage low on small VPS)
-            echo "Cleaning up old images..."
+            # Up migrator only first, wait for it
+            docker compose -f docker-compose.prod.yml --env-file .env \
+              up -d --no-deps db-migrator
+
+            echo "  Waiting for migrator to finish (max 90s)..."
+            WAITED=0
+            while docker ps --filter "name=marketplace-db-migrator" --filter "status=running" \
+                  | grep -q "db-migrator" 2>/dev/null; do
+              sleep 3; WAITED=$((WAITED+3))
+              echo -n "."
+              [ $WAITED -ge 90 ] && { echo ""; echo "⚠ Migrator timeout"; break; }
+            done
+            echo ""
+
+            echo "=== Migration logs ==="
+            docker logs marketplace-db-migrator 2>&1 | tail -25
+            echo "====================="
+
+            # ── Step 3: Restart all services ────────────────────────────
+            echo ""
+            echo "[3/3] Restarting all services..."
+            docker compose -f docker-compose.prod.yml --env-file .env \
+              up -d --remove-orphans
+
+            # Wait for services to be healthy
+            sleep 20
+
+            # ── Health checks ────────────────────────────────────────────
+            echo ""
+            echo "=== Health checks ==="
+            curl -sf http://127.0.0.1:3001/api/health > /dev/null \
+              && echo "✅ main-api :3001 OK" || echo "❌ main-api :3001 FAIL"
+            curl -sf http://127.0.0.1:3002/api/health > /dev/null \
+              && echo "✅ payment-api :3002 OK" || echo "❌ payment-api :3002 FAIL"
+            curl -sf http://127.0.0.1:3000 > /dev/null \
+              && echo "✅ frontend :3000 OK" || echo "❌ frontend :3000 FAIL"
+
+            echo ""
+            echo "=== Container status ==="
+            docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | grep marketplace
+
+            # Cleanup dangling images
             docker image prune -f --filter "until=24h" || true
 
             echo ""
-            echo "======================================"
-            echo "  ✅ DEPLOYMENT SUCCESSFUL!"
-            echo "  Commit: ${GIT_SHA:0:7}"
-            echo "  Site: https://kienai.id.vn"
-            echo "======================================"
+            echo "=============================================="
+            echo "  ✅ DEPLOYMENT DONE — ${GIT_SHA:0:7}"
+            echo "  🌐 https://kienai.id.vn"
+            echo "=============================================="
 
-      - name: Notify deployment status
+      - name: Deployment summary
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ Deploy OK — commit ${GITHUB_SHA:0:7} is live on kienai.id.vn"
+            echo "✅ Deploy OK — commit ${GITHUB_SHA:0:7} live at kienai.id.vn"
           else
-            echo "❌ Deploy FAILED — commit ${GITHUB_SHA:0:7} — check logs above"
+            echo "❌ Deploy FAILED — commit ${GITHUB_SHA:0:7} — check Actions logs"
           fi

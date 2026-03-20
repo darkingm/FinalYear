@@ -18,7 +18,7 @@ import {
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Header } from '@/components/layout/Header';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { usePriceStore } from '@/store';
 
 /* ─── Crypto Ticker Data ────────────────────────────────────── */
@@ -153,16 +153,7 @@ function LeftPanel() {
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
                     style={{ background: `${coin.color}22` }}>
-                    <img
-                      src={getCoinLogo(coin.symbol)}
-                      alt={coin.symbol}
-                      className="w-5 h-5 object-contain"
-                      onError={(e) => {
-                        const t = e.target as HTMLImageElement;
-                        t.style.display = 'none';
-                        t.parentElement!.innerHTML = `<span style="color:${coin.color};font-size:9px;font-weight:900">${coin.symbol.slice(0, 2)}</span>`;
-                      }}
-                    />
+                    <CoinImage symbol={coin.symbol} size={20} />
                   </div>
                   <div>
                     <p className="text-xs font-bold text-white/90">{coin.symbol}</p>
@@ -198,7 +189,7 @@ function LeftPanel() {
               const change = changes[coin.symbol] ?? 0;
               return (
                 <span key={i} className="flex items-center gap-1.5 text-[11px] font-mono flex-shrink-0">
-                  <img src={getCoinLogo(coin.symbol)} alt={coin.symbol} className="w-3.5 h-3.5 object-contain rounded-full" />
+                  <CoinImage symbol={coin.symbol} size={14} className="rounded-full" />
                   <span className="font-bold text-white/60">{coin.symbol}</span>
                   <span className="text-white/90">${price < 10 ? price.toFixed(3) : price.toFixed(2)}</span>
                   <span className={change >= 0 ? 'text-emerald-400' : 'text-red-400'}>

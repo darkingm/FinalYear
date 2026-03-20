@@ -350,7 +350,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
   try {
     const userId = req.user!.user_id;
     const orderId = parseInt(req.params.id);
-    const { status } = req.body;
+    const { status, tracking_number, reason, evidence_urls } = req.body;
 
     const allowedStatuses = ['SHIPPED', 'DELIVERED', 'COMPLETED', 'DISPUTED'];
     if (!allowedStatuses.includes(status)) throw new AppError('Invalid status update', 400);
@@ -362,6 +362,8 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     if (orderResult.rows.length === 0) throw new AppError('Order not found', 404);
 
     const order = orderResult.rows[0];
+
+    // Role-based permission check
     if (order.seller_id === userId && !['SHIPPED', 'DELIVERED'].includes(status)) {
       throw new AppError('Sellers can only mark SHIPPED or DELIVERED', 403);
     }
@@ -369,31 +371,108 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
       throw new AppError('Buyers can only mark COMPLETED or DISPUTED', 403);
     }
 
-    await query(`UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`, [status, orderId]);
+    // Status transition validation
+    // NOTE: PAID → COMPLETED allowed for buyer (skips SHIPPED step when seller doesn't update)
+    // NOTE: ONCHAIN_CONFIRMED → COMPLETED allowed (crypto payment confirmed on-chain)
+    const validTransitions: Record<string, string[]> = {
+      UNPAID: ['CANCELLED'],
+      TX_SUBMITTED: [],
+      TX_FAILED: [],
+      ONCHAIN_CONFIRMED: ['SHIPPED', 'COMPLETED', 'DISPUTED'],  // buyer can confirm from any paid state
+      PAID: ['SHIPPED', 'COMPLETED', 'DISPUTED'],               // buyer can confirm even if seller didn't mark SHIPPED
+      PAID_PAYPAL: ['SHIPPED', 'COMPLETED', 'DISPUTED'],
+      SHIPPED: ['COMPLETED', 'DISPUTED'],
+      DELIVERED: ['COMPLETED', 'DISPUTED'],
+      COMPLETED: [],
+      DISPUTED: [],
+      REFUNDED: [],
+      CANCELLED: [],
+    };
+    const allowedNext = validTransitions[order.status] || [];
+    if (!allowedNext.includes(status)) {
+      throw new AppError(`Cannot transition order from ${order.status} to ${status}`, 400);
+    }
+
+    // Anti-fraud: detect suspicious dispute patterns
+    // If buyer tries to dispute AFTER an on-chain confirm was already recorded, flag it
+    if (status === 'DISPUTED' && order.release_tx_hash) {
+      // Escrow already released — buyer is disputing after money went to seller
+      // Still allow but flag for admin with HIGH priority
+      logger.warn(`FRAUD FLAG: Buyer ${userId} disputing order ${orderId} AFTER escrow release tx ${order.release_tx_hash}`);
+    }
+
+    // Build update query — include tracking_number if provided on SHIPPED
+    if (status === 'SHIPPED' && tracking_number) {
+      await query(
+        `UPDATE orders SET status = $1, tracking_number = $2, updated_at = NOW() WHERE order_id = $3`,
+        [status, tracking_number, orderId]
+      );
+    } else {
+      await query(
+        `UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`,
+        [status, orderId]
+      );
+    }
+
+    // Create dispute record if DISPUTED — so admin can see it in the disputes panel
+    if (status === 'DISPUTED') {
+      const disputeReason = reason || 'Buyer raised a dispute';
+      const evidenceJson = JSON.stringify(evidence_urls || []);
+      const afterRelease = !!order.release_tx_hash; // Detect fraudulent late disputes
+      const priority = afterRelease ? 'fraud_flag' : 'normal';
+      const flaggedReason = afterRelease
+        ? `[⚠️ LATE DISPUTE - escrow already released tx:${order.release_tx_hash}] ${disputeReason}`
+        : disputeReason;
+
+      await query(
+        `INSERT INTO disputes
+           (order_id, raised_by, reason, status, priority, evidence_urls,
+            buyer_wallet, seller_wallet, created_at, updated_at)
+         VALUES ($1, $2, $3, 'open', $4, $5::jsonb, $6, $7, NOW(), NOW())
+         ON CONFLICT (order_id) DO UPDATE
+           SET reason          = EXCLUDED.reason,
+               status          = 'open',
+               priority        = EXCLUDED.priority,
+               evidence_urls   = EXCLUDED.evidence_urls,
+               updated_at      = NOW()`,
+        [
+          orderId,
+          userId,
+          flaggedReason,
+          priority,
+          evidenceJson,
+          order.buyer_wallet || null,
+          order.seller_wallet || null,
+        ]
+      ).catch(err => logger.warn('Failed to create/update dispute record:', err.message));
+    }
+
     await publishEvent('order.status_updated', { order_id: orderId, status, timestamp: Date.now() });
 
-    // Auto-release escrow if order is completed and paid with crypto
+    // Auto-release escrow when buyer confirms delivery (COMPLETED) for crypto orders
     if (status === 'COMPLETED' && order.payment_method === 'crypto') {
       try {
-        const paymentApiUrl = process.env.PAYMENT_API_URL || 'http://localhost:5001/api';
-        await axios.post(`${paymentApiUrl}/crypto-payment/release`, {
+        const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || process.env.PAYMENT_API_URL || 'http://localhost:5001';
+        // Use internal service key — never forward user tokens to internal services (security risk)
+        await axios.post(`${paymentApiUrl}/api/crypto-payment/release`, {
           order_id: orderId
         }, {
           headers: {
-            Authorization: req.headers.authorization // Pass along the user's token
-          }
+            'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY || 'internal-service-key',
+          },
+          timeout: 30000, // 30s for blockchain tx
         });
-        logger.info(`Called payment service to release funds for order ${orderId}`);
+        logger.info(`Escrow release triggered for order ${orderId}`);
       } catch (err: any) {
+        // Don't block status update if release fails — it can be retried by admin
         logger.error(`Failed to trigger escrow release for order ${orderId}:`, err.message);
-        // We don't throw here to not break the status update, but it should be retried or handled
+        // Mark as ONCHAIN_CONFIRMED so admin knows to retry release
+        await query(
+          `UPDATE orders SET status = 'ONCHAIN_CONFIRMED', updated_at = NOW() WHERE order_id = $1`,
+          [orderId]
+        );
       }
     }
-
-    // Auto-refund if order is disputed
-    // In real app, Admin resolves dispute to Refund or Release. For testing, if buyer disputes, we might refund.
-    // However, the rule says: "Quy trình Refund / Giải quyết Tranh chấp: Thưc tế, Admin can thiệp. Hàm refund ở SC."
-    // So the admin will call the refund API directly, we don't auto-refund here.
 
     res.json({ success: true, message: 'Order status updated', status });
   } catch (error: any) {

@@ -1,0 +1,14 @@
+FROM postgres:15-alpine
+
+# Install bash (alpine only has sh by default)
+RUN apk add --no-cache bash
+
+# Copy migration scripts and SQL files
+COPY db-migrate.sh /usr/local/bin/db-migrate
+COPY migrations/  /migrations/
+
+# Make executable
+RUN chmod +x /usr/local/bin/db-migrate
+
+# Run migrations on container start
+ENTRYPOINT ["db-migrate"]

@@ -11,13 +11,14 @@ import {
   Menu, X, ShoppingBag, Wallet, Package,
   LogOut, User, Shield, Bell,
   TrendingUp, Zap, BarChart3, ChevronDown, Copy, Check,
+  Gem, Brain,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import { useTranslation } from 'react-i18next';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import { useCartStore } from '@/store/cart-store';
 import { usePriceStore } from '@/store';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,6 +29,85 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * TickerItem — isolated memo component, only re-renders for its OWN symbol
+ * This is the key fix: each coin renders independently → no full-list re-render
+ * ───────────────────────────────────────────────────────────────────────────── */
+const TICKER_SYMBOLS = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
+
+const TickerCoin = memo(function TickerCoin({ short }: { short: string }) {
+  // Subscribe only to this coin's slice — no re-render from other coins
+  const data = usePriceStore((s) => s.prices[short + 'USDT']);
+  const prevRef = useRef<number>(0);
+  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    const curr = data.price;
+    const prev = prevRef.current;
+    if (prev !== 0 && curr !== prev) {
+      setFlash(curr > prev ? 'up' : 'down');
+      const t = setTimeout(() => setFlash(null), 500);
+      prevRef.current = curr;
+      return () => clearTimeout(t);
+    }
+    prevRef.current = curr;
+  }, [data?.price]);
+
+  if (!data) return null;
+
+  const p = data.price;
+  const formatted = p >= 10000
+    ? p.toLocaleString('en-US', { maximumFractionDigits: 0 })
+    : p >= 100
+      ? p.toFixed(2)
+      : p.toFixed(4);
+
+  const isUp = data.change24h >= 0;
+  const priceColor = flash === 'up' ? 'text-emerald-400' : flash === 'down' ? 'text-red-400' : 'text-foreground';
+
+  return (
+    <Link
+      href={`/trading/${short}USDT`}
+      className="flex items-center gap-1.5 hover:text-foreground transition-colors flex-shrink-0"
+    >
+      <CoinImage symbol={short} size={14} className="rounded-full flex-shrink-0" />
+      <span className="font-semibold text-foreground text-[11px]">{short}</span>
+      <span className={`font-mono text-[11px] price-num ${priceColor}`}>${formatted}</span>
+      <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${isUp ? 'text-emerald-500 bg-emerald-500/10' : 'text-red-500 bg-red-500/10'}`}>
+        {isUp ? '+' : ''}{data.change24h.toFixed(2)}%
+      </span>
+    </Link>
+  );
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * TickerBar — static outer shell: renders once, items re-render independently
+ * Uses pure CSS marquee — NO JS animation loop, pure GPU compositing
+ * ───────────────────────────────────────────────────────────────────────────── */
+const TickerBar = memo(function TickerBar() {
+  const { connect: priceConnect } = usePriceStore();
+  useEffect(() => {
+    priceConnect(TICKER_SYMBOLS.map(s => s + 'USDT'));
+  }, []); // eslint-disable-line
+
+  // Duplicate items for seamless infinite scroll (CSS handles the loop)
+  const items = [...TICKER_SYMBOLS, ...TICKER_SYMBOLS];
+
+  return (
+    <div className="bg-background border-b border-border text-muted-foreground text-xs py-1.5 overflow-hidden hidden md:block">
+      <div className="flex items-center gap-8 animate-marquee whitespace-nowrap w-max pr-8">
+        {items.map((short, idx) => (
+          <TickerCoin key={`${short}-${idx}`} short={short} />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Header
+ * ───────────────────────────────────────────────────────────────────────────── */
 export function Header() {
   const { isAuthenticated, user } = useAuth();
   const { disconnect } = useDisconnect();
@@ -35,27 +115,16 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
   const [scrolled, setScrolled] = useState(false);
-
-  // Shared price store — same feed as homepage/CoinPriceStrip
-  const TICKER_SYMBOLS = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
-  const TICKER_BINANCE = TICKER_SYMBOLS.map(s => s + 'USDT');
-  const { prices: storePrices, connect: priceConnect } = usePriceStore();
-  useEffect(() => { priceConnect(TICKER_BINANCE); }, []);
   const [, setLang] = useState(i18n.language);
   const [addrCopied, setAddrCopied] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  useEffect(() => { setIsMounted(true); }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
-    window.addEventListener('scroll', onScroll);
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
@@ -65,9 +134,15 @@ export function Header() {
     return () => { i18n.off('languageChanged', handler); };
   }, [i18n]);
 
-
   const handleLogout = () => { disconnect(); signOut({ callbackUrl: '/' }); };
 
+  // Click handler for auth-required links — redirect to login if not logged in
+  const handleAuthLink = (href: string) => (e: React.MouseEvent) => {
+    if (!isAuthenticated) {
+      e.preventDefault();
+      router.push(`/login?callbackUrl=${encodeURIComponent(href)}`);
+    }
+  };
 
   const navLinks = [
     { href: '/', label: 'Trang chủ', authRequired: false },
@@ -75,7 +150,13 @@ export function Header() {
     { href: '/trading/BTCUSDT', label: 'Giao dịch', icon: TrendingUp, authRequired: false },
     { href: '/orders', label: 'Đơn hàng', icon: ShoppingBag, authRequired: true },
     { href: '/wallet', label: 'Ví', authRequired: true },
-  ].filter(link => !link.authRequired || isAuthenticated);
+  ];
+
+  // These always show in nav — redirect to login if not authenticated
+  const specialNavLinks = [
+    { href: '/nfts', label: 'NFT', icon: Gem, authRequired: true },
+    { href: '/profile/credit', label: 'AI Credit', icon: Brain, authRequired: true },
+  ];
 
   const isActive = (href: string) => href === '/' ? pathname === '/' : pathname?.startsWith(href);
   const isAdmin = (user as any)?.role === 'admin' || (user as any)?.email === 'admin@marketplace.com';
@@ -88,45 +169,9 @@ export function Header() {
   return (
     <TooltipProvider delayDuration={300}>
       <>
-        {/* Ticker bar — driven by shared usePriceStore */}
-        <div className="bg-background border-b border-border text-muted-foreground text-xs py-1.5 overflow-hidden hidden md:block">
-          <div className="flex items-center gap-8 animate-marquee whitespace-nowrap w-max pr-8 hover:[animation-play-state:paused]">
-            {(() => {
-              const tickers = TICKER_SYMBOLS.map(s => {
-                const d = storePrices[s + 'USDT'];
-                if (!d) return null;
-                return {
-                  s,
-                  p: d.price.toLocaleString(undefined, { maximumFractionDigits: d.price > 100 ? 2 : 4 }),
-                  c: (d.change24h > 0 ? '+' : '') + d.change24h.toFixed(2) + '%',
-                  pos: d.change24h >= 0,
-                };
-              }).filter(Boolean);
-              const items = tickers.length > 0 ? tickers.concat(tickers) : null;
-              return items ? items.map((coin: any, idx: number) => (
-                <Link key={`${coin.s}-${idx}`} href={`/trading/${coin.s}USDT`}
-                  className="flex items-center gap-1.5 hover:text-foreground transition-colors">
-                  <img src={getCoinLogo(coin.s)} alt={coin.s} className="w-4 h-4 object-contain" />
-                  <span className="font-semibold text-foreground">{coin.s}/USDT</span>
-                  <span>${coin.p}</span>
-                  <span className={coin.pos ? 'text-emerald-500 bg-emerald-500/10 px-1 py-0.5 rounded' : 'text-red-500 bg-red-500/10 px-1 py-0.5 rounded'}>
-                    {coin.c}
-                  </span>
-                </Link>
-              )) : (
-                <div className="flex items-center gap-8">
-                  {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                    <div key={i} className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded-full bg-border animate-pulse" />
-                      <div className="w-12 h-3 rounded bg-border animate-pulse" />
-                      <div className="w-16 h-3 rounded bg-border animate-pulse" />
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-        </div>
+        {/* Ticker bar — isolated TickerCoin memos, smooth CSS marquee */}
+        <TickerBar />
+
         <header className={`sticky top-0 z-50 w-full transition-all duration-300 ${headerBg} border-b border-border`}>
           <div className="container mx-auto px-4">
             <div className="flex h-16 items-center justify-between gap-4">
@@ -143,16 +188,41 @@ export function Header() {
 
               {/* Desktop Nav */}
               <nav className="hidden lg:flex items-center gap-0.5">
-                {navLinks.map((link) => (
-                  <Link key={link.href} href={link.href}
+                {navLinks.map((link) => {
+                  const show = !link.authRequired || isAuthenticated;
+                  if (!show) return null;
+                  return (
+                    <Link key={link.href} href={link.href}
+                      className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
+                        ? 'text-[#8247e5] bg-[#8247e5]/10'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
+                        }`}>
+                      {link.icon && <link.icon className="w-3.5 h-3.5" />}
+                      {link.label}
+                    </Link>
+                  );
+                })}
+
+                {/* Special links: always visible, redirect to login if not authed */}
+                {specialNavLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={isAuthenticated ? link.href : `/login?callbackUrl=${encodeURIComponent(link.href)}`}
                     className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
                       ? 'text-[#8247e5] bg-[#8247e5]/10'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                      }`}>
-                    {link.icon && <link.icon className="w-3.5 h-3.5" />}
+                      }`}
+                  >
+                    <link.icon className="w-3.5 h-3.5" />
                     {link.label}
+                    {!isAuthenticated && (
+                      <span className="ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-[#8247e5]/15 text-[#8247e5]">
+                        Login
+                      </span>
+                    )}
                   </Link>
                 ))}
+
                 {isAdmin && (
                   <Link href="/admin"
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${pathname?.startsWith('/admin')
@@ -164,7 +234,6 @@ export function Header() {
                 )}
               </nav>
 
-              {/* Cart icon (quick link) */}
               <div className="flex-1" />
 
               {/* Right Side */}
@@ -187,7 +256,7 @@ export function Header() {
 
                     <Separator orientation="vertical" className="h-6 mx-1" />
 
-                    {/* Web3 wallet — Custom ConnectButton */}
+                    {/* Web3 wallet */}
                     <ConnectButton.Custom>
                       {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
                         if (!mounted) return null;
@@ -196,7 +265,6 @@ export function Header() {
                           <div className="flex items-center gap-1">
                             {connected ? (
                               <>
-                                {/* Chain badge */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <button
@@ -213,7 +281,6 @@ export function Header() {
                                   <TooltipContent>Đổi mạng</TooltipContent>
                                 </Tooltip>
 
-                                {/* Wallet address + account selector */}
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <button className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">
@@ -283,7 +350,7 @@ export function Header() {
                   </>
                 )}
 
-                {/* Profile Dropdown using Radix DropdownMenu */}
+                {/* Profile Dropdown */}
                 {isAuthenticated ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -312,8 +379,6 @@ export function Header() {
                         { href: '/profile', icon: User, label: t('nav.profile') },
                         { href: '/orders', icon: Package, label: t('nav.orders') },
                         { href: '/wallet', icon: Wallet, label: t('nav.wallet') },
-                        { href: '/profile/credit', icon: Shield, label: 'AI Credit Score' },
-                        { href: '/profile/nfts', icon: Zap, label: 'NFT Portfolio' },
                         { href: '/seller/dashboard', icon: BarChart3, label: 'Seller Dashboard' },
                         ...(isAdmin ? [{ href: '/admin', icon: Shield, label: 'Admin Panel' }] : []),
                       ].map((item) => (
@@ -366,24 +431,34 @@ export function Header() {
           {mobileMenuOpen && (
             <div className="lg:hidden border-t border-border bg-background animate-fade-in">
               <div className="container mx-auto px-4 py-4 space-y-3">
-                <div className="flex gap-2">
-                  <Link href="/products" className="flex-1" onClick={() => setMobileMenuOpen(false)}>
-                    <button className="w-full flex items-center gap-2 px-3 py-2.5 bg-muted rounded-xl text-sm text-foreground font-medium">
-                      Xem sản phẩm
-                    </button>
-                  </Link>
-                </div>
-
                 <nav className="flex flex-col gap-1">
-                  {navLinks.map((link) => (
-                    <Link key={link.href} href={link.href}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(link.href) ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                        }`}
-                      onClick={() => setMobileMenuOpen(false)}>
-                      {link.icon && <link.icon className="w-4 h-4" />}
-                      {link.label}
-                    </Link>
-                  ))}
+                  {navLinks.map((link) => {
+                    const href = (!link.authRequired || isAuthenticated)
+                      ? link.href
+                      : `/login?callbackUrl=${encodeURIComponent(link.href)}`;
+                    return (
+                      <Link key={link.href} href={href}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(link.href) ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
+                          }`}
+                        onClick={() => setMobileMenuOpen(false)}>
+                        {link.icon && <link.icon className="w-4 h-4" />}
+                        {link.label}
+                      </Link>
+                    );
+                  })}
+                  {/* Special nav links in mobile too */}
+                  {specialNavLinks.map((link) => {
+                    const href = isAuthenticated ? link.href : `/login?callbackUrl=${encodeURIComponent(link.href)}`;
+                    return (
+                      <Link key={link.href} href={href}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(link.href) ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'}`}
+                        onClick={() => setMobileMenuOpen(false)}>
+                        <link.icon className="w-4 h-4" />
+                        {link.label}
+                        {!isAuthenticated && <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#8247e5]/15 text-[#8247e5]">Login</span>}
+                      </Link>
+                    );
+                  })}
                   {isAdmin && (
                     <Link href="/admin"
                       className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/10"
@@ -409,7 +484,6 @@ export function Header() {
                   </div>
                 ) : (
                   <>
-                    {/* Mobile profile section */}
                     <div className="flex items-center gap-3 py-2">
                       <Avatar className="h-9 w-9 rounded-xl">
                         <AvatarImage src={(user as any)?.image} />

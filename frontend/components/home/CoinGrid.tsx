@@ -5,8 +5,7 @@ import { useCryptoPriceOptimized } from '@/lib/hooks/useCryptoPriceOptimized';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import Image from 'next/image';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 
 const FEATURED_COINS = [
   { symbol: 'BTCUSDT', name: 'Bitcoin', short: 'BTC' },
@@ -46,14 +45,8 @@ export const CoinGrid = memo(function CoinGrid() {
               <Link href={`/trading/${coin.symbol}`}>
                 <div className="bg-card rounded-xl p-4 border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer group">
                   <div className="flex items-center gap-2.5 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center p-1.5 group-hover:bg-primary/10 transition-colors">
-                      <Image
-                        src={getCoinLogo(coin.short)}
-                        alt={coin.name}
-                        width={32}
-                        height={32}
-                        className="w-full h-full object-contain"
-                      />
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors overflow-hidden">
+                      <CoinImage symbol={coin.short} size={28} className="rounded-sm" />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-sm leading-tight">{coin.name}</p>
@@ -66,9 +59,8 @@ export const CoinGrid = memo(function CoinGrid() {
                   </p>
 
                   <div
-                    className={`flex items-center gap-1 text-xs font-medium ${
-                      isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                    }`}
+                    className={`flex items-center gap-1 text-xs font-medium ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                      }`}
                   >
                     {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     <span>{isPositive ? '+' : ''}{price.change24h.toFixed(2)}%</span>

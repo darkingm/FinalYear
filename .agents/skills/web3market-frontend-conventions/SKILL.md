@@ -1,0 +1,230 @@
+---
+name: web3market-frontend-conventions
+description: Use when building or editing frontend components, pages, or UI in the Web3Market project — covers Next.js App Router patterns, wagmi v2 hooks, styling conventions, icon rules, coin logos, and common frontend mistakes to avoid.
+---
+
+# Web3Market — Frontend Conventions
+
+## Tech Stack
+
+- **Framework:** Next.js 14, App Router (NOT Pages Router)
+- **Language:** TypeScript strict
+- **Styling:** Tailwind CSS + CSS variables (dark mode default)
+- **Web3:** wagmi v2 + viem + RainbowKit
+- **Icons:** lucide-react ONLY (no inline SVG, no emoji in cards)
+- **Animations:** framer-motion
+- **Toasts:** sonner (`toast.success/error/info/loading`)
+- **HTTP:** axios via `apiClient` (main-service) and `paymentClient` (payment-service)
+
+## API Clients
+
+```typescript
+import { apiClient, paymentClient } from '@/lib/api/client';
+
+// main-service (port 3001)
+apiClient.get('/api/orders')
+apiClient.post('/api/orders/:id/status', { status: 'COMPLETED' })
+
+// payment-service (port 3002)
+paymentClient.post('/api/payments/crypto/quote', { ... })
+paymentClient.get('/api/payments/crypto/status/:orderId')
+```
+
+**Never** call `fetch()` directly — always use the pre-configured clients with auth interceptors.
+
+## Auth
+
+```typescript
+import { useAuth } from '@/lib/hooks/useAuth';
+const { isAuthenticated, isLoading, user } = useAuth();
+
+// Protect routes:
+useEffect(() => {
+  if (!authLoading && !isAuthenticated) router.push('/login');
+}, [isAuthenticated, authLoading]);
+```
+
+## wagmi v2 Patterns
+
+```typescript
+import { useAccount, useWalletClient, useSwitchChain, useWriteContract, useReadContract } from 'wagmi';
+import { parseUnits, formatUnits, type Address } from 'viem';
+import { keccak256, toBytes } from 'viem';   // ← CORRECT encoding
+
+// orderId for smart contract calls:
+const orderId32 = keccak256(toBytes(order.internal_order_id));
+// NOT: keccak256(stringToHex(...)) — different encoding, causes contract failures
+```
+
+## Icon Rules
+
+| Use case | Component |
+|---|---|
+| All UI icons | `lucide-react` components |
+| Crypto coin logos | `<CoinImage symbol="ETH" />` or `getCoinLogo(symbol)` |
+| Chain/network icons | Emoji strings in `PAYMENT_NETWORKS` config only, NOT in card UI |
+
+```tsx
+// ✅ CORRECT — lucide for UI + CoinImage for crypto
+import { Wallet, CheckCircle, ArrowLeft } from 'lucide-react';
+import { CoinImage } from '@/components/ui/CoinImage';
+
+<Wallet className="w-5 h-5" />
+<CoinImage symbol="ETH" size={24} />
+
+// ❌ WRONG
+<svg>...</svg>              // No manual SVG
+<img src="/eth-icon.png" /> // No static local coin images
+```
+
+**Coin logo CDN:** `assets.coincap.io/assets/icons/{symbol_lowercase}@2x.png`  
+Always include `onError` handler to hide broken logos gracefully.
+
+## `force-dynamic` for Auth Pages
+
+Any page that reads auth state or user data must export:
+```typescript
+export const dynamic = 'force-dynamic';
+```
+Without this, Next.js may cache the page and serve stale/unauthenticated state.
+
+## Client vs Server Components
+
+- Default: Server Component (no `'use client'`)
+- Add `'use client'` when using: hooks, useState, useEffect, wagmi hooks, browser APIs
+- Auth-protected interactive pages: always `'use client'` + `force-dynamic`
+
+## Page File Pattern
+
+```typescript
+'use client';
+export const dynamic = 'force-dynamic';
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useRouter } from 'next/navigation';
+
+export default function MyPage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Auth guard
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) router.push('/login');
+  }, [isAuthenticated, authLoading, router]);
+
+  if (authLoading) return <LoadingSpinner />;
+  // ...
+}
+```
+
+## Color Palette (Tailwind tokens)
+
+| Token | Value | Use |
+|---|---|---|
+| `bg-background` | Dark navy | Page background |
+| `bg-card` | Slightly lighter | Card backgrounds |
+| `text-foreground` | White/light | Primary text |
+| `text-muted-foreground` | Gray | Secondary text |
+| `border-border` | Subtle border | Card outlines |
+| `#f0b90b` | BNB Gold | Primary accent, CTAs, highlights |
+| `emerald-400/500` | Green | Success states, escrow badges |
+| `red-400/500` | Red | Errors, warnings |
+| `amber-400/500` | Amber | Warnings, pending states |
+
+**Never** use plain `red`, `blue`, `green` — always use shade numbers (400, 500, etc.) with opacity.
+
+## Toast Conventions
+
+```typescript
+import { toast } from 'sonner';
+
+toast.success('Thanh toán thành công!');          // Vietnamese user messages
+toast.error(e.response?.data?.message || 'Lỗi'); // Show API error or fallback
+toast.loading('Đang xử lý...', { id: 'key' });   // Loading with ID
+toast.dismiss('key');                              // Dismiss by ID
+toast.info('Thông tin...', { duration: 5000 });   // Auto-dismiss timer
+```
+
+## Motion/Animation Conventions
+
+```tsx
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Standard card enter animation
+<motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+
+// Success/confirmation animation
+<motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+
+// List items with stagger
+<motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+  transition={{ delay: index * 0.05 }}>
+```
+
+## Common Frontend Mistakes
+
+### 1. Using `<Image>` for external CDN URLs
+```tsx
+// ❌ Fails — domain not in next.config domain whitelist
+<Image src="https://assets.coincap.io/..." />
+
+// ✅ Use plain <img> with onError
+<img src={getCoinLogo(symbol)} onError={e => e.currentTarget.style.display='none'} />
+```
+
+### 2. Calling `setSubmitting(false)` in `finally` during polling
+When a function starts polling after an async action, `finally` runs when the outer try/catch exits — before polling finishes. This unlocks the button prematurely.
+```typescript
+// ❌ finally runs too early
+try { ...start polling... } finally { setSubmitting(false); }
+
+// ✅ Only set false after the action phase completes, before polling
+setPayStep('confirming');
+setSubmitting(false);   // ← here, not in finally
+poll();                  // poll runs independently
+```
+
+### 3. Missing `force-dynamic` on auth pages
+Causes: stale data, users see other users' data, redirect loops.  
+Fix: add `export const dynamic = 'force-dynamic'` at top of file.
+
+### 4. Type error in `useReadContract` args
+```typescript
+// The args field MUST use conditional — not undefined assignment
+args: address && quote ? [address, quote.escrow_contract as Address] : undefined,
+query: { enabled: !!address && !!quote }
+```
+
+### 5. orderId encoding mismatch (breaks smart contract)
+```typescript
+// ❌ Wrong
+const id32 = keccak256(stringToHex(order.internal_order_id));
+
+// ✅ Correct — matches backend ethers.toUtf8Bytes
+const id32 = keccak256(toBytes(order.internal_order_id));
+```
+
+## PayStep State Machine (checkout page)
+
+```
+idle → signing (MetaMask popup)
+     → submitted (TX in mempool, UI unlocks)
+     → confirming (polling for blockchain confirmation)
+     → done (confirmed, auto-redirect)
+     → failed (show error + retry)
+```
+
+`setSubmitting(false)` call goes AFTER `setPayStep('submitted')`, NOT in `finally`.
+
+## Useful Utility Locations
+
+| Utility | Path |
+|---|---|
+| API clients | `frontend/lib/api/client.ts` |
+| Auth hook | `frontend/lib/hooks/useAuth.ts` |
+| Coin logos | `frontend/lib/utils/coin-logos.ts` |
+| Web3 config | `frontend/lib/web3/config.ts` |
+| CoinImage component | `frontend/components/ui/CoinImage.tsx` |
+| Header | `frontend/components/layout/Header.tsx` |
+| Footer | `frontend/components/layout/Footer.tsx` |

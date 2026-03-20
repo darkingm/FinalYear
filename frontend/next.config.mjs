@@ -53,7 +53,10 @@ const nextConfig = {
     optimizePackageImports: [
       'lucide-react',
       '@rainbow-me/rainbowkit',
+      'wagmi',
+      '@paypal/react-paypal-js',
       'framer-motion',
+      'viem',
     ],
     missingSuspenseWithCSRBailout: false,
   },
@@ -70,6 +73,32 @@ const nextConfig = {
         net: false,
         tls: false,
         crypto: false,
+      };
+
+      // Split heavy Web3 + PayPal libraries into their own lazy-loaded chunks.
+      // This prevents them from being inlined into app/layout.js.
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization?.splitChunks,
+          cacheGroups: {
+            ...config.optimization?.splitChunks?.cacheGroups,
+            web3Vendor: {
+              name: 'vendor-web3',
+              test: /[\\/]node_modules[\\/](wagmi|viem|@wagmi|@rainbow-me|@walletconnect|@coinbase|@metamask)[^\\/]*[\\/]/,
+              chunks: 'all',
+              priority: 30,
+              reuseExistingChunk: true,
+            },
+            paypalVendor: {
+              name: 'vendor-paypal',
+              test: /[\\/]node_modules[\\/]@paypal[\\/]/,
+              chunks: 'all',
+              priority: 30,
+              reuseExistingChunk: true,
+            },
+          },
+        },
       };
     }
 

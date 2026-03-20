@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import {
   Package, Upload, X, Plus, Minus, RefreshCw, ChevronRight,
   DollarSign, Tag, Layers, ImageIcon, Coins, Loader2, CheckCircle,
@@ -351,8 +351,7 @@ export default function CreateProductPage() {
                             style={sel ? { borderColor: `${t.color}60`, background: `${t.color}12` } : {}}
                             className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-sm font-bold transition-all ${sel ? '' : 'border-border hover:border-border/80 bg-transparent'}`}
                           >
-                            <img src={getCoinLogo(t.symbol)} alt={t.symbol} className="w-5 h-5 object-contain rounded-full"
-                              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <CoinImage symbol={t.symbol} size={20} className="flex-shrink-0" />
                             <span style={sel ? { color: t.color } : {}}>{t.symbol}</span>
                             {sel
                               ? <Minus className="w-3 h-3 opacity-50" />
@@ -380,8 +379,7 @@ export default function CreateProductPage() {
                             return (
                               <div key={sym} className="flex items-center gap-3">
                                 <div className="flex items-center gap-2 w-24 flex-shrink-0">
-                                  <img src={getCoinLogo(sym)} alt={sym} className="w-5 h-5 object-contain rounded-full"
-                                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <CoinImage symbol={sym} size={20} className="flex-shrink-0" />
                                   <span className="text-sm font-bold" style={{ color: token?.color }}>{sym}</span>
                                 </div>
                                 <input
@@ -479,8 +477,7 @@ export default function CreateProductPage() {
                       selectedTokens.map(sym => (
                         <div key={sym} className="flex items-center justify-between p-2.5 bg-background rounded-xl border border-border">
                           <div className="flex items-center gap-2">
-                            <img src={getCoinLogo(sym)} alt={sym} className="w-4 h-4 rounded-full object-contain"
-                              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <CoinImage symbol={sym} size={16} className="flex-shrink-0" />
                             <span className="font-semibold">{sym}</span>
                           </div>
                           <span className="font-mono font-bold text-[#f0b90b]">

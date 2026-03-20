@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { usePriceStore } from '@/store';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 import Link from 'next/link';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
@@ -55,13 +55,7 @@ function TickerItem({ symbol }: { symbol: string }) {
       href={`/trading/${symbol}`}
       className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-muted/60 transition-colors group flex-shrink-0"
     >
-      {/* Real coin logo from coincap CDN */}
-      <img
-        src={getCoinLogo(coinSymbol)}
-        alt={coinSymbol}
-        className="w-5 h-5 rounded-full object-contain flex-shrink-0"
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-      />
+      <CoinImage symbol={coinSymbol} size={20} className="rounded-full flex-shrink-0" />
 
       <span className="text-xs font-bold text-muted-foreground group-hover:text-foreground transition-colors">
         {coinSymbol}
@@ -70,8 +64,8 @@ function TickerItem({ symbol }: { symbol: string }) {
       {/* Price with flash color on update */}
       <span
         className={`font-mono text-xs font-semibold tabular-nums transition-colors duration-300 ${flash === 'up' ? 'text-emerald-400' :
-            flash === 'down' ? 'text-red-400' :
-              'text-foreground'
+          flash === 'down' ? 'text-red-400' :
+            'text-foreground'
           }`}
       >
         ${formatPrice(price.price)}

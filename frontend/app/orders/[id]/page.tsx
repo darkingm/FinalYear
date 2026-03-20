@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient, paymentClient } from '@/lib/api/client';
@@ -12,9 +12,15 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Package, ArrowLeft, CheckCircle, XCircle, Loader2, Truck, Check, AlertTriangle, Star } from 'lucide-react';
+import {
+  Package, ArrowLeft, CheckCircle, XCircle, Loader2, Truck, Check,
+  AlertTriangle, Star, Shield, ExternalLink, Upload, ImagePlus, X,
+  Info, Clock, FileText
+} from 'lucide-react';
 import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/order/OrderStepper';
 import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseAbi, keccak256, toBytes } from 'viem';
 
 interface Order {
   order_id: number;
@@ -34,6 +40,11 @@ interface Order {
   seller_name: string;
   created_at: string;
   paypal_order_id?: string;
+  tx_hash?: string;
+  tracking_number?: string;
+  chain_id?: number;
+  escrow_contract?: string;
+  amount_token?: number;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,6 +62,36 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [trackingInput, setTrackingInput] = useState('');
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeImages, setDisputeImages] = useState<string[]>([]); // Cloudinary URLs
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Wagmi for on-chain buyerConfirmDelivery
+  const { isConnected } = useAccount();
+  const CONFIRM_ABI = parseAbi(['function buyerConfirmDelivery(bytes32 orderId) external']);
+  const { writeContract, data: confirmTxData, isPending: confirmPending } = useWriteContract();
+  const { isLoading: confirmWaiting, isSuccess: confirmSuccess } = useWaitForTransactionReceipt({ hash: confirmTxData });
+
+  // After on-chain confirm, update backend
+  useEffect(() => {
+    if (!confirmSuccess || !order) return;
+    // Use PATCH /:id/status — state machine now allows PAID/ONCHAIN_CONFIRMED → COMPLETED
+    apiClient.patch(`/api/orders/${order.order_id}/status`, { status: 'COMPLETED' })
+      .then(() => {
+        toast.success('✅ Xác nhận nhận hàng thành công! Escrow đang giải ngân cho người bán.');
+        fetchOrder();
+      })
+      .catch((e: any) => {
+        const msg = e.response?.data?.message || 'Lỗi cập nhật backend';
+        toast.error(`Cập nhật thất bại: ${msg}`);
+        // Don't panic — on-chain tx succeeded, admin can manually release
+        toast.info('Giao dịch on-chain thành công. Admin sẽ xác nhận thủ công nếu cần.', { duration: 8000 });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmSuccess]);
 
   const isInternalId = UUID_REGEX.test(id);
 
@@ -125,14 +166,82 @@ export default function OrderDetailPage() {
     }
   };
 
-  const handleUpdateStatus = async (newStatus: OrderStatus) => {
+  const handleUpdateStatus = async (newStatus: OrderStatus, extra?: Record<string, string>) => {
     setActionLoading(true);
     try {
-      await apiClient.patch(`/api/orders/${order?.order_id}/status`, { status: newStatus });
+      await apiClient.patch(`/api/orders/${order?.order_id}/status`, { status: newStatus, ...extra });
       toast.success('Cập nhật trạng thái thành công!');
       fetchOrder();
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Cập nhật thất bại');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // On-chain buyer confirm delivery
+  const handleOnChainConfirm = () => {
+    if (!order?.escrow_contract || !order?.chain_id) {
+      // Fallback: backend-only for non-crypto orders (PayPal, etc.)
+      handleUpdateStatus('COMPLETED');
+      return;
+    }
+    if (!isConnected) {
+      toast.error('Kết nối ví MetaMask trước');
+      return;
+    }
+    // IMPORTANT: orderId32 must match exactly what the backend/contract uses:
+    // ethers.keccak256(ethers.toUtf8Bytes(internal_order_id))
+    // toBytes() from viem encodes as UTF-8, matching ethers.toUtf8Bytes()
+    const orderId32 = keccak256(toBytes(order.internal_order_id));
+    writeContract({
+      address: order.escrow_contract as `0x${string}`,
+      abi: CONFIRM_ABI,
+      functionName: 'buyerConfirmDelivery',
+      args: [orderId32],
+      chainId: order.chain_id as any,
+    });
+  };
+
+  // Upload evidence image to Cloudinary
+  const uploadEvidenceImage = async (file: File) => {
+    setUploadingImg(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', 'marketplace_evidence'); // unsigned preset
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'deyjlti3v';
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error(data.error?.message || 'Upload thất bại');
+      setDisputeImages(prev => [...prev, data.secure_url]);
+      toast.success('Ảnh đã tải lên thành công');
+    } catch (e: any) {
+      toast.error(e.message || 'Tải ảnh thất bại');
+    } finally {
+      setUploadingImg(false);
+    }
+  };
+
+  const handleDispute = async () => {
+    if (!disputeReason.trim()) { toast.error('Vui lòng nhập lý do khiếu nại'); return; }
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/api/orders/${order?.order_id}/status`, {
+        status: 'DISPUTED',
+        reason: disputeReason,
+        evidence_urls: disputeImages,   // ← gửi URLs ảnh bằng chứng
+      });
+      toast.success('✅ Đã gửi khiếu nại — Admin sẽ xem xét trong 24h. Tiền vẫn giữ trong escrow.');
+      setShowDisputeForm(false);
+      setDisputeReason('');
+      setDisputeImages([]);
+      fetchOrder();
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Gửi khiếu nại thất bại');
     } finally {
       setActionLoading(false);
     }
@@ -363,16 +472,49 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
+          {/* ── ESCROW INFO BANNER (PAID) ─── */}
+          {order.status === 'PAID' && order.payment_method === 'crypto' && (
+            <div className="p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-start gap-3 mb-6">
+              <Shield className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-emerald-300 text-sm">Tiền đang được giữ trong Escrow Contract</p>
+                <p className="text-xs text-emerald-400/70 mt-1">Tiền của bạn đã được khóa an toàn trong hợp đồng thông minh. Người bán sẽ nhận được tiền sau khi bạn xác nhận nhận hàng.</p>
+                {order.tx_hash && (
+                  <a href={`https://etherscan.io/tx/${order.tx_hash}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:underline mt-1">
+                    TX: {order.tx_hash.slice(0, 12)}...{order.tx_hash.slice(-8)}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── TRACKING INFO CARD (SHIPPED) ─── */}
+          {order.status === 'SHIPPED' && (
+            <div className="p-5 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Truck className="w-4 h-4 text-indigo-400" />
+                <p className="font-semibold text-indigo-300 text-sm">Hàng đang trên đường giao</p>
+              </div>
+              {order.tracking_number ? (
+                <p className="text-xs text-indigo-400/80">Mã vận đơn: <span className="font-mono font-bold text-indigo-300">{order.tracking_number}</span></p>
+              ) : (
+                <p className="text-xs text-indigo-400/70">Người bán chưa cập nhật mã vận đơn.</p>
+              )}
+            </div>
+          )}
+
           {order.status === 'UNPAID' && isBuyer && (
             <Link href={`/checkout/${order.order_id}`}>
-              <button className="w-full relative overflow-hidden group py-4 bg-gradient-to-r from-[#f0b90b] to-[#f3ba2f] text-black font-bold rounded-2xl text-base transition-all shadow-[0_4px_20px_rgba(240,185,11,0.2)] hover:shadow-[0_4px_30px_rgba(240,185,11,0.35)] hover:-translate-y-0.5">
+              <button className="w-full relative overflow-hidden group py-4 bg-gradient-to-r from-[#f0b90b] to-[#f3ba2f] text-black font-bold rounded-2xl text-base transition-all shadow-[0_4px_20px_rgba(240,185,11,0.2)] hover:shadow-[0_4px_30px_rgba(240,185,11,0.35)] hover:-translate-y-0.5 mb-6">
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
                 <span className="relative z-10 block text-center">Tiếp tục thanh toán an toàn &rarr;</span>
               </button>
             </Link>
           )}
 
-          {/* Action Buttons for Seller */}
+          {/* ── SELLER: Mark SHIPPED ─── */}
           {isSeller && (order.status === 'PAID' || order.status === 'ONCHAIN_CONFIRMED') && (
             <div className="p-6 bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-3xl shadow-lg shadow-blue-500/5 mb-6 border border-blue-500/20 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-3xl rounded-full" />
@@ -380,10 +522,19 @@ export default function OrderDetailPage() {
                 <h3 className="font-bold text-lg mb-2 text-blue-400 flex items-center gap-2">
                   <Package className="w-5 h-5" /> Thao tác dành cho người bán
                 </h3>
-                <p className="text-sm text-blue-200/70 mb-5">Người mua đã thanh toán. Vui lòng đóng gói và giao hàng qua các đơn vị vận chuyển hỗ trợ.</p>
+                <p className="text-sm text-blue-200/70 mb-4">Người mua đã thanh toán. Tiền đang khóa trong escrow cho đến khi giao hàng xong.</p>
+                <div className="mb-4">
+                  <label className="text-xs text-blue-300/70 font-semibold mb-1.5 block">Mã vận đơn (tùy chọn)</label>
+                  <input
+                    value={trackingInput}
+                    onChange={e => setTrackingInput(e.target.value)}
+                    placeholder="VD: VN123456789..."
+                    className="w-full px-3 py-2.5 bg-blue-900/20 border border-blue-500/20 rounded-xl text-sm text-white placeholder-blue-400/40 focus:outline-none focus:border-blue-400/50"
+                  />
+                </div>
                 <button
-                  className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.39)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.23)] hover:-translate-y-0.5 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                  onClick={() => handleUpdateStatus('SHIPPED')}
+                  className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(59,130,246,0.39)] hover:-translate-y-0.5 flex items-center justify-center gap-2 disabled:opacity-70"
+                  onClick={() => handleUpdateStatus('SHIPPED', trackingInput ? { tracking_number: trackingInput } : {})}
                   disabled={actionLoading}
                 >
                   {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Truck className="w-5 h-5" />}
@@ -393,35 +544,148 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {/* Action Buttons for Buyer */}
-          {isBuyer && order.status === 'SHIPPED' && (
+          {/* ── BUYER: Confirm Delivery (on-chain) ─── */}
+          {/* Show when SHIPPED, or when PAID and buyer hasn't received goods after a while */}
+          {isBuyer && (order.status === 'SHIPPED' || order.status === 'PAID') && (
             <div className="p-6 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-3xl shadow-lg shadow-emerald-500/5 mb-6 border border-emerald-500/20 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
               <div className="relative z-10">
                 <h3 className="font-bold text-lg mb-2 text-emerald-400 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5" /> Xác nhận nhận hàng
                 </h3>
-                <p className="text-sm text-emerald-200/70 mb-5 leading-relaxed">
-                  Bạn đã nhận được sản phẩm và hoàn toàn hài lòng với chất lượng?
-                  Xác nhận ngay để hợp đồng thông minh tự động giải ngân cho người bán.
+                {order.status === 'PAID' && (
+                  <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <p className="text-xs text-amber-300">⚠️ Người bán chưa cập nhật trạng thái giao hàng. Nếu bạn đã nhận được hàng, bạn vẫn có thể xác nhận để giải ngân cho người bán.</p>
+                  </div>
+                )}
+                <p className="text-sm text-emerald-200/70 mb-2 leading-relaxed">
+                  Bạn đã nhận được sản phẩm? Nhấn xác nhận để hợp đồng thông minh tự động giải ngân cho người bán.
                 </p>
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <p className="text-xs text-red-300 font-semibold">⚠️ Lưu ý quan trọng: Sau khi xác nhận, tiền sẽ chuyển thẳng cho người bán và KHÔNG THỂ hoàn lại. Chỉ nhấn khi bạn đã nhận hàng và hài lòng.</p>
+                </div>
+                {!isConnected && order.payment_method === 'crypto' && (
+                  <p className="text-xs text-yellow-400/80 mb-3">&#9888; Kết nối MetaMask để xác nhận trustlessly on-chain.</p>
+                )}
                 <div className="flex flex-col sm:flex-row gap-3">
+                  {/* Dispute button */}
                   <button
-                    className="flex-1 py-3.5 px-4 bg-transparent border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                    onClick={() => handleUpdateStatus('DISPUTED')}
-                    disabled={actionLoading}
+                    className="flex-1 py-3.5 px-4 bg-transparent border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+                    onClick={() => setShowDisputeForm(v => !v)}
                   >
-                    <AlertTriangle className="w-4 h-4" /> Báo cáo / Yêu cầu hoàn tiền
+                    <AlertTriangle className="w-4 h-4" /> Khiếu nại / Hoàn tiền
                   </button>
+                  {/* Confirm delivery button */}
                   <button
-                    className="flex-1 py-3.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.23)] hover:-translate-y-0.5 flex items-center justify-center gap-2 disabled:opacity-70"
-                    onClick={() => handleUpdateStatus('COMPLETED')}
-                    disabled={actionLoading}
+                    className="flex-1 py-3.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] hover:-translate-y-0.5 flex items-center justify-center gap-2 disabled:opacity-70"
+                    onClick={handleOnChainConfirm}
+                    disabled={confirmPending || confirmWaiting}
                   >
-                    {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                    Đã Nhận Hàng Tốt
+                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />Chờ MetaMask...</> :
+                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xác nhận on-chain...</> :
+                        <><Check className="w-5 h-5" />Đã Nhận Hàng — Thanh toán cho Người Bán</>}
                   </button>
                 </div>
+
+                {/* Dispute form */}
+                {showDisputeForm && (
+                  <div className="mt-4 p-5 bg-red-950/40 border border-red-500/20 rounded-2xl space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-4 h-4 text-red-400" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-red-300 text-sm">Gửi khiếu nại</p>
+                        <p className="text-xs text-red-400/70 mt-0.5">Tiền sẽ tiếp tục đóng băng trong escrow cho đến khi Admin phán quyết.</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                      <div className="flex items-start gap-2">
+                        <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-amber-300">Lưu ý về tính minh bạch</p>
+                          <ul className="text-xs text-amber-400/80 space-y-1 list-disc list-inside">
+                            <li>Mọi khiếu nại đều được ghi lại trên hệ thống vĩnh viễn</li>
+                            <li>Admin có thể xem toàn bộ lịch sử giao dịch blockchain</li>
+                            <li>Khiếu nại gian lận sẽ bị ghi vào Credit Score và có thể bị khóa tài khoản</li>
+                            <li>Nếu đã nhận hàng, Admin phát hiện qua TX on-chain — khiếu nại cố tình sẽ bị từ chối</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-red-300 font-semibold mb-2 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />Mô tả vấn đề <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={disputeReason}
+                        onChange={e => setDisputeReason(e.target.value)}
+                        placeholder="Mô tả chi tiết: hàng không đúng mô tả, hàng hỏng, không nhận được hàng..."
+                        rows={4}
+                        className="w-full px-3 py-2.5 bg-red-900/20 border border-red-500/20 rounded-xl text-sm text-white placeholder-red-400/40 focus:outline-none focus:border-red-400/50 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-red-300 font-semibold mb-2 flex items-center gap-1.5">
+                        <ImagePlus className="w-3.5 h-3.5" />Ảnh bằng chứng (tối đa 5) — <span className="text-red-400/70 font-normal">Khuyến khích để tăng tính thuyết phục</span>
+                      </label>
+                      {disputeImages.length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+                          {disputeImages.map((url, idx) => (
+                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-red-500/20 bg-black/30 group">
+                              <img src={url} alt={`Bằng chứng ${idx + 1}`} className="w-full h-full object-cover" />
+                              <button onClick={() => setDisputeImages(prev => prev.filter((_, i) => i !== idx))}
+                                className="absolute top-1 right-1 w-5 h-5 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <X className="w-3 h-3 text-white" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {disputeImages.length < 5 && (
+                        <>
+                          <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) uploadEvidenceImage(f); e.target.value = ''; }} />
+                          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingImg}
+                            className="w-full py-3 border border-dashed border-red-500/30 rounded-xl text-sm text-red-400/70 hover:text-red-300 hover:border-red-500/50 hover:bg-red-500/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                            {uploadingImg
+                              ? <><Loader2 className="w-4 h-4 animate-spin" />Đang tải ảnh...</>
+                              : <><Upload className="w-4 h-4" />Chọn ảnh bằng chứng ({disputeImages.length}/5)</>}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <div className="p-3 bg-white/3 border border-white/5 rounded-xl">
+                      <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Quy trình xử lý</p>
+                      <div className="space-y-1.5">
+                        {[
+                          { n: '1', t: 'Bạn gửi khiếu nại + ảnh bằng chứng', c: 'text-red-400' },
+                          { n: '2', t: 'Admin xem xét, liên hệ cả hai bên trong 24h', c: 'text-amber-400' },
+                          { n: '3', t: 'Admin phán quyết: hoàn tiền bạn HOẶC giải ngân người bán', c: 'text-blue-400' },
+                          { n: '4', t: 'Bên thua kiện bị trừ Credit Score vĩnh viễn', c: 'text-gray-400' },
+                        ].map(({ n, t, c }) => (
+                          <div key={n} className="flex items-start gap-2">
+                            <span className={`text-xs font-bold ${c} flex-shrink-0 w-4`}>{n}.</span>
+                            <span className="text-xs text-gray-500">{t}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => { setShowDisputeForm(false); setDisputeReason(''); setDisputeImages([]); }}
+                        className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 text-sm hover:bg-white/5 transition-all">
+                        Hủy
+                      </button>
+                      <button onClick={handleDispute} disabled={actionLoading || !disputeReason.trim()}
+                        className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                        {actionLoading
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />Đang gửi...</>
+                          : <><AlertTriangle className="w-4 h-4" />Gửi Khiếu Nại & Đóng Băng Tiền</>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
           )}

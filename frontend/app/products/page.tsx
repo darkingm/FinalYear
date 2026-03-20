@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
 import { useChainId } from 'wagmi';
-import { getCoinLogo } from '@/lib/utils/coin-logos';
+import { CoinImage } from '@/components/ui/CoinImage';
 
 
 
@@ -190,12 +190,7 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
                           style={{ background: `${chain.color}22`, color: chain.color }}
                         >
                           {formatTokenAmount(parseFloat(t.price_in_token), t.symbol)}
-                          <img
-                            src={getCoinLogo(t.symbol)}
-                            alt={t.symbol}
-                            className="w-3.5 h-3.5 object-contain flex-shrink-0 rounded-full"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
+                          <CoinImage symbol={t.symbol} size={14} className="flex-shrink-0" />
                         </span>
                       ))}
                   </div>
@@ -203,12 +198,7 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
                   /* fallback: compute MATIC price from USD */
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black" style={{ background: `${chain.color}22`, color: chain.color }}>
                     {maticFormatted}
-                    <img
-                      src={getCoinLogo('MATIC')}
-                      alt="MATIC"
-                      className="w-3.5 h-3.5 object-contain flex-shrink-0 rounded-full"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
+                    <CoinImage symbol="MATIC" size={14} className="flex-shrink-0" />
                   </span>
                 )}
                 {isTestnet && <p className="text-[10px] text-white/40 mt-0.5">(testnet)</p>}

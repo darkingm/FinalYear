@@ -313,7 +313,14 @@
 
 /* ── Marquee ticker ── */
 .animate-marquee {
-  animation: marquee 40s linear infinite;
+  animation: marquee 55s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
 }
 
 @keyframes marquee {
@@ -324,6 +331,22 @@
   100% {
     transform: translateX(-50%);
   }
+}
+
+/* Price number smooth transition */
+.price-num {
+  transition: color 0.4s ease;
+  font-variant-numeric: tabular-nums;
+}
+
+/* scrollbar-none utility */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Dark card styles ── */
@@ -349,8 +372,15 @@
 }
 
 @keyframes rainbow-shift {
-  0%, 100% { background-position: 0% 50%; }
-  50%       { background-position: 100% 50%; }
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 /* ── Purple rainbow button ── */
@@ -385,7 +415,7 @@
   border-radius: 9999px;
   filter: blur(80px);
   pointer-events: none;
-  background: radial-gradient(circle, rgba(130,71,229,0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(130, 71, 229, 0.15) 0%, transparent 70%);
 }
 
 /* ── Depth bar animation ── */

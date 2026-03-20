@@ -607,11 +607,18 @@ export class CryptoPaymentService {
     );
 
     if (confirmations >= requiredConfirmations) {
-      // Mark on-chain confirmed
+      // Funds are now locked in EscrowCore contract.
+      // Status → PAID: waiting for seller to ship, then buyer to confirm delivery.
+      // Release happens ONLY when buyer calls confirm delivery (COMPLETED → backend calls releasePayment).
       await mainQuery(
-        `UPDATE orders SET status = 'ONCHAIN_CONFIRMED', updated_at = NOW() 
+        `UPDATE orders SET status = 'PAID', updated_at = NOW() 
          WHERE order_id = $1`,
         [payment.order_id]
+      );
+
+      await query(
+        `UPDATE payments SET status = 'confirmed', updated_at = NOW() WHERE tx_hash = $1`,
+        [txHash]
       );
 
       await publishEvent('payment.validated', {
@@ -620,36 +627,7 @@ export class CryptoPaymentService {
         confirmations,
       });
 
-      logger.info('Transaction verified — triggering auto-release', { txHash, confirmations });
-
-      // ── AUTO-RELEASE: transfer funds from escrow → seller ──────────────────
-      // Fire-and-forget with error handling: if release fails, order stays
-      // ONCHAIN_CONFIRMED so admin can retry manually. Funds are never lost.
-      setImmediate(async () => {
-        try {
-          await this.releaseFunds(payment.order_id);
-
-          // After successful release, update order to PAID
-          await mainQuery(
-            `UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE order_id = $1`,
-            [payment.order_id]
-          );
-
-          await publishEvent('payment.released', {
-            order_id: payment.order_id,
-            tx_hash: txHash,
-          });
-
-          logger.info('Escrow auto-released successfully', { order_id: payment.order_id });
-        } catch (releaseErr: any) {
-          // Non-fatal: log and leave at ONCHAIN_CONFIRMED for admin to retry via
-          // POST /api/crypto-payment/release { order_id }
-          logger.error('Auto-release failed — order stays ONCHAIN_CONFIRMED for manual retry', {
-            order_id: payment.order_id,
-            error: releaseErr.message,
-          });
-        }
-      });
+      logger.info('Transaction verified — funds locked in escrow, awaiting delivery', { txHash, confirmations, order_id: payment.order_id });
 
       return {
         verified: true,
@@ -731,10 +709,10 @@ export class CryptoPaymentService {
 
       logger.info('Funds released from Escrow', { orderId, txHash: tx.hash });
 
-      // Mark order as PAID (funds transferred to seller)
+      // Mark order as COMPLETED (funds successfully transferred to seller)
       await mainQuery(
-        `UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE order_id = $1`,
-        [orderId]
+        `UPDATE orders SET status = 'COMPLETED', release_tx_hash = $1, updated_at = NOW() WHERE order_id = $2`,
+        [tx.hash, orderId]
       );
 
       await publishEvent('payment.released', { order_id: orderId, tx_hash: tx.hash });
