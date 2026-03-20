@@ -13,6 +13,7 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true, // Needed for RWAFactory — avoids "stack too deep" with many params
     },
   },
   networks: {

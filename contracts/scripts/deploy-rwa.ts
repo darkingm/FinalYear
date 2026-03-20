@@ -1,98 +1,90 @@
 import { ethers } from "hardhat";
 
 /**
- * Full deployment script for Web3Market RWA contracts:
- *   1. EscrowCore  — multi-token escrow with SBT dynamic fees
- *   2. ProductNFT  — ERC721 + ERC2981 royalty + Physical-Digital Link
- *   3. CreditScoreSBT — ERC5192 Soulbound Token credit score
+ * Deploy the full RWA tokenization stack:
+ *   1. ComplianceRegistry
+ *   2. RWAFactory (references ComplianceRegistry)
+ *   3. (Optional) A demo asset for testing
  *
- * After deploy: wires SBT into EscrowCore and grants backend wallet MINTER + UPDATER roles.
+ * Usage:
+ *   npx hardhat run scripts/deploy-rwa.ts --network vps
+ *   npx hardhat run scripts/deploy-rwa.ts --network amoy
+ *   DEPLOY_DEMO_ASSET=true npx hardhat run scripts/deploy-rwa.ts --network vps
  */
 async function main() {
   const [deployer] = await ethers.getSigners();
-  const backendWallet = process.env.BACKEND_WALLET_ADDRESS || deployer.address;
-  const feeVault      = process.env.FEE_VAULT_ADDRESS      || deployer.address;
 
-  console.log("=".repeat(60));
-  console.log(" Web3Market RWA Deployment");
-  console.log("=".repeat(60));
-  console.log("Deployer   :", deployer.address);
-  console.log("Backend    :", backendWallet);
-  console.log("Fee Vault  :", feeVault);
+  console.log("\n=====================================");
+  console.log("  RWA Tokenization — Deployment");
+  console.log("=====================================");
+  console.log("Deployer :", deployer.address);
   const balance = await deployer.provider.getBalance(deployer.address);
-  console.log("Balance    :", ethers.formatEther(balance), "MATIC/ETH\n");
+  console.log("Balance  :", ethers.formatEther(balance), "ETH");
 
-  // ── 1. EscrowCore ──────────────────────────────────────────────────────────
-  console.log("1/3. Deploying EscrowCore...");
-  const EscrowCore = await ethers.getContractFactory("EscrowCore");
-  const escrow = await EscrowCore.deploy(feeVault);
-  await escrow.waitForDeployment();
-  const escrowAddr = await escrow.getAddress();
-  console.log("     EscrowCore :", escrowAddr);
+  const OPERATOR = process.env.OPERATOR_ADDRESS || deployer.address;
+  console.log("Operator :", OPERATOR);
 
-  // ── 2. ProductNFT ───────────────────────────────────────────────────────────
-  console.log("2/3. Deploying ProductNFT...");
-  const ProductNFT = await ethers.getContractFactory("ProductNFT");
-  const productNFT = await ProductNFT.deploy(feeVault);
-  await productNFT.waitForDeployment();
-  const productNFTAddr = await productNFT.getAddress();
-  console.log("     ProductNFT :", productNFTAddr);
+  // ── 1. ComplianceRegistry ─────────────────────────────────────
+  console.log("\n[1/3] Deploying ComplianceRegistry...");
+  const ComplianceRegistry = await ethers.getContractFactory("ComplianceRegistry");
+  const registry = await ComplianceRegistry.deploy(deployer.address) as any;
+  await registry.waitForDeployment();
+  const registryAddr = await registry.getAddress();
+  console.log("✅ ComplianceRegistry:", registryAddr);
 
-  // ── 3. CreditScoreSBT ───────────────────────────────────────────────────────
-  console.log("3/3. Deploying CreditScoreSBT...");
-  const CreditScoreSBT = await ethers.getContractFactory("CreditScoreSBT");
-  const sbt = await CreditScoreSBT.deploy();
-  await sbt.waitForDeployment();
-  const sbtAddr = await sbt.getAddress();
-  console.log("     CreditScoreSBT:", sbtAddr);
+  const KYC_OP_ROLE = ethers.keccak256(ethers.toUtf8Bytes("KYC_OPERATOR_ROLE"));
+  await (await registry.grantRole(KYC_OP_ROLE, OPERATOR)).wait(1);
+  console.log("   KYC_OPERATOR_ROLE → OPERATOR wallet");
 
-  // ── Wire contracts ───────────────────────────────────────────────────────────
-  console.log("\nWiring contracts...");
+  // ── 2. RWAFactory ─────────────────────────────────────────────
+  console.log("\n[2/3] Deploying RWAFactory...");
+  const RWAFactory = await ethers.getContractFactory("RWAFactory");
+  const factory = await RWAFactory.deploy(registryAddr, deployer.address) as any;
+  await factory.waitForDeployment();
+  const factoryAddr = await factory.getAddress();
+  console.log("✅ RWAFactory:", factoryAddr);
 
-  // Set SBT contract in EscrowCore for dynamic fees
-  const tx1 = await escrow.setSBTContract(sbtAddr);
-  await tx1.wait();
-  console.log("  EscrowCore.setSBTContract:", sbtAddr);
+  const ISSUER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("ISSUER_ROLE"));
+  await (await factory.grantRole(ISSUER_ROLE, OPERATOR)).wait(1);
+  console.log("   ISSUER_ROLE → OPERATOR wallet");
 
-  // Grant MINTER_ROLE on ProductNFT to backend wallet
-  const MINTER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MINTER_ROLE"));
-  const tx2 = await productNFT.grantRole(MINTER_ROLE, backendWallet);
-  await tx2.wait();
-  console.log("  ProductNFT.grantRole(MINTER_ROLE) ->" , backendWallet);
+  // ── 3. Optional demo asset ────────────────────────────────────
+  if (process.env.DEPLOY_DEMO_ASSET === "true") {
+    console.log("\n[3/3] Creating demo RWA asset (Real Estate)...");
 
-  // Grant UPDATER_ROLE on CreditScoreSBT to backend wallet
-  const UPDATER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("UPDATER_ROLE"));
-  const tx3 = await sbt.grantRole(UPDATER_ROLE, backendWallet);
-  await tx3.wait();
-  console.log("  CreditScoreSBT.grantRole(UPDATER_ROLE) ->", backendWallet);
+    await (await registry.batchSetKYC([deployer.address, OPERATOR], "VN")).wait(1);
+    console.log("   KYC: whitelisted deployer + operator");
 
-  // Grant OPERATOR_ROLE on EscrowCore to backend wallet
-  const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("OPERATOR_ROLE"));
-  const tx4 = await escrow.grantRole(OPERATOR_ROLE, backendWallet);
-  await tx4.wait();
-  console.log("  EscrowCore.grantRole(OPERATOR_ROLE) ->", backendWallet);
+    const tx = await factory.createAsset(
+      "demo-asset-uuid-0001",
+      "HCM Tower Unit 2101",
+      "HCMT-2101",
+      0, // AssetType.REAL_ESTATE
+      "QmDemoLegalDocIPFSHashPlaceholder123456",
+      500_000_000_000n, // $500K USD × 1e6
+      100_000_000n,     // $100/token × 1e6
+      OPERATOR
+    );
+    await tx.wait(1);
+    console.log("✅ Demo asset created (5,000 tokens @ $100)");
+  } else {
+    console.log("\n[3/3] Demo asset skipped (DEPLOY_DEMO_ASSET=true to enable)");
+  }
 
-  // ── Summary ──────────────────────────────────────────────────────────────────
-  console.log("\n" + "=".repeat(60));
-  console.log(" Deployment Complete!");
-  console.log("=".repeat(60));
-  console.log("\nAdd these to your backend .env files:\n");
-  console.log(`ESCROW_CONTRACT_ADDRESS=${escrowAddr}`);
-  console.log(`PRODUCT_NFT_ADDRESS=${productNFTAddr}`);
-  console.log(`CREDIT_SBT_ADDRESS=${sbtAddr}`);
-  console.log(`MINTER_PRIVATE_KEY=<your_backend_wallet_pk>`);
-  console.log(`PINATA_JWT=<your_pinata_jwt_for_ipfs>`);
-  console.log(`FRONTEND_URL=https://your-domain.com`);
+  // ── Summary ───────────────────────────────────────────────────
+  console.log("\n========================================");
+  console.log("  ✅ RWA Stack Deployed!");
+  console.log("========================================");
+  console.log(`
+Add to docker/.env on VPS:
+  COMPLIANCE_REGISTRY_ADDRESS=${registryAddr}
+  RWA_FACTORY_ADDRESS=${factoryAddr}
 
-  console.log("\nVerify on Polygonscan:");
-  console.log(`  npx hardhat verify --network polygon ${escrowAddr} ${feeVault}`);
-  console.log(`  npx hardhat verify --network polygon ${productNFTAddr} ${feeVault}`);
-  console.log(`  npx hardhat verify --network polygon ${sbtAddr}`);
+Quick update:
+  ssh root@103.20.96.79 "echo COMPLIANCE_REGISTRY_ADDRESS=${registryAddr} >> /root/services/FinalYear/docker/.env && echo RWA_FACTORY_ADDRESS=${factoryAddr} >> /root/services/FinalYear/docker/.env"
+`);
 }
 
 main()
   .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+  .catch((err) => { console.error(err); process.exit(1); });
