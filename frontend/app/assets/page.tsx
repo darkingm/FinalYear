@@ -6,6 +6,8 @@ import { motion } from 'framer-motion';
 import { Building, TrendingUp, Coins, Leaf, Search, Filter, RefreshCw, Percent, Users, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api/client';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 export interface RWAAsset {
@@ -151,7 +153,8 @@ export default function AssetsMarketplacePage() {
     const totalAUM = assets.reduce((s, a) => s + Number(a.total_valuation_usd), 0);
 
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-background flex flex-col relative">
+            <Header />
             {/* Hero */}
             <div className="border-b border-border bg-gradient-to-br from-background via-[#f0b90b]/5 to-background">
                 <div className="max-w-7xl mx-auto px-4 sm:px-8 py-16">
@@ -221,6 +224,7 @@ export default function AssetsMarketplacePage() {
                     </div>
                 )}
             </div>
+            <Footer />
         </div>
     );
 }

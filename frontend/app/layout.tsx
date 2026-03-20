@@ -2,6 +2,12 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
+import dynamic from 'next/dynamic';
+
+const ParticleBackground = dynamic(
+  () => import('@/components/ui/ParticleBackground').then(m => ({ default: m.ParticleBackground })),
+  { ssr: false }
+);
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,7 +24,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <Providers>{children}</Providers>
+        <Providers>
+          <ParticleBackground />
+          {children}
+        </Providers>
       </body>
     </html>
   );
