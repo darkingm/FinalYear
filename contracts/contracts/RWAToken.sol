@@ -87,7 +87,7 @@ contract RWAToken is ERC20, AccessControl, Pausable {
 
     /* ── Distributor link ────────────────────────────────────────── */
     /// @notice Link ProfitDistributor — called by RWAFactory after deploying both contracts.
-    function setDistributor(address distributor_) external onlyRole(OPERATOR_ROLE) {
+    function setDistributor(address distributor_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(distributor_ != address(0), "RWAToken: zero address");
         distributor = IProfitDistributor(distributor_);
         emit DistributorSet(distributor_);
