@@ -76,85 +76,53 @@
 }
 
 
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   GLOBE BACKGROUND — Dark mode transparency system
-   Canvas (z-index:0, alpha:true) renders Earth + stars on top of page.
-   Transparent elements show globe through. Cards stay solid for readability.
+   GLOBE BACKGROUND — Dark mode transparency
+   Canvas z-index:-1 alpha:false draws dark space background.
+   Page structure must be transparent so globe shows through.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ① Full-page wrappers — transparent (globe provides the dark bg) */
+/* ① Full-page wrappers (min-h-screen) — canvas bg replaces these */
 .dark .min-h-screen {
   background-color: transparent !important;
 }
 
-/* ② All section containers inside main — transparent + hover glow */
+/* ② Section containers in main — transparent + subtle hover */
 .dark main>section,
 .dark main>div>section,
 .dark main>div>div>section {
   background-color: transparent !important;
-  transition: background-color 0.4s ease;
+  transition: background-color 0.35s ease;
 }
 
 .dark main>section:hover,
 .dark main>div>section:hover {
-  background-color: rgba(255, 255, 255, 0.025);
+  background-color: rgba(255, 255, 255, 0.022);
 }
 
-/* ③ Direct divs inside main that act as section wrappers */
-.dark main>div:not([class*="bg-card"]):not([class*="bg-muted"]) {
+/* ③ Main direct div wrappers (page frame divs, not cards) */
+.dark main>div:not([class*="bg-card"]):not([class*="bg-muted"]):not([class*="rounded"]) {
   background-color: transparent;
 }
 
-/* ④ bg-background used on sections/containers — transparent in dark mode */
-/*    Cards (bg-card), popovers (bg-popover), muted (bg-muted) stay solid */
-.dark .bg-background {
-  background-color: transparent !important;
-}
-
-/* ⑤ Gradient containers from/via/to background — transparent gradient stops */
-.dark [class*="from-background"] {
-  --tw-gradient-from: transparent var(--tw-gradient-from-position) !important;
-}
-
-.dark [class*="via-background"] {
-  --tw-gradient-via: transparent var(--tw-gradient-via-position) !important;
-}
-
-.dark [class*="to-background"] {
-  --tw-gradient-to: transparent var(--tw-gradient-to-position) !important;
-}
-
-/* ⑥ Header/navbar: glass blur effect so it floats above globe */
+/* ④ Header: glass effect — floats above globe */
 .dark header {
-  background-color: rgba(5, 9, 20, 0.6) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
+  background-color: rgba(5, 9, 20, 0.65) !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 
-/* ⑦ Footer: semi-transparent glass */
+/* ⑤ Footer: glass effect */
 .dark footer {
-  background-color: rgba(5, 9, 20, 0.7) !important;
+  background-color: rgba(5, 9, 20, 0.70) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
 }
 
-/* ⑧ PROTECT solid elements (restore opaque bg where needed) */
-.dark .bg-card,
-.dark .bg-muted,
-.dark .bg-popover,
-.dark [role="dialog"],
-.dark [role="menu"],
-.dark [role="listbox"],
-.dark [data-radix-popper-content-wrapper],
-.dark [data-state] .bg-card {
-  /* These classes use distinct CSS vars — bg-card is not overridden above */
-}
-
-/* ⑨ Ensure text stays bright (near-white) against dark space */
-/* dark foreground = hsl(210 20% 90%) = #dee5ef — excellent contrast vs #050914 */
-.dark body {
-  color: hsl(var(--foreground));
-}
+/* ⑥ Ensure text contrast — foreground stays near-white in dark mode */
+/* dark --foreground: 210 20% 90% = #dee5ef — high contrast vs #050914 space */
 
 
 /* ── Scrollbar ── */
