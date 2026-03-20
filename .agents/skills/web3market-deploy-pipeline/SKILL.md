@@ -131,19 +131,98 @@ Nginx runs as system service proxying to Docker containers:
 - `/payment/` → `http://127.0.0.1:3002/`
 - SSL cert: Let's Encrypt (auto-renew via certbot)
 
-Nginx config: `/etc/nginx/sites-available/kienai.id.vn`
+Nginx config: `/etc/nginx/conf.d/kienai.conf`
+
+Full routing table:
+| External path | Container | Port |
+|---|---|---|
+| `/api/auth/*` | frontend (NextAuth) | 3000 |
+| `/api/payments/*` | payment-api | 3002 |
+| `/payment/*` | payment-api (legacy) | 3002 |
+| `/api/*` | main-api | 3001 |
+| `/*` | frontend (Next.js) | 3000 |
+| `:8545` (direct) | hardhat-node | 8545 |
+
+**Health endpoints** (NOT `/api/health`):
+- main-api: `curl http://127.0.0.1:3001/health`
+- payment-api: `curl http://127.0.0.1:3002/health`
+- frontend: `curl -o /dev/null -w '%{http_code}' http://127.0.0.1:3000`
 
 ## Deploy Checklist
 
 Before deploying:
 - [ ] TypeScript compiles: `npx tsc --noEmit` (frontend + both services)
-- [ ] New DB columns/tables → create migration file in `migrations/`
+- [ ] New DB columns/tables → create migration file in `init_database.sql/migrations/`
 - [ ] New env vars → add to `docker-compose.prod.yml` AND VPS `.env`
 - [ ] Docker is running locally
 - [ ] Logged in to Docker Hub: `docker login`
 
 After deploying:
 - [ ] `docker logs marketplace-db-migrator` — migrations applied
-- [ ] `curl -sf http://127.0.0.1:3001/api/health` on VPS
-- [ ] `curl -sf http://127.0.0.1:3002/api/health` on VPS
+- [ ] `curl -sf http://127.0.0.1:3001/health` on VPS  ← `/health` not `/api/health`
+- [ ] `curl -sf http://127.0.0.1:3002/health` on VPS
 - [ ] Check `https://kienai.id.vn` in browser
+
+## Tricky Issues Learned
+
+### 1. Containers stuck in `Created` (not `Up`)
+Happens when `db-migrator` image doesn't exist yet on Docker Hub (first deploy after adding migrator).
+
+**Fix** — use override file to skip db-migrator dependency temporarily:
+```bash
+# On VPS
+cp /path/to/docker-compose.override-nomigrator.yml \
+   /root/services/FinalYear/docker/docker-compose.override.yml
+
+cd /root/services/FinalYear/docker
+docker compose -f docker-compose.prod.yml -f docker-compose.override.yml \
+  --env-file .env up -d
+
+# After CI builds db-migrator image successfully:
+rm /root/services/FinalYear/docker/docker-compose.override.yml
+```
+
+### 2. PowerShell SSH quoting issues
+PowerShell expands `$` and mangles quotes — heredocs and `$()` don't work.
+
+**Fix** — write SQL to local file, scp, docker cp, then run:
+```powershell
+# Write file locally
+"SELECT version FROM schema_migrations;" | Out-File -Encoding utf8 /tmp/check.sql
+scp /tmp/check.sql root@103.20.96.79:/tmp/
+ssh root@103.20.96.79 "docker cp /tmp/check.sql marketplace-postgres:/tmp/ && docker exec marketplace-postgres psql -U postgres -d marketplace_db -f /tmp/check.sql"
+```
+
+### 3. DO block with multiple EXCEPTION clauses
+PostgreSQL only allows ONE `EXCEPTION` block per `DO` block.
+```sql
+-- WRONG:
+DO $$ BEGIN ALTER TABLE ... ;
+EXCEPTION WHEN duplicate_table THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;  -- syntax error!
+
+-- CORRECT:
+DO $$ BEGIN ALTER TABLE ... ;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+```
+
+### 4. Container name conflict on `docker compose up`
+```bash
+docker stop marketplace-main-api marketplace-payment-api marketplace-frontend
+docker rm marketplace-main-api marketplace-payment-api marketplace-frontend
+docker compose ... up -d --no-deps main-api payment-api frontend
+```
+
+### 5. VPS .env minimum required keys
+```env
+DOCKERHUB_USERNAME=kiendzpro
+INTERNAL_SERVICE_KEY=internal-service-key-w3market-2026  # CRITICAL
+PAYMENT_SERVICE_URL=http://payment-api:3002              # CRITICAL
+POSTGRES_PASSWORD=Kien29092004
+REDIS_PASSWORD=Kien29092004
+RABBITMQ_PASSWORD=Kien29092004
+JWT_SECRET=fyp_jwt_Kien29092004_marketplace_2024_prod
+JWT_REFRESH_SECRET=fyp_refresh_Kien29092004_marketplace_2024_prod
+NEXTAUTH_SECRET=qo/QS42PzUNj0lFF9JbxXhD2S247Yf5ZMCoar3leqaw=
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=deyjlti3v
+```
