@@ -70,8 +70,20 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    background-color: hsl(var(--background));
+  }
+
+  /* Dark mode: body transparent so WebGL globe canvas shows through */
+  /* Canvas draws the space bg (#050914) — this keeps the same dark look */
+  .dark body {
+    background-color: transparent;
+  }
+
+  .dark html {
+    background-color: #050914;
+    /* fallback if canvas not ready yet */
   }
 }
 
