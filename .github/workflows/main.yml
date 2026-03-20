@@ -275,12 +275,12 @@ jobs:
             # Wait for services to be healthy
             sleep 20
 
-            # ── Health checks ────────────────────────────────────────────
+            # ── Health checks ─────────────────────────────────────────────
             echo ""
             echo "=== Health checks ==="
-            curl -sf http://127.0.0.1:3001/api/health > /dev/null \
+            curl -sf http://127.0.0.1:3001/health > /dev/null \
               && echo "✅ main-api :3001 OK" || echo "❌ main-api :3001 FAIL"
-            curl -sf http://127.0.0.1:3002/api/health > /dev/null \
+            curl -sf http://127.0.0.1:3002/health > /dev/null \
               && echo "✅ payment-api :3002 OK" || echo "❌ payment-api :3002 FAIL"
             curl -sf http://127.0.0.1:3000 > /dev/null \
               && echo "✅ frontend :3000 OK" || echo "❌ frontend :3000 FAIL"

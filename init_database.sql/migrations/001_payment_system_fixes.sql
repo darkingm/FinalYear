@@ -25,8 +25,7 @@ EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 -- Needed for ON CONFLICT (order_id) DO UPDATE upserts
 DO $$ BEGIN
   ALTER TABLE disputes ADD CONSTRAINT disputes_order_id_unique UNIQUE (order_id);
-EXCEPTION WHEN duplicate_table THEN NULL;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 -- 5. Add buyer_wallet to disputes for admin reference panel
 DO $$ BEGIN
