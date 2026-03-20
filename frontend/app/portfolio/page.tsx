@@ -54,7 +54,7 @@ export default function PortfolioPage() {
         if (!address || holdings.length === 0) return;
         holdings.forEach(async (h) => {
             try {
-                const res = await rwaApi.profit.pending(h.asset_id, address);
+                const res = await rwaApi.portfolio.pending(h.asset_id, address);
                 setPendingRewards(prev => ({ ...prev, [h.asset_id]: res.data.pending_eth || '0' }));
             } catch { }
         });
