@@ -9,6 +9,7 @@ import { getCoinDetail, CoinDetailData } from '@/lib/api/binance-detail';
 import {
   TrendingUp, TrendingDown, Activity, BarChart3, Clock, ArrowLeft,
   Search, Star, RefreshCw, ChevronDown, Share2, BookOpen, ArrowUpDown,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,20 @@ import { toast } from 'sonner';
 import { ShoppingCart } from 'lucide-react';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { usePriceStore } from '@/store';
+import { useAccount, useBalance, useReadContract } from 'wagmi';
+import { parseAbi, formatUnits } from 'viem';
+
+// USDT contract addresses (Hardhat local testnet)
+const USDT_ADDRESSES: Record<number, `0x${string}`> = {
+  31337: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707', // Hardhat local USDT mock
+  137: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',   // Polygon USDT
+  80002: '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06',  // Amoy USDT
+};
+
+const ERC20_ABI = parseAbi([
+  'function balanceOf(address) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+]);
 
 
 // Lazy load chart
@@ -239,15 +254,28 @@ function RecentTrades({ trades }: { trades: CoinDetailData['recentTrades'] }) {
 
 /* ─── Spot Trading Panel ─────────────────────────── */
 function SpotTradingPanel({ coinName, currentPrice }: { coinName: string; currentPrice: number }) {
+  const { address, isConnected, chainId } = useAccount();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop-limit'>('market');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
   const [sliderPercent, setSliderPercent] = useState(0);
 
-  // Demo wallet balance
-  const usdtBalance = 1250.00;
-  const coinBalance = 0.0142;
+  // Real wallet balances
+  const { data: ethBalance } = useBalance({ address, query: { enabled: isConnected } });
+  const usdtAddr = USDT_ADDRESSES[chainId ?? 31337];
+  const { data: usdtRaw } = useReadContract({
+    address: usdtAddr,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !!usdtAddr },
+  });
+
+  const usdtBalance = usdtRaw ? parseFloat(formatUnits(usdtRaw as bigint, 6)) : 0;
+  const ethAmt = ethBalance ? parseFloat(ethBalance.formatted) : 0;
+  // For non-USDT coins, show ETH balance as proxy
+  const coinBalance = ethAmt;
 
   const total = orderType === 'market'
     ? (parseFloat(amount || '0') * currentPrice)
@@ -265,10 +293,19 @@ function SpotTradingPanel({ coinName, currentPrice }: { coinName: string; curren
   };
 
   const handleSubmit = () => {
+    if (!isConnected) return toast.error('Kết nối ví MetaMask để giao dịch');
     toast.success(`${side === 'buy' ? 'Mua' : 'Bán'} ${amount} ${coinName} ${orderType === 'market' ? 'theo giá thị trường' : `tại giá $${price}`}`);
     setAmount('');
     setSliderPercent(0);
   };
+
+  if (!isConnected) return (
+    <div className="bg-card border border-border rounded-xl p-6 text-center space-y-3">
+      <Wallet className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+      <p className="text-sm text-muted-foreground">Kết nối ví để giao dịch</p>
+      <p className="text-xs text-muted-foreground/60">Sử dụng MetaMask hoặc ví Web3 bất kỳ</p>
+    </div>
+  );
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">

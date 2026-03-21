@@ -9,6 +9,11 @@ const GlobeBackground = dynamic(
   { ssr: false }
 );
 
+const AIChatBubble = dynamic(
+  () => import('@/components/ui/AIChatBubble').then(m => ({ default: m.AIChatBubble })),
+  { ssr: false }
+);
+
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
@@ -26,6 +31,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           <GlobeBackground />
+          <AIChatBubble />
           {children}
         </Providers>
       </body>

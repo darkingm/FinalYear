@@ -36,7 +36,7 @@ const FRAG = /* glsl */`
   }`;
 
 /* ── Config ────────────────────────────────────────────────────────────────── */
-const STAR_N = 7000;   // more stars, full screen
+const STAR_N = 2500;   // sparse star field — more visible on hover
 const HOVER_R = 180;
 const AUTO_ROT = 0.0009;
 const DRAG_SENS = 0.007;
@@ -48,20 +48,18 @@ const PRESETS = {
     dark: {
         clearColor: 0x050914,
         ambientColor: 0x1a2040, ambientIntens: 1.8,
-        sunColor: 0xfff8f0, sunIntens: 2.4,
+        sunColor: 0xfff8f0, sunIntens: 2.0,
         sunPos: [4, 1.5, 2] as [number, number, number],
         starOpacity: 1.0,
-        earthSpecular: 0x1a3366, earthShininess: 25,
         nightOpacity: 0.85,
     },
     light: {
-        clearColor: 0xbddff5,  // bright sky blue
-        ambientColor: 0x88aabb, ambientIntens: 2.2,
-        sunColor: 0xffffff, sunIntens: 3.8,   // bright but not washed out
+        clearColor: 0xbddff5,
+        ambientColor: 0x88aabb, ambientIntens: 2.8,
+        sunColor: 0xffffff, sunIntens: 3.2,
         sunPos: [3, 2, 2] as [number, number, number],
-        starOpacity: 0.18,      // barely visible in daylight
-        earthSpecular: 0x226688, earthShininess: 40,  // more shiny in light
-        nightOpacity: 0.0,       // hide night lights in day mode
+        starOpacity: 0.18,
+        nightOpacity: 0.0,
     },
 } as const;
 
@@ -142,7 +140,7 @@ export function GlobeBackground() {
             /* ── Stars: SCREEN-SPACE placement (fills entire viewport) ──── */
             // Each star placed at a random NDC position and pushed to a random depth.
             // This guarantees uniform coverage across the whole screen.
-            const BASE_MIN = 2.5 * dpr, BASE_MAX = 6 * dpr, MAX_GLOW = 26 * dpr;
+            const BASE_MIN = 1.5 * dpr, BASE_MAX = 4 * dpr, MAX_GLOW = 22 * dpr;
 
             const pos = new Float32Array(STAR_N * 3);
             const col = new Float32Array(STAR_N * 3);
@@ -219,9 +217,7 @@ export function GlobeBackground() {
                 sun.color.setHex(p.sunColor);
                 sun.intensity = p.sunIntens;
                 sun.position.set(...p.sunPos).normalize();
-                starMat.uniforms.uOpacity.value = p.starOpacity; // ← correct way
-                earthMat.specular = new THREE.Color(p.earthSpecular);
-                earthMat.shininess = p.earthShininess;
+                starMat.uniforms.uOpacity.value = p.starOpacity;
                 earthMat.needsUpdate = true;
                 if (nightMesh) (nightMesh.material as THREE.MeshLambertMaterial).opacity = p.nightOpacity;
             };
