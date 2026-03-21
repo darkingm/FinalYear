@@ -47,16 +47,16 @@ const TILT = 23.5 * Math.PI / 180;
 const PRESETS = {
     dark: {
         clearColor: 0x050914,
-        ambientColor: 0x3366aa, ambientIntens: 3.5,
-        sunColor: 0xfff5e0, sunIntens: 7.0,
+        ambientColor: 0x3366aa, ambientIntens: 1.75,
+        sunColor: 0xfff5e0, sunIntens: 3.5,
         sunPos: [4, 1.5, 2] as [number, number, number],
         starOpacity: 1.0,
         nightOpacity: 0.7,
     },
     light: {
         clearColor: 0xbddff5,
-        ambientColor: 0xe8f4ff, ambientIntens: 5.0,
-        sunColor: 0xffffff, sunIntens: 9.0,
+        ambientColor: 0xe8f4ff, ambientIntens: 2.5,
+        sunColor: 0xffffff, sunIntens: 4.5,
         sunPos: [3, 2, 2] as [number, number, number],
         starOpacity: 0.05,
         nightOpacity: 0.0,
@@ -93,9 +93,9 @@ export function GlobeBackground() {
             const camera = new THREE.PerspectiveCamera(55, W() / H(), 1, 8000);
             camera.position.z = 680;
 
-            const ambientLight = new THREE.AmbientLight(0x3366aa, 3.5);
+            const ambientLight = new THREE.AmbientLight(0x3366aa, 1.75);
             scene.add(ambientLight);
-            const sun = new THREE.DirectionalLight(0xfff5e0, 7.0);
+            const sun = new THREE.DirectionalLight(0xfff5e0, 3.5);
             sun.position.set(4, 1.5, 2).normalize();
             scene.add(sun);
 

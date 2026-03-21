@@ -68,6 +68,10 @@ if [ "$BUILD_ALL" = "true" ]; then
   info "Building ai-service..."
   docker build -t ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest \
     -f backend/ai-service/Dockerfile backend/ai-service
+
+  info "Building tokenization-service..."
+  docker build -t ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest \
+    -f backend/tokenization-service/Dockerfile backend/tokenization-service
 fi
 
 if [ "$BUILD_MIGRATOR" = "true" ]; then
@@ -88,6 +92,7 @@ if [ "$BUILD_ALL" = "true" ]; then
   docker push ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest
   docker push ${DOCKERHUB_USERNAME}/marketplace-frontend:latest
   docker push ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest
+  docker push ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest
 fi
 
 if [ "$BUILD_MIGRATOR" = "true" ]; then
@@ -109,6 +114,7 @@ ssh ${VPS_USER}@${VPS_HOST} << ENDSSH
   docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest
   docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:latest
   docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest
+  docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest
 
   echo ""
   echo "=== VPS: Restarting stack with migrations ==="

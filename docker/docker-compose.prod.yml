@@ -304,6 +304,25 @@ services:
       - marketplace-network
     restart: unless-stopped
 
+  tokenization-service:
+    image: ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest
+    container_name: marketplace-tokenization
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketplace_db}
+      FRONTEND_URL: https://kienai.id.vn
+    ports:
+      - "127.0.0.1:3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   payment_postgres_data:
