@@ -93,9 +93,10 @@ export function GlobeBackground() {
             const camera = new THREE.PerspectiveCamera(55, W() / H(), 1, 8000);
             camera.position.z = 680;
 
-            const ambientLight = new THREE.AmbientLight(0x000000, 1);
+            const ambientLight = new THREE.AmbientLight(0x1a2040, 1.8);
             scene.add(ambientLight);
-            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            const sun = new THREE.DirectionalLight(0xfff8f0, 2.0);
+            sun.position.set(4, 1.5, 2).normalize();
             scene.add(sun);
 
             /* ── Earth ───────────────────────────────────────────────────── */
