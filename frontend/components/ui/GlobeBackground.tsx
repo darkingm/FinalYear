@@ -1,20 +1,20 @@
 'use client';
 
 /**
- * GlobeBackground — 3D Earth for BOTH light and dark mode
+ * GlobeBackground — 3D Earth + full-screen star field for both themes
  *
- * Dark mode:  deep space (#050914) + dim Earth + bright star field
- * Light mode: sky blue (#c8e8ff) + vibrant bright Earth + subtle stars
- *
- * MutationObserver watches html.class for theme changes → updates live
+ * KEY FIXES:
+ * - Stars placed using screen-space NDC → all stars uniformly fill viewport
+ * - Opacity uniform in GLSL (not .opacity property which doesn't work on ShaderMaterial)
+ * - Light mode: Earth texture + brighter lighting (2.8x sun) + sky blue bg
+ * - Dark mode: deep space + warm dim lighting + bright white stars
  */
-
 import { useEffect, useRef } from 'react';
 
 const TEX_DAY = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
 
-/* ── GLSL ─────────────────────────────────────────────────────────────────── */
+/* ── GLSL — opacity is a uniform so we can toggle in light/dark ────────────── */
 const VERT = /* glsl */`
   attribute float size;
   attribute vec3  aColor;
@@ -26,15 +26,17 @@ const VERT = /* glsl */`
   }`;
 
 const FRAG = /* glsl */`
-  varying vec3 vColor;
+  uniform float uOpacity;
+  varying vec3  vColor;
   void main() {
     float d = length(gl_PointCoord - 0.5) * 2.0;
     if (d > 1.0) discard;
-    float a = pow(1.0 - d, 2.2);
+    float a = pow(1.0 - d, 2.0) * uOpacity;
     gl_FragColor = vec4(vColor, a);
   }`;
 
-const STAR_N = 5500;
+/* ── Config ────────────────────────────────────────────────────────────────── */
+const STAR_N = 7000;   // more stars, full screen
 const HOVER_R = 180;
 const AUTO_ROT = 0.0009;
 const DRAG_SENS = 0.007;
@@ -42,29 +44,24 @@ const DRAG_THRESH = 8;
 const LERP = 0.08;
 const TILT = 23.5 * Math.PI / 180;
 
-/* Theme presets */
 const PRESETS = {
     dark: {
         clearColor: 0x050914,
-        ambientColor: 0x1a2040,
-        ambientIntens: 1.8,
-        sunColor: 0xfff8f0,
-        sunIntens: 2.4,
+        ambientColor: 0x1a2040, ambientIntens: 1.8,
+        sunColor: 0xfff8f0, sunIntens: 2.4,
         sunPos: [4, 1.5, 2] as [number, number, number],
-        starOpacity: 0.9,       // fully visible stars
-        starColorCool: [0.88, 0.92, 1.0] as [number, number, number],
-        starHint: 0,         // no sky colour overlay on stars
+        starOpacity: 1.0,
+        earthSpecular: 0x1a3366, earthShininess: 25,
+        nightOpacity: 0.85,
     },
     light: {
-        clearColor: 0xc8e8ff,  // bright sky blue
-        ambientColor: 0x6699bb,  // blueish sky ambient
-        ambientIntens: 3.5,       // strong ambient → bright earth surface
-        sunColor: 0xffffff,
-        sunIntens: 5.0,       // bright sunlight
-        sunPos: [3, 2, 3] as [number, number, number],
-        starOpacity: 0.25,      // stars almost invisible in daylight
-        starColorCool: [0.6, 0.7, 0.9] as [number, number, number],
-        starHint: 1,
+        clearColor: 0xbddff5,  // bright sky blue
+        ambientColor: 0x88aabb, ambientIntens: 2.2,
+        sunColor: 0xffffff, sunIntens: 3.8,   // bright but not washed out
+        sunPos: [3, 2, 2] as [number, number, number],
+        starOpacity: 0.18,      // barely visible in daylight
+        earthSpecular: 0x226688, earthShininess: 40,  // more shiny in light
+        nightOpacity: 0.0,       // hide night lights in day mode
     },
 } as const;
 
@@ -77,27 +74,23 @@ export function GlobeBackground() {
         if (!canvas) return;
 
         const dpr = Math.min(window.devicePixelRatio, 2);
-        let dead = false;
-        let dragging = false;
-        let didDrag = false;
-        let startX = 0, startY = 0;
-        let lastX = 0, lastY = 0;
+        let dead = false, dragging = false, didDrag = false;
+        let startX = 0, startY = 0, lastX = 0, lastY = 0;
         let mouseX = -9999, mouseY = -9999;
 
-        const getTheme = () => document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        const getTheme = (): 'dark' | 'light' =>
+            document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 
         import('three').then(THREE => {
             if (dead) return;
-
             const W = () => window.innerWidth;
             const H = () => window.innerHeight;
 
-            /* ── Renderer ─────────────────────────────────────────────────── */
+            /* ── Renderer ────────────────────────────────────────────────── */
             const R = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
             R.setPixelRatio(dpr);
             R.setSize(W(), H());
 
-            /* ── Scene / Camera ─────────────────────────────────────────────── */
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(55, W() / H(), 1, 8000);
             camera.position.z = 680;
@@ -107,24 +100,29 @@ export function GlobeBackground() {
             const sun = new THREE.DirectionalLight(0xffffff, 1);
             scene.add(sun);
 
-            /* ── Earth ─────────────────────────────────────────────────────── */
+            /* ── Earth ───────────────────────────────────────────────────── */
             const er = Math.min(W(), H()) * 0.42;
-            const earthMat = new THREE.MeshPhongMaterial({ color: 0x1a4477, shininess: 30 });
+            const earthMat = new THREE.MeshPhongMaterial({ color: 0x1a4477, shininess: 25 });
             const earth = new THREE.Mesh(new THREE.SphereGeometry(er, 72, 72), earthMat);
             earth.rotation.z = TILT;
             scene.add(earth);
 
+            /* Textures (non-blocking) */
             const loader = new THREE.TextureLoader();
             loader.load(TEX_DAY, t => { earthMat.map = t; earthMat.needsUpdate = true; });
+
+            let nightMesh: THREE.Mesh | null = null;
             loader.load(TEX_NIGHT, t => {
                 if (dead) return;
-                const ns = new THREE.Mesh(
+                nightMesh = new THREE.Mesh(
                     new THREE.SphereGeometry(er + 1, 72, 72),
-                    new THREE.MeshLambertMaterial({ map: t, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85 })
+                    new THREE.MeshLambertMaterial({
+                        map: t, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85,
+                    })
                 );
-                ns.rotation.z = TILT;
-                scene.add(ns);
-                (earth as any).__ns = ns;
+                nightMesh.rotation.z = TILT;
+                scene.add(nightMesh);
+                (earth as any).__ns = nightMesh;
             });
 
             /* Atmosphere glow */
@@ -132,40 +130,70 @@ export function GlobeBackground() {
                 new THREE.SphereGeometry(er * 1.07, 64, 64),
                 new THREE.ShaderMaterial({
                     vertexShader: `varying float v; void main() {
-            vec3 n=normalize(normalMatrix*normal);vec3 e=normalize(-vec3(modelViewMatrix*vec4(position,1)));
-            v=pow(0.72-dot(n,e),4.0);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1);}`,
+            vec3 n=normalize(normalMatrix*normal);
+            vec3 e=normalize(-vec3(modelViewMatrix*vec4(position,1)));
+            v=pow(0.72-dot(n,e),4.0);
+            gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1);}`,
                     fragmentShader: `varying float v; void main(){gl_FragColor=vec4(0.2,0.55,1.0,1.0)*v*0.85;}`,
                     side: THREE.FrontSide, blending: THREE.AdditiveBlending, transparent: true,
                 })
             ));
 
-            /* ── Stars ─────────────────────────────────────────────────────── */
-            const BASE_MIN = 3 * dpr, BASE_MAX = 7 * dpr, MAX_GLOW = 28 * dpr;
+            /* ── Stars: SCREEN-SPACE placement (fills entire viewport) ──── */
+            // Each star placed at a random NDC position and pushed to a random depth.
+            // This guarantees uniform coverage across the whole screen.
+            const BASE_MIN = 2.5 * dpr, BASE_MAX = 6 * dpr, MAX_GLOW = 26 * dpr;
+
             const pos = new Float32Array(STAR_N * 3);
             const col = new Float32Array(STAR_N * 3);
             const sz = new Float32Array(STAR_N);
             const base = new Float32Array(STAR_N);
             const tgt = new Float32Array(STAR_N);
+            // Stars are static in screen-space, so scrX/Y = their randomized screen pos
             const scrX = new Float32Array(STAR_N);
             const scrY = new Float32Array(STAR_N);
-            const tmp = new THREE.Vector3();
+
+            const right = new THREE.Vector3();
+            const upV = new THREE.Vector3();
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            right.crossVectors(forward, camera.up).normalize();
+            upV.crossVectors(right, forward).normalize();
+
+            const fovY = camera.fov * Math.PI / 180;
+            const fovX = 2 * Math.atan(Math.tan(fovY / 2) * (W() / H()));
 
             for (let i = 0; i < STAR_N; i++) {
-                const θ = Math.random() * Math.PI * 2;
-                const φ = Math.acos(2 * Math.random() - 1);
-                const d = 1500 + Math.random() * 2000;
-                pos[i * 3] = d * Math.sin(φ) * Math.cos(θ);
-                pos[i * 3 + 1] = d * Math.sin(φ) * Math.sin(θ);
-                pos[i * 3 + 2] = d * Math.cos(φ) - 500;
+                // Random position in NDC space (extend ±1.3 to fill past viewport edges)
+                const ndcX = (Math.random() * 2.6 - 1.3);
+                const ndcY = (Math.random() * 2.6 - 1.3);
+                const depth = 1200 + Math.random() * 2800;
+
+                // Convert NDC → world direction, then place star at depth
+                const angleX = ndcX * Math.tan(fovX / 2);
+                const angleY = ndcY * Math.tan(fovY / 2);
+                const dir = new THREE.Vector3(
+                    forward.x + right.x * angleX + upV.x * angleY,
+                    forward.y + right.y * angleX + upV.y * angleY,
+                    forward.z + right.z * angleX + upV.z * angleY,
+                ).normalize();
+
+                pos[i * 3] = camera.position.x + dir.x * depth;
+                pos[i * 3 + 1] = camera.position.y + dir.y * depth;
+                pos[i * 3 + 2] = camera.position.z + dir.z * depth;
+
+                // Screen position IS the NDC we chose (clamped to actual viewport)
+                scrX[i] = Math.max(0, Math.min(W() - 1, (ndcX * 0.5 + 0.5) * W()));
+                scrY[i] = Math.max(0, Math.min(H() - 1, (-ndcY * 0.5 + 0.5) * H()));
+
                 const b = BASE_MIN + Math.random() * (BASE_MAX - BASE_MIN);
                 base[i] = sz[i] = tgt[i] = b;
-                const warm = Math.random() < 0.18;
-                col[i * 3] = warm ? 1.0 : 0.88 + Math.random() * 0.12;
+
+                // Color: cool white/blue, rare warm
+                const warm = Math.random() < 0.15;
+                col[i * 3] = warm ? 1.00 : 0.88 + Math.random() * 0.12;
                 col[i * 3 + 1] = warm ? 0.82 : 0.92 + Math.random() * 0.08;
-                col[i * 3 + 2] = warm ? 0.55 : 1.0;
-                tmp.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).project(camera);
-                scrX[i] = (tmp.x * 0.5 + 0.5) * W();
-                scrY[i] = (-tmp.y * 0.5 + 0.5) * H();
+                col[i * 3 + 2] = warm ? 0.55 : 1.00;
             }
 
             const geo = new THREE.BufferGeometry();
@@ -174,12 +202,15 @@ export function GlobeBackground() {
             geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
             geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
             geo.setAttribute('size', szA);
-            const starPoints = new THREE.Points(geo, new THREE.ShaderMaterial({
-                vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false,
-            }));
-            scene.add(starPoints);
 
-            /* ── Apply theme ────────────────────────────────────────────────── */
+            const starMat = new THREE.ShaderMaterial({
+                vertexShader: VERT, fragmentShader: FRAG,
+                uniforms: { uOpacity: { value: 1.0 } },
+                transparent: true, depthWrite: false,
+            });
+            scene.add(new THREE.Points(geo, starMat));
+
+            /* ── Apply theme ─────────────────────────────────────────────── */
             const applyTheme = (t: 'dark' | 'light') => {
                 const p = PRESETS[t];
                 R.setClearColor(p.clearColor, 1);
@@ -188,28 +219,27 @@ export function GlobeBackground() {
                 sun.color.setHex(p.sunColor);
                 sun.intensity = p.sunIntens;
                 sun.position.set(...p.sunPos).normalize();
-                starPoints.material.opacity = p.starOpacity;
+                starMat.uniforms.uOpacity.value = p.starOpacity; // ← correct way
+                earthMat.specular = new THREE.Color(p.earthSpecular);
+                earthMat.shininess = p.earthShininess;
+                earthMat.needsUpdate = true;
+                if (nightMesh) (nightMesh.material as THREE.MeshLambertMaterial).opacity = p.nightOpacity;
             };
             applyTheme(getTheme());
 
-            /* Watch for theme changes */
             const obs = new MutationObserver(() => applyTheme(getTheme()));
             obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
-            /* ── Resize ─────────────────────────────────────────────────────── */
+            /* ── Resize ──────────────────────────────────────────────────── */
             const onResize = () => {
                 camera.aspect = W() / H();
                 camera.updateProjectionMatrix();
                 R.setSize(W(), H());
-                for (let i = 0; i < STAR_N; i++) {
-                    tmp.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).project(camera);
-                    scrX[i] = (tmp.x * 0.5 + 0.5) * W();
-                    scrY[i] = (-tmp.y * 0.5 + 0.5) * H();
-                }
+                // Stars in screen-space don't need re-projection (their scrX/Y is pre-baked)
             };
             window.addEventListener('resize', onResize);
 
-            /* ── Mouse / Drag ───────────────────────────────────────────────── */
+            /* ── Mouse/drag ─────────────────────────────────────────────── */
             const onDown = (e: MouseEvent) => {
                 dragging = true; didDrag = false;
                 startX = lastX = e.clientX; startY = lastY = e.clientY;
@@ -228,11 +258,12 @@ export function GlobeBackground() {
                 lastX = e.clientX; lastY = e.clientY;
             };
             const onUp = () => { dragging = false; };
+
             window.addEventListener('mousedown', onDown);
             window.addEventListener('mousemove', onMove);
             window.addEventListener('mouseup', onUp);
 
-            /* ── Tick ───────────────────────────────────────────────────────── */
+            /* ── Tick ────────────────────────────────────────────────────── */
             const tick = () => {
                 if (dead) return;
                 rafRef.current = requestAnimationFrame(tick);
@@ -241,6 +272,7 @@ export function GlobeBackground() {
                     const ns = (earth as any).__ns;
                     if (ns) ns.rotation.y = earth.rotation.y;
                 }
+                // Star hover glow — check pre-baked screen positions
                 for (let i = 0; i < STAR_N; i++) {
                     const dist = Math.hypot(scrX[i] - mouseX, scrY[i] - mouseY);
                     tgt[i] = dist < HOVER_R
@@ -253,8 +285,8 @@ export function GlobeBackground() {
             };
             tick();
 
-            /* ── Dispose ────────────────────────────────────────────────────── */
-            const dispose = () => {
+            /* ── Dispose ─────────────────────────────────────────────────── */
+            (canvas as any).__dispose = () => {
                 dead = true;
                 cancelAnimationFrame(rafRef.current);
                 obs.disconnect();
@@ -264,7 +296,6 @@ export function GlobeBackground() {
                 window.removeEventListener('mouseup', onUp);
                 R.dispose();
             };
-            (canvas as any).__dispose = dispose;
         });
 
         return () => {
@@ -279,13 +310,8 @@ export function GlobeBackground() {
         <canvas
             ref={canvasRef}
             style={{
-                position: 'fixed',
-                inset: 0,
-                width: '100vw',
-                height: '100vh',
-                zIndex: -1,
-                pointerEvents: 'none',
-                display: 'block',
+                position: 'fixed', inset: 0, width: '100vw', height: '100vh',
+                zIndex: -1, pointerEvents: 'none', display: 'block'
             }}
             aria-hidden
         />
