@@ -78,20 +78,44 @@
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   GLOBE BACKGROUND — Dark mode transparency
-   Canvas z-index:-1 alpha:false draws dark space background.
-   Page structure must be transparent so globe shows through.
+   GLOBE BACKGROUND (z-index:-1)
+   The canvas renders the dark space background. For it to show through,
+   HTML/body and page sections must be transparent in dark mode.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ① Full-page wrappers (min-h-screen) — canvas bg replaces these */
+/* ① html + body transparent — canvas clearColor provides the dark bg */
+.dark html,
+.dark body {
+  background-color: transparent !important;
+}
+
+/* ② ALL bg-background elements transparent — sections/wrappers show globe */
+/*    Note: we restore dialogs/popovers below */
+.dark .bg-background {
+  background-color: transparent;
+}
+
+/* ③ Restore opaque backgrounds for floating UI (dialogs, dropdowns, tooltips) */
+/*    Using !important + attribute selectors to win over the transparent rule */
+.dark [role="dialog"],
+.dark [role="alertdialog"],
+.dark [role="menu"],
+.dark [role="listbox"],
+.dark [role="tooltip"],
+.dark [data-radix-popper-content-wrapper],
+.dark [data-radix-select-content],
+.dark [cmdk-root] {
+  background-color: hsl(var(--background)) !important;
+}
+
+/* ④ Full-page wrappers — transparent (already covered by bg-background above) */
 .dark .min-h-screen {
   background-color: transparent !important;
 }
 
-/* ② Section containers in main — transparent + subtle hover */
+/* ⑤ Sections + divs inside main — transparent + hover glow */
 .dark main>section,
-.dark main>div>section,
-.dark main>div>div>section {
+.dark main>div>section {
   background-color: transparent !important;
   transition: background-color 0.35s ease;
 }
@@ -101,28 +125,33 @@
   background-color: rgba(255, 255, 255, 0.022);
 }
 
-/* ③ Main direct div wrappers (page frame divs, not cards) */
 .dark main>div:not([class*="bg-card"]):not([class*="bg-muted"]):not([class*="rounded"]) {
   background-color: transparent;
 }
 
-/* ④ Header: glass effect — floats above globe */
+/* ⑥ Header glass effect */
 .dark header {
-  background-color: rgba(5, 9, 20, 0.65) !important;
-  backdrop-filter: blur(18px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  background-color: rgba(5, 9, 20, 0.68) !important;
+  backdrop-filter: blur(18px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
-/* ⑤ Footer: glass effect */
+/* ⑦ Footer glass */
 .dark footer {
-  background-color: rgba(5, 9, 20, 0.70) !important;
+  background-color: rgba(5, 9, 20, 0.72) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
 }
 
-/* ⑥ Ensure text contrast — foreground stays near-white in dark mode */
-/* dark --foreground: 210 20% 90% = #dee5ef — high contrast vs #050914 space */
+/* ⑧ Gradient stops that use "from/to background" → transparent */
+.dark [class*="from-background"] {
+  --tw-gradient-from: transparent var(--tw-gradient-from-position);
+}
+
+.dark [class*="to-background"] {
+  --tw-gradient-to: transparent var(--tw-gradient-to-position);
+}
 
 
 /* ── Scrollbar ── */

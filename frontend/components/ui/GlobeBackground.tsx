@@ -1,81 +1,74 @@
 'use client';
 
 /**
- * GlobeBackground — 3D Earth + interactive star field
+ * GlobeBackground — 3D Earth + antigravity.google star effect
  *
- * Features:
- * ✅ Canvas at z-index: -1 (BEHIND all page content — never blocks clicks)
- * ✅ Dark space rendered by canvas clearColor (body can be transparent)
- * ✅ Earth auto-rotates on tilted axis
- * ✅ Click + drag (anywhere on page) rotates Earth — uses window events
- * ✅ Stars glow exactly like antigravity.google — GLSL with direct pixel sizes
- * ✅ Stars precomputed to 2D screen coords — O(n) per frame, no re-projection
- * ✅ Dark mode only via DOM classList check
+ * Architecture:
+ * - Canvas z-index: -1 (TRUE background, behind all content)
+ * - alpha: false → canvas draws its own #050914 dark space colour
+ * - body/html/sections must be transparent (globals.css) for canvas to show
+ * - pointer-events: none on canvas → never blocks clicks
+ * - window mouse events → drag (with 8px threshold) + star hover glow
+ * - DPR-corrected star sizes so they're actually visible
  */
 
 import { useEffect, useRef } from 'react';
 
+/* ── Textures (jsDelivr CDN — CORS safe) ─────────────────────────────────── */
 const TEX_DAY = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
-const TEX_WATER = 'https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/textures/planets/earth_specular_2048.jpg';
 
-/* ── GLSL shaders — direct pixel size (no depth attenuation bug) ─────────── */
+/* ── GLSL shaders ────────────────────────────────────────────────────────── */
 const VERT = /* glsl */`
   attribute float size;
-  attribute vec3 aColor;
-  varying vec3 vColor;
-  varying float vSize;
+  attribute vec3  aColor;
+  varying   vec3  vColor;
   void main() {
     vColor = aColor;
-    vSize  = size;
     gl_Position  = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = size;   /* direct pixel size — no distance division */
-  }
-`;
+    gl_PointSize = clamp(size, 1.0, 64.0);
+  }`;
+
 const FRAG = /* glsl */`
   varying vec3 vColor;
-  varying float vSize;
   void main() {
-    vec2 uv  = gl_PointCoord - 0.5;
-    float d  = length(uv) * 2.0;        /* 0 at center, 1 at edge */
+    vec2  uv = gl_PointCoord - 0.5;
+    float d  = length(uv) * 2.0;
     if (d > 1.0) discard;
-    /* soft glow disc: bright core → transparent edge */
-    float a = pow(1.0 - d, 2.5);
-    gl_FragColor = vec4(vColor * (0.7 + 0.3 * a), a);
-  }
-`;
+    float a = pow(1.0 - d, 2.2);
+    gl_FragColor = vec4(vColor, a);
+  }`;
 
-/* ── Configuration ───────────────────────────────────────────────────────── */
-const STAR_N = 6000;
-const HOVER_R = 150;   // px — cursor glow radius
-const BASE_MIN = 1.5;   // min star size in screen pixels
-const BASE_MAX = 3.5;   // max base star size
-const MAX_GLOW = 14.0;  // max size when cursor nearby
-const LERP = 0.09;  // smoothing factor (higher = snappier)
-const AUTO_ROT = 0.0010; // radians per frame (auto rotation)
-const DRAG_SENS = 0.006;  // drag sensitivity
+/* ── Config ──────────────────────────────────────────────────────────────── */
+const STAR_N = 5500;
+const HOVER_RADIUS = 180;     // CSS px
+const AUTO_ROT = 0.0009;  // rad / frame
+const DRAG_SENS = 0.007;
+const DRAG_THRESH = 8;       // px — below this is a click, above is drag
+const LERP = 0.08;
 const TILT = 23.5 * Math.PI / 180;
 
 export function GlobeBackground() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef(0);
-    const stateRef = useRef({
-        mx: -9999, my: -9999,
-        dragging: false,
-        lastX: 0, lastY: 0,
-    });
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        /* Dark mode only */
+        /* Only in dark mode */
         if (!document.documentElement.classList.contains('dark')) return;
 
-        let dead = false;
+        const dpr = Math.min(window.devicePixelRatio, 2);
 
-        (async () => {
-            const THREE = await import('three');
+        let dead = false;
+        let dragging = false;
+        let didDrag = false;
+        let startX = 0, startY = 0;
+        let lastX = 0, lastY = 0;
+        let mouseX = -9999, mouseY = -9999;
+
+        import('three').then(THREE => {
             if (dead) return;
 
             const W = () => window.innerWidth;
@@ -83,87 +76,67 @@ export function GlobeBackground() {
 
             /* ── Renderer ─────────────────────────────────────────────────── */
             const R = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-            R.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            R.setPixelRatio(dpr);
             R.setSize(W(), H());
-            R.setClearColor(0x050914, 1);  // deep space — canvas IS the background
+            R.setClearColor(0x050914, 1);   // deep space — this IS the bg
 
-            /* ── Scene / Camera ──────────────────────────────────────────── */
+            /* ── Scene / Camera ────────────────────────────────────────────── */
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(55, W() / H(), 1, 8000);
             camera.position.z = 680;
-
-            /* ── Light ────────────────────────────────────────────────────── */
             scene.add(new THREE.AmbientLight(0x1a2040, 1.8));
             const sun = new THREE.DirectionalLight(0xfff8f0, 2.4);
             sun.position.set(4, 1.5, 2);
             scene.add(sun);
 
-            /* ── Load textures ────────────────────────────────────────────── */
-            const loadTex = (url: string) =>
-                new Promise<InstanceType<typeof THREE.Texture> | null>(res =>
-                    new THREE.TextureLoader().load(url, t => res(t), undefined, () => res(null))
-                );
-            const [dayT, nightT, waterT] = await Promise.all([
-                loadTex(TEX_DAY), loadTex(TEX_NIGHT), loadTex(TEX_WATER),
-            ]);
-            if (dead) return;
-
-            /* ── Earth ────────────────────────────────────────────────────── */
-            const er = Math.min(W(), H()) * 0.42;  // 42% of shorter side
+            /* ── Earth ─────────────────────────────────────────────────────── */
+            const er = Math.min(W(), H()) * 0.42;
             const earth = new THREE.Mesh(
                 new THREE.SphereGeometry(er, 72, 72),
-                new THREE.MeshPhongMaterial({
-                    map: dayT ?? undefined,
-                    specularMap: waterT ?? undefined,
-                    specular: new THREE.Color(0x1a3366),
-                    shininess: 25,
-                    color: dayT ? undefined : 0x1a4477,
-                })
+                new THREE.MeshPhongMaterial({ color: 0x1a4477, shininess: 25 })
             );
             earth.rotation.z = TILT;
             scene.add(earth);
 
-            /* Night lights (additive) */
-            if (nightT) {
+            /* Load textures (non-blocking) */
+            const loader = new THREE.TextureLoader();
+            loader.load(TEX_DAY, t => { (earth.material as any).map = t; (earth.material as any).needsUpdate = true; });
+            loader.load(TEX_NIGHT, t => {
+                if (dead) return;
                 const ns = new THREE.Mesh(
                     new THREE.SphereGeometry(er + 1, 72, 72),
-                    new THREE.MeshLambertMaterial({
-                        map: nightT, blending: THREE.AdditiveBlending,
-                        transparent: true, opacity: 0.85,
-                    })
+                    new THREE.MeshLambertMaterial({ map: t, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85 })
                 );
                 ns.rotation.z = TILT;
-                (earth as any).__ns = ns;
                 scene.add(ns);
-            }
+                (earth as any).__ns = ns;
+            });
 
-            /* Atmosphere Fresnel glow */
+            /* Atmosphere */
             scene.add(new THREE.Mesh(
                 new THREE.SphereGeometry(er * 1.07, 64, 64),
                 new THREE.ShaderMaterial({
-                    vertexShader: `
-            varying float v;
-            void main() {
-              vec3 n = normalize(normalMatrix * normal);
-              vec3 e = normalize(-vec3(modelViewMatrix * vec4(position,1.0)));
-              v = pow(0.72 - dot(n,e), 4.0);
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-            }`,
-                    fragmentShader: `
-            varying float v;
-            void main() { gl_FragColor = vec4(0.2, 0.55, 1.0, 1.0) * v * 0.85; }`,
+                    vertexShader: `varying float v; void main() {
+            vec3 n=normalize(normalMatrix*normal);
+            vec3 e=normalize(-vec3(modelViewMatrix*vec4(position,1)));
+            v=pow(0.72-dot(n,e),4.0);
+            gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1); }`,
+                    fragmentShader: `varying float v; void main() { gl_FragColor=vec4(0.2,0.55,1.0,1.0)*v*0.85; }`,
                     side: THREE.FrontSide, blending: THREE.AdditiveBlending, transparent: true,
                 })
             ));
 
-            /* ── Star Field ────────────────────────────────────────────────── */
+            /* ── Stars ─────────────────────────────────────────────────────── */
+            // Star sizes in FRAMEBUFFER pixels = CSS pixels × dpr
+            const BASE_MIN = 3 * dpr;   // 3 CSS px
+            const BASE_MAX = 7 * dpr;   // 7 CSS px
+            const MAX_GLOW = 28 * dpr;  // 28 CSS px (big visible glow)
+
             const pos = new Float32Array(STAR_N * 3);
             const col = new Float32Array(STAR_N * 3);
             const sz = new Float32Array(STAR_N);
             const base = new Float32Array(STAR_N);
             const tgt = new Float32Array(STAR_N);
-
-            /* Precomputed 2D screen positions (camera is static — project once) */
             const scrX = new Float32Array(STAR_N);
             const scrY = new Float32Array(STAR_N);
             const tmp = new THREE.Vector3();
@@ -171,7 +144,7 @@ export function GlobeBackground() {
             for (let i = 0; i < STAR_N; i++) {
                 const θ = Math.random() * Math.PI * 2;
                 const φ = Math.acos(2 * Math.random() - 1);
-                const d = 1600 + Math.random() * 1800;
+                const d = 1500 + Math.random() * 2000;
                 pos[i * 3] = d * Math.sin(φ) * Math.cos(θ);
                 pos[i * 3 + 1] = d * Math.sin(φ) * Math.sin(θ);
                 pos[i * 3 + 2] = d * Math.cos(φ) - 500;
@@ -179,11 +152,10 @@ export function GlobeBackground() {
                 const b = BASE_MIN + Math.random() * (BASE_MAX - BASE_MIN);
                 base[i] = sz[i] = tgt[i] = b;
 
-                /* Color: mostly cool white/blue, few warm stars */
                 const warm = Math.random() < 0.18;
-                col[i * 3] = warm ? 1.00 : 0.88 + Math.random() * 0.12;
-                col[i * 3 + 1] = warm ? 0.82 : 0.90 + Math.random() * 0.10;
-                col[i * 3 + 2] = warm ? 0.55 : 1.00;
+                col[i * 3] = warm ? 1.0 : 0.88 + Math.random() * 0.12;
+                col[i * 3 + 1] = warm ? 0.82 : 0.92 + Math.random() * 0.08;
+                col[i * 3 + 2] = warm ? 0.55 : 1.0;
 
                 tmp.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).project(camera);
                 scrX[i] = (tmp.x * 0.5 + 0.5) * W();
@@ -196,10 +168,8 @@ export function GlobeBackground() {
             geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
             geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
             geo.setAttribute('size', szA);
-
             scene.add(new THREE.Points(geo, new THREE.ShaderMaterial({
-                vertexShader: VERT, fragmentShader: FRAG,
-                transparent: true, depthWrite: false,
+                vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false,
             })));
 
             /* ── Resize ────────────────────────────────────────────────────── */
@@ -207,7 +177,6 @@ export function GlobeBackground() {
                 camera.aspect = W() / H();
                 camera.updateProjectionMatrix();
                 R.setSize(W(), H());
-                /* Re-project stars (viewport changed) */
                 for (let i = 0; i < STAR_N; i++) {
                     tmp.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).project(camera);
                     scrX[i] = (tmp.x * 0.5 + 0.5) * W();
@@ -216,109 +185,77 @@ export function GlobeBackground() {
             };
             window.addEventListener('resize', onResize);
 
-            /* ── Input: mouse move + drag-to-rotate ─────────────────────── */
-            const s = stateRef.current;
-
-            const onMouseMove = (e: MouseEvent) => {
-                s.mx = e.clientX;
-                s.my = e.clientY;
-
-                if (s.dragging) {
-                    const dx = e.clientX - s.lastX;
-                    const dy = e.clientY - s.lastY;
+            /* ── Mouse / drag ──────────────────────────────────────────────── */
+            const onDown = (e: MouseEvent) => {
+                dragging = true; didDrag = false;
+                startX = lastX = e.clientX;
+                startY = lastY = e.clientY;
+            };
+            const onMove = (e: MouseEvent) => {
+                mouseX = e.clientX; mouseY = e.clientY;
+                if (!dragging) return;
+                const totalDist = Math.hypot(e.clientX - startX, e.clientY - startY);
+                if (didDrag || totalDist > DRAG_THRESH) {
+                    didDrag = true;
+                    const dx = e.clientX - lastX;
+                    const dy = e.clientY - lastY;
                     earth.rotation.y += dx * DRAG_SENS;
-                    /* Tilt: clamp so it doesn't flip upside down */
-                    earth.rotation.x = Math.max(-1.0, Math.min(1.0,
-                        earth.rotation.x + dy * DRAG_SENS * 0.5));
+                    earth.rotation.x = Math.max(-1.0, Math.min(1.0, earth.rotation.x + dy * DRAG_SENS * 0.5));
                     const ns = (earth as any).__ns;
                     if (ns) { ns.rotation.y = earth.rotation.y; ns.rotation.x = earth.rotation.x; }
-                    s.lastX = e.clientX;
-                    s.lastY = e.clientY;
                 }
+                lastX = e.clientX; lastY = e.clientY;
             };
+            const onUp = () => { dragging = false; };
 
-            const onMouseDown = (e: MouseEvent) => {
-                s.dragging = true;
-                s.lastX = e.clientX;
-                s.lastY = e.clientY;
-            };
+            window.addEventListener('mousedown', onDown);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
 
-            const onMouseUp = () => { s.dragging = false; };
-
-            /* Touch support */
-            const onTouchStart = (e: TouchEvent) => {
-                const t = e.touches[0];
-                s.dragging = true; s.lastX = t.clientX; s.lastY = t.clientY;
-            };
-            const onTouchMove = (e: TouchEvent) => {
-                const t = e.touches[0];
-                const dx = t.clientX - s.lastX;
-                const dy = t.clientY - s.lastY;
-                earth.rotation.y += dx * DRAG_SENS;
-                earth.rotation.x = Math.max(-1.0, Math.min(1.0, earth.rotation.x + dy * DRAG_SENS * 0.5));
-                const ns = (earth as any).__ns;
-                if (ns) { ns.rotation.y = earth.rotation.y; ns.rotation.x = earth.rotation.x; }
-                s.lastX = t.clientX; s.lastY = t.clientY;
-            };
-            const onTouchEnd = () => { s.dragging = false; };
-
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mousedown', onMouseDown);
-            window.addEventListener('mouseup', onMouseUp);
-            window.addEventListener('touchstart', onTouchStart, { passive: true });
-            window.addEventListener('touchmove', onTouchMove, { passive: true });
-            window.addEventListener('touchend', onTouchEnd);
-
-            /* ── Tick ─────────────────────────────────────────────────────── */
+            /* ── Tick ──────────────────────────────────────────────────────── */
             const tick = () => {
                 if (dead) return;
                 rafRef.current = requestAnimationFrame(tick);
 
-                /* Auto-rotate Y (only when not dragging) */
-                if (!s.dragging) {
+                if (!dragging) {
                     earth.rotation.y += AUTO_ROT;
                     const ns = (earth as any).__ns;
                     if (ns) ns.rotation.y = earth.rotation.y;
                 }
 
-                /* Star glow — antigravity.google proximity effect */
-                const mxv = s.mx, myv = s.my;
+                /* antigravity.google star effect */
                 for (let i = 0; i < STAR_N; i++) {
-                    const dx = scrX[i] - mxv;
-                    const dy = scrY[i] - myv;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-
-                    /* Smooth quadratic falloff like antigravity */
-                    if (dist < HOVER_R) {
-                        const t = 1 - dist / HOVER_R;
-                        tgt[i] = base[i] + t * t * (MAX_GLOW - base[i]);
-                    } else {
-                        tgt[i] = base[i];
-                    }
+                    const dist = Math.hypot(scrX[i] - mouseX, scrY[i] - mouseY);
+                    tgt[i] = dist < HOVER_RADIUS
+                        ? base[i] + (1 - dist / HOVER_RADIUS) ** 2 * (MAX_GLOW - base[i])
+                        : base[i];
                     sz[i] += (tgt[i] - sz[i]) * LERP;
                 }
                 szA.needsUpdate = true;
-
                 R.render(scene, camera);
             };
             tick();
 
-            /* ── Cleanup ────────────────────────────────────────────────── */
-            return () => {
+            /* ── Cleanup ───────────────────────────────────────────────────── */
+            const dispose = () => {
                 dead = true;
                 cancelAnimationFrame(rafRef.current);
                 window.removeEventListener('resize', onResize);
-                window.removeEventListener('mousemove', onMouseMove);
-                window.removeEventListener('mousedown', onMouseDown);
-                window.removeEventListener('mouseup', onMouseUp);
-                window.removeEventListener('touchstart', onTouchStart);
-                window.removeEventListener('touchmove', onTouchMove);
-                window.removeEventListener('touchend', onTouchEnd);
+                window.removeEventListener('mousedown', onDown);
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
                 R.dispose();
             };
-        })().then(fn => { if (fn) fn(); });
+            // Store for effect cleanup
+            (canvas as any).__dispose = dispose;
+        });
 
-        return () => { dead = true; cancelAnimationFrame(rafRef.current); };
+        return () => {
+            dead = true;
+            cancelAnimationFrame(rafRef.current);
+            const dispose = (canvas as any).__dispose;
+            if (dispose) dispose();
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -330,8 +267,8 @@ export function GlobeBackground() {
                 inset: 0,
                 width: '100vw',
                 height: '100vh',
-                zIndex: -1,          /* BEHIND all page content */
-                pointerEvents: 'none',      /* canvas itself never captures events */
+                zIndex: -1,
+                pointerEvents: 'none',
                 display: 'block',
             }}
             aria-hidden
