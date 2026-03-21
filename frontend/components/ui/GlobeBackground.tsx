@@ -10,6 +10,7 @@
  * - Dark mode: deep space + warm dim lighting + bright white stars
  */
 import { useEffect, useRef } from 'react';
+import type * as THREE from 'three';
 
 const TEX_DAY = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
