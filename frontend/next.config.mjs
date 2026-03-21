@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3001';
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:3005';
+const TOKEN_SERVICE_URL = process.env.TOKEN_SERVICE_URL || 'http://localhost:3003';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -48,6 +49,11 @@ const nextConfig = {
         // AI service (Python FastAPI, port 3005) — must come BEFORE the catch-all
         source: '/api/ai/:path*',
         destination: `${AI_SERVICE_URL}/api/ai/:path*`,
+      },
+      {
+        // Tokenization / RWA service (port 3003)
+        source: '/api/rwa/:path*',
+        destination: `${TOKEN_SERVICE_URL}/api/rwa/:path*`,
       },
       {
         // Everything else → Node.js main-service (port 3001)

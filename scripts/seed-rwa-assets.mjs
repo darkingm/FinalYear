@@ -2,12 +2,10 @@
  * seed-rwa-assets.mjs — run once to create 5 realistic RWA assets
  * Usage: node scripts/seed-rwa-assets.mjs
  * Requires the backend to be running on http://localhost:3001
- *
- * Auth: uses admin credentials or skips auth if API is open
+ * Uses built-in Node 18+ fetch (no external deps needed)
  */
-import fetch from 'node-fetch';
 
-const BASE = process.env.API_URL || 'http://localhost:3001';
+const BASE = process.env.API_URL || 'http://localhost:3003';
 
 const ASSETS = [
     {
