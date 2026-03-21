@@ -4,16 +4,28 @@ import { query } from '../../config/database';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
 
+/**
+ * Ensure a seller_profile exists for this user.
+ * ALL authenticated users can be sellers — profile is auto-created on first use.
+ */
+async function ensureSellerProfile(userId: number): Promise<number> {
+  await query(
+    `INSERT INTO seller_profiles (user_id, display_name, created_at)
+     VALUES ($1, (SELECT username FROM users WHERE user_id = $1), NOW())
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId]
+  );
+  const result = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
+  if (result.rows.length === 0) throw new AppError('Could not create seller profile', 500);
+  return result.rows[0].seller_id;
+}
+
 // ─── Get Seller Dashboard Overview ────────────────────────────────────────────
 export async function getSellerOverview(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.user_id;
     const days = parseInt(req.query.days as string) || 30;
-
-    // Get seller_id from user
-    const spResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
-    if (spResult.rows.length === 0) throw new AppError('Seller profile not found', 404);
-    const sellerId = spResult.rows[0].seller_id;
+    const sellerId = await ensureSellerProfile(userId);
 
     const since = `NOW() - INTERVAL '${days} days'`;
 
@@ -95,7 +107,7 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
          WHERE seller_id = $1 AND status = 'published'`,
         [sellerId]
       ),
-      // Conversion: views vs orders (product_views table if exists)
+      // Conversion stats
       query(
         `SELECT
            COUNT(DISTINCT o.order_id) AS total_orders,
@@ -131,10 +143,7 @@ export async function getSellerProducts(req: AuthRequest, res: Response, next: N
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const offset = (page - 1) * limit;
-
-    const spResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
-    if (spResult.rows.length === 0) throw new AppError('Seller profile not found', 404);
-    const sellerId = spResult.rows[0].seller_id;
+    const sellerId = await ensureSellerProfile(userId);
 
     const [result, countResult] = await Promise.all([
       query(
@@ -177,10 +186,7 @@ export async function getSellerOrders(req: AuthRequest, res: Response, next: Nex
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
     const offset = (page - 1) * limit;
     const status = req.query.status as string | undefined;
-
-    const spResult = await query('SELECT seller_id FROM seller_profiles WHERE user_id = $1', [userId]);
-    if (spResult.rows.length === 0) throw new AppError('Seller profile not found', 404);
-    const sellerId = spResult.rows[0].seller_id;
+    const sellerId = await ensureSellerProfile(userId);
 
     const params: any[] = [sellerId];
     let whereExtra = '';
@@ -223,5 +229,4 @@ export async function getSellerOrders(req: AuthRequest, res: Response, next: Nex
 }
 
 // ─── /api/seller/stats — alias of getSellerOverview ───────────────────────────
-// Some clients (AI-chat, external tools) call /stats instead of /overview.
 export const getSellerStats = getSellerOverview;

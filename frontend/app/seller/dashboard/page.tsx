@@ -50,16 +50,13 @@ export default function SellerDashboardPage() {
     if (!authLoading) {
       if (!isAuthenticated) {
         router.push('/login?callbackUrl=/seller/dashboard');
-      } else if ((user as any)?.role !== 'seller' && (user as any)?.role !== 'admin') {
-        toast.error('You must be a seller to access this page');
-        router.push('/');
       }
+      // No role check — any logged-in user can be a seller
     }
-  }, [isAuthenticated, authLoading, user, router]);
+  }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    const userRole = (user as any)?.role;
-    if (isAuthenticated && (userRole === 'seller' || userRole === 'admin')) {
+    if (isAuthenticated) {
       fetchDashboard();
     }
   }, [isAuthenticated, user]);
@@ -85,7 +82,20 @@ export default function SellerDashboardPage() {
     );
   }
 
-  if (!stats) return null;
+  if (!stats) return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header />
+      <main className="flex-1 container mx-auto px-4 py-16 max-w-7xl text-center">
+        <Store className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+        <h2 className="text-xl font-bold">Chưa có dữ liệu gian hàng</h2>
+        <p className="text-muted-foreground mt-2">Hãy tạo sản phẩm đầu tiên để bắt đầu bán hàng!</p>
+        <Link href="/products/create" className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-[#f0b90b] text-black font-bold rounded-xl hover:bg-[#f0b90b]/90 transition-colors">
+          <Plus className="w-4 h-4" /> Tạo sản phẩm đầu tiên
+        </Link>
+      </main>
+      <Footer />
+    </div>
+  );
 
   const statCards = [
     {
