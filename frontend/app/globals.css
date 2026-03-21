@@ -78,63 +78,70 @@
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   GLOBE BACKGROUND (z-index:-1)
-   The canvas renders the dark space background. For it to show through,
-   HTML/body and page sections must be transparent in dark mode.
+   GLOBE BACKGROUND — works in BOTH light and dark mode
+   Canvas (z-index:-1) provides the background colour for each theme:
+     dark mode  → #050914 deep space
+     light mode → #c8e8ff sky blue
+   All bg-background elements must be transparent so canvas shows through.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ① html + body transparent — canvas clearColor provides the dark bg */
-.dark html,
-.dark body {
+/* ① html + body transparent in BOTH modes */
+html,
+body {
   background-color: transparent !important;
 }
 
-/* ② ALL bg-background elements transparent — sections/wrappers show globe */
-/*    Note: we restore dialogs/popovers below */
-.dark .bg-background {
+/* ② ALL bg-background elements → transparent (canvas provides bg) */
+.bg-background {
   background-color: transparent;
 }
 
-/* ③ Restore opaque backgrounds for floating UI (dialogs, dropdowns, tooltips) */
-/*    Using !important + attribute selectors to win over the transparent rule */
-.dark [role="dialog"],
-.dark [role="alertdialog"],
-.dark [role="menu"],
-.dark [role="listbox"],
-.dark [role="tooltip"],
-.dark [data-radix-popper-content-wrapper],
-.dark [data-radix-select-content],
-.dark [cmdk-root] {
+/* ③ Restore floating UI backgrounds (dialogs, dropdowns, menus) */
+[role="dialog"],
+[role="alertdialog"],
+[role="menu"],
+[role="listbox"],
+[role="tooltip"],
+[data-radix-popper-content-wrapper],
+[data-radix-select-content],
+[cmdk-root] {
   background-color: hsl(var(--background)) !important;
 }
 
-/* ④ Full-page wrappers — transparent (already covered by bg-background above) */
-.dark .min-h-screen {
+/* ④ Full-page wrappers */
+.min-h-screen {
   background-color: transparent !important;
 }
 
-/* ⑤ Sections + divs inside main — transparent + hover glow */
-.dark main>section,
-.dark main>div>section {
+/* ⑤ Sections in main — transparent + hover glow */
+main>section,
+main>div>section {
   background-color: transparent !important;
   transition: background-color 0.35s ease;
 }
 
-.dark main>section:hover,
-.dark main>div>section:hover {
-  background-color: rgba(255, 255, 255, 0.022);
+main>section:hover,
+main>div>section:hover {
+  background-color: rgba(128, 128, 128, 0.04);
 }
 
-.dark main>div:not([class*="bg-card"]):not([class*="bg-muted"]):not([class*="rounded"]) {
+main>div:not([class*="bg-card"]):not([class*="bg-muted"]):not([class*="rounded"]) {
   background-color: transparent;
 }
 
-/* ⑥ Header glass effect */
+/* ⑥ Header glass — adapts to light/dark */
 .dark header {
   background-color: rgba(5, 9, 20, 0.68) !important;
   backdrop-filter: blur(18px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+header:not(.dark header) {
+  background-color: rgba(200, 230, 255, 0.65) !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(100, 160, 220, 0.25) !important;
 }
 
 /* ⑦ Footer glass */
@@ -144,12 +151,18 @@
   -webkit-backdrop-filter: blur(12px) !important;
 }
 
-/* ⑧ Gradient stops that use "from/to background" → transparent */
-.dark [class*="from-background"] {
+footer:not(.dark footer) {
+  background-color: rgba(200, 230, 255, 0.70) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* ⑧ Gradient stops from/to background → transparent */
+[class*="from-background"] {
   --tw-gradient-from: transparent var(--tw-gradient-from-position);
 }
 
-.dark [class*="to-background"] {
+[class*="to-background"] {
   --tw-gradient-to: transparent var(--tw-gradient-to-position);
 }
 
