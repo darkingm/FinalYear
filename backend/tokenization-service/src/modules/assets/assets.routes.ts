@@ -41,7 +41,7 @@ assetsRouter.get('/:id', async (req: Request, res: Response) => {
     }
 });
 
-/* ─── Admin: Create asset ────────────────────────────────────────────── */
+/* ─── Admin: Create asset (no blockchain) ────────────────────────────── */
 assetsRouter.post('/', async (req: Request, res: Response) => {
     const {
         name, symbol, asset_type, description, location,
@@ -56,7 +56,7 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
     const totalTokens = Math.floor(Number(total_valuation_usd) / Number(price_per_token_usd));
 
     try {
-        // 1. Create DB record (status=PENDING until on-chain deployment confirmed)
+        // 1. Create DB record first (always succeeds)
         await query(`
       INSERT INTO rwa_assets (
         asset_id, name, symbol, asset_type, description, location,
@@ -69,29 +69,44 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
             legal_doc_ipfs || '', expected_apy || null,
         ]);
 
-        // 2. Deploy on-chain (async — update status after)
-        const assetTypeMap: Record<string, number> = {
-            REAL_ESTATE: 0, BOND: 1, EQUITY: 2, COMMODITY: 3,
-        };
-        const assetTypeEnum = assetTypeMap[asset_type] ?? 0;
+        // 2. Try blockchain deploy — optional, skip if unavailable (local dev)
+        let tokenAddress = '0x0000000000000000000000000000000000000000';
+        let distributorAddress = '0x0000000000000000000000000000000000000000';
+        let onChain = false;
 
-        const { tokenAddress, distributorAddress } = await createAssetOnChain({
-            assetId, name, symbol, assetType: assetTypeEnum,
-            legalDocIPFS: legal_doc_ipfs || '',
-            totalValUSD: BigInt(Math.round(Number(total_valuation_usd) * 1e6)),
-            pricePerTokenUSD: BigInt(Math.round(Number(price_per_token_usd) * 1e6)),
-        });
+        try {
+            const assetTypeMap: Record<string, number> = {
+                REAL_ESTATE: 0, BOND: 1, EQUITY: 2, COMMODITY: 3,
+            };
+            const assetTypeEnum = assetTypeMap[asset_type] ?? 0;
+            const result = await createAssetOnChain({
+                assetId, name, symbol, assetType: assetTypeEnum,
+                legalDocIPFS: legal_doc_ipfs || '',
+                totalValUSD: BigInt(Math.round(Number(total_valuation_usd) * 1e6)),
+                pricePerTokenUSD: BigInt(Math.round(Number(price_per_token_usd) * 1e6)),
+            });
+            tokenAddress = result.tokenAddress;
+            distributorAddress = result.distributorAddress;
+            onChain = true;
+        } catch (_blockchainErr) {
+            // Blockchain not available (Hardhat not running locally) — continue with placeholder
+            console.warn(`[RWA] Blockchain unavailable for ${symbol}, saving with placeholder addresses`);
+        }
 
-        // 3. Update with contract addresses
+        // 3. Update with contract addresses (placeholder or real)
         await query(`
       UPDATE rwa_assets
-      SET token_contract_address = $1, distributor_contract_address = $2, status = 'ACTIVE'
+      SET token_contract_address = $1, distributor_contract_address = $2
       WHERE asset_id = $3
     `, [tokenAddress, distributorAddress, assetId]);
 
-        res.status(201).json({ asset_id: assetId, token_contract_address: tokenAddress, distributor_contract_address: distributorAddress });
+        res.status(201).json({
+            asset_id: assetId,
+            token_contract_address: tokenAddress,
+            distributor_contract_address: distributorAddress,
+            on_chain: onChain,
+        });
     } catch (err: any) {
-        // Mark as failed
         await query(`UPDATE rwa_assets SET status = 'FAILED' WHERE asset_id = $1`, [assetId]).catch(() => { });
         res.status(500).json({ error: err.message });
     }
