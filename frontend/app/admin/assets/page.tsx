@@ -162,6 +162,18 @@ export default function AdminAssetsPage() {
         fetchAll();
     }, []);
 
+    const handleStatusChange = async (assetId: string, newStatus: string) => {
+        try {
+            await rwaApi.assets.updateStatus(assetId, newStatus);
+            setAssets(prev => prev.map(a => a.asset_id === assetId ? { ...a, status: newStatus } : a));
+            toast.success(`Status updated to ${newStatus}`);
+        } catch (e: any) { toast.error(e.response?.data?.error || 'Update failed'); }
+    };
+
+    const nextStatus: Record<string, string> = {
+        PENDING: 'ACTIVE', ACTIVE: 'CLOSED', CLOSED: 'ACTIVE',
+    };
+
     const handleDepositProfit = async (asset: RWAAsset) => {
         const amount = depositAmount[asset.asset_id];
         if (!amount || parseFloat(amount) <= 0) return toast.error('Enter ETH amount');
@@ -224,10 +236,17 @@ export default function AdminAssetsPage() {
                                         <p className="text-[10px] font-mono text-muted-foreground mt-0.5">Token: {asset.token_contract_address.slice(0, 20)}...</p>
                                     )}
                                 </div>
-                                <div className="flex gap-4 text-sm">
+                                <div className="flex gap-4 text-sm items-start flex-wrap">
                                     <div><p className="text-muted-foreground text-xs">Sold</p><p className="font-bold">{asset.tokens_sold.toLocaleString()}</p></div>
                                     <div><p className="text-muted-foreground text-xs">Remaining</p><p className="font-bold">{(asset.total_tokens - asset.tokens_sold).toLocaleString()}</p></div>
                                     {asset.expected_apy && <div><p className="text-muted-foreground text-xs">APY</p><p className="font-bold text-emerald-400">{asset.expected_apy}%</p></div>}
+                                    <button
+                                        onClick={() => handleStatusChange(asset.asset_id, nextStatus[asset.status] || 'ACTIVE')}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border rounded-lg text-xs font-bold transition-all ml-2"
+                                        title={`Set to ${nextStatus[asset.status]}`}
+                                    >
+                                        → {nextStatus[asset.status] || 'ACTIVE'}
+                                    </button>
                                 </div>
                             </div>
 
