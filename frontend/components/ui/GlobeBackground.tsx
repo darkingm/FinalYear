@@ -47,18 +47,18 @@ const TILT = 23.5 * Math.PI / 180;
 const PRESETS = {
     dark: {
         clearColor: 0x050914,
-        ambientColor: 0x1a2040, ambientIntens: 1.8,
-        sunColor: 0xfff8f0, sunIntens: 2.0,
+        ambientColor: 0x244066, ambientIntens: 2.5,   // blue-white fill — reveals landmasses
+        sunColor: 0xfff5e0, sunIntens: 4.5,         // warm bright sun
         sunPos: [4, 1.5, 2] as [number, number, number],
         starOpacity: 1.0,
-        nightOpacity: 0.85,
+        nightOpacity: 0.7,
     },
     light: {
         clearColor: 0xbddff5,
-        ambientColor: 0x88aabb, ambientIntens: 2.8,
-        sunColor: 0xffffff, sunIntens: 3.2,
+        ambientColor: 0xd0e8f8, ambientIntens: 3.5,   // very bright sky fill
+        sunColor: 0xffffff, sunIntens: 6.0,         // full daytime sun
         sunPos: [3, 2, 2] as [number, number, number],
-        starOpacity: 0.18,
+        starOpacity: 0.05,
         nightOpacity: 0.0,
     },
 } as const;
@@ -93,9 +93,9 @@ export function GlobeBackground() {
             const camera = new THREE.PerspectiveCamera(55, W() / H(), 1, 8000);
             camera.position.z = 680;
 
-            const ambientLight = new THREE.AmbientLight(0x1a2040, 1.8);
+            const ambientLight = new THREE.AmbientLight(0x244066, 2.5);
             scene.add(ambientLight);
-            const sun = new THREE.DirectionalLight(0xfff8f0, 2.0);
+            const sun = new THREE.DirectionalLight(0xfff5e0, 4.5);
             sun.position.set(4, 1.5, 2).normalize();
             scene.add(sun);
 
