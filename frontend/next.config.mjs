@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3001';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:3005';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -35,14 +36,21 @@ const nextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
 
-  // Proxy /api/* → Express backend (skip /api/auth which is NextAuth)
+  // Proxy rules — ORDER MATTERS (specific before general)
   async rewrites() {
     return [
       {
+        // NextAuth — handled locally, never proxy
         source: '/api/auth/:path*',
-        destination: '/api/auth/:path*', // handled by NextAuth — no proxy
+        destination: '/api/auth/:path*',
       },
       {
+        // AI service (Python FastAPI, port 3005) — must come BEFORE the catch-all
+        source: '/api/ai/:path*',
+        destination: `${AI_SERVICE_URL}/api/ai/:path*`,
+      },
+      {
+        // Everything else → Node.js main-service (port 3001)
         source: '/api/:path*',
         destination: `${BACKEND_URL}/api/:path*`,
       },
