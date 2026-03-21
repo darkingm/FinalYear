@@ -55,6 +55,7 @@ export interface ProfitDistributorInterface extends Interface {
       | "hasRole"
       | "pause"
       | "paused"
+      | "pendingCredit"
       | "pendingReward"
       | "renounceRole"
       | "revokeRole"
@@ -132,6 +133,10 @@ export interface ProfitDistributorInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pendingCredit",
+    values: [AddressLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "pendingReward",
     values: [AddressLike]
@@ -215,6 +220,10 @@ export interface ProfitDistributorInterface extends Interface {
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingCredit",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "pendingReward",
     data: BytesLike
@@ -461,6 +470,8 @@ export interface ProfitDistributor extends BaseContract {
 
   paused: TypedContractMethod<[], [boolean], "view">;
 
+  pendingCredit: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+
   pendingReward: TypedContractMethod<[investor: AddressLike], [bigint], "view">;
 
   renounceRole: TypedContractMethod<
@@ -568,6 +579,9 @@ export interface ProfitDistributor extends BaseContract {
   getFunction(
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "pendingCredit"
+  ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "pendingReward"
   ): TypedContractMethod<[investor: AddressLike], [bigint], "view">;

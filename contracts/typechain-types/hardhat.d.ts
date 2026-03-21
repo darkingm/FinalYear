@@ -142,6 +142,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.RWAFactory__factory>;
     getContractFactory(
+      name: "IProfitDistributor",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IProfitDistributor__factory>;
+    getContractFactory(
       name: "RWAToken",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.RWAToken__factory>;
@@ -307,6 +311,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.RWAFactory>;
     getContractAt(
+      name: "IProfitDistributor",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IProfitDistributor>;
+    getContractAt(
       name: "RWAToken",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -441,6 +450,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.RWAFactory>;
     deployContract(
+      name: "IProfitDistributor",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IProfitDistributor>;
+    deployContract(
       name: "RWAToken",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.RWAToken>;
@@ -605,6 +618,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.RWAFactory>;
+    deployContract(
+      name: "IProfitDistributor",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IProfitDistributor>;
     deployContract(
       name: "RWAToken",
       args: any[],
