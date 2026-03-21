@@ -185,6 +185,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build & Push tokenization-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/tokenization-service
+          file: ./backend/tokenization-service/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-tokenization:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-tokenization:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ============================================================
   # JOB 3 — Deploy to VPS with automatic DB migration
   # ============================================================
@@ -240,6 +252,7 @@ jobs:
             docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest &
             docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:latest &
             docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest &
+            docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest &
             wait
             echo "✓ All images pulled"
 
@@ -272,7 +285,7 @@ jobs:
             # CRITICAL: Stop+remove orphaned containers before compose up.
             # Prevents "container name already in use" conflict when containers
             # were started manually (outside docker compose) on the VPS.
-            for svc in marketplace-main-api marketplace-payment-api marketplace-frontend marketplace-ai; do
+            for svc in marketplace-main-api marketplace-payment-api marketplace-frontend marketplace-ai marketplace-tokenization; do
               docker stop "$svc" 2>/dev/null || true
               docker rm   "$svc" 2>/dev/null || true
             done
