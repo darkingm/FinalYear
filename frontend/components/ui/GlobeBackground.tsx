@@ -59,7 +59,7 @@ const PRESETS = {
         ambientColor: 0xe8f4ff, ambientIntens: 2.5,
         sunColor: 0xffffff, sunIntens: 4.5,
         sunPos: [3, 2, 2] as [number, number, number],
-        starOpacity: 0.05,
+        starOpacity: 0.35,   // visible rainbow sparkles
         nightOpacity: 0.0,
     },
 } as const;
@@ -142,7 +142,7 @@ export function GlobeBackground() {
             /* ── Stars: SCREEN-SPACE placement (fills entire viewport) ──── */
             // Each star placed at a random NDC position and pushed to a random depth.
             // This guarantees uniform coverage across the whole screen.
-            const BASE_MIN = 1.5 * dpr, BASE_MAX = 4 * dpr, MAX_GLOW = 22 * dpr;
+            const BASE_MIN = 2.5 * dpr, BASE_MAX = 7 * dpr, MAX_GLOW = 26 * dpr;
 
             const pos = new Float32Array(STAR_N * 3);
             const col = new Float32Array(STAR_N * 3);
@@ -189,7 +189,8 @@ export function GlobeBackground() {
                 const b = BASE_MIN + Math.random() * (BASE_MAX - BASE_MIN);
                 base[i] = sz[i] = tgt[i] = b;
 
-                // Color: cool white/blue, rare warm
+                // Dark mode: cool white/blue, rare warm
+                // Light mode: rainbow HSL — will be set in applyTheme
                 const warm = Math.random() < 0.15;
                 col[i * 3] = warm ? 1.00 : 0.88 + Math.random() * 0.12;
                 col[i * 3 + 1] = warm ? 0.82 : 0.92 + Math.random() * 0.08;
@@ -211,6 +212,28 @@ export function GlobeBackground() {
             scene.add(new THREE.Points(geo, starMat));
 
             /* ── Apply theme ─────────────────────────────────────────────── */
+            const colA = new THREE.BufferAttribute(col, 3);
+            colA.setUsage(THREE.DynamicDrawUsage);
+            geo.setAttribute('aColor', colA);
+
+            // Pre-bake rainbow colors for light mode
+            const rainbowCol = new Float32Array(STAR_N * 3);
+            for (let i = 0; i < STAR_N; i++) {
+                const hue = (i / STAR_N) * 360; // full rainbow spread
+                // HSL → RGB
+                const h = hue / 60, c2 = 1, x2 = c2 * (1 - Math.abs(h % 2 - 1));
+                let r = 0, g = 0, b2 = 0;
+                if (h < 1) { r = c2; g = x2; }
+                else if (h < 2) { r = x2; g = c2; }
+                else if (h < 3) { g = c2; b2 = x2; }
+                else if (h < 4) { g = x2; b2 = c2; }
+                else if (h < 5) { r = x2; b2 = c2; }
+                else { r = c2; b2 = x2; }
+                rainbowCol[i * 3] = r * 0.9 + 0.1;
+                rainbowCol[i * 3 + 1] = g * 0.9 + 0.1;
+                rainbowCol[i * 3 + 2] = b2 * 0.9 + 0.1;
+            }
+
             const applyTheme = (t: 'dark' | 'light') => {
                 const p = PRESETS[t];
                 R.setClearColor(p.clearColor, 1);
@@ -222,6 +245,10 @@ export function GlobeBackground() {
                 starMat.uniforms.uOpacity.value = p.starOpacity;
                 earthMat.needsUpdate = true;
                 if (nightMesh) (nightMesh.material as THREE.MeshLambertMaterial).opacity = p.nightOpacity;
+                // Swap star colors: rainbow in light, cool white in dark
+                const src = t === 'light' ? rainbowCol : col;
+                for (let i = 0; i < STAR_N * 3; i++) colA.array[i] = src[i];
+                colA.needsUpdate = true;
             };
             applyTheme(getTheme());
 
@@ -257,9 +284,35 @@ export function GlobeBackground() {
             };
             const onUp = () => { dragging = false; };
 
+            /* ── Touch events (mobile) ───────────────────────────────────── */
+            const onTouchStart = (e: TouchEvent) => {
+                const t = e.touches[0];
+                dragging = true; didDrag = false;
+                startX = lastX = t.clientX; startY = lastY = t.clientY;
+            };
+            const onTouchMove = (e: TouchEvent) => {
+                if (!dragging || e.touches.length !== 1) return;
+                const t = e.touches[0];
+                mouseX = t.clientX; mouseY = t.clientY;
+                if (didDrag || Math.hypot(t.clientX - startX, t.clientY - startY) > DRAG_THRESH) {
+                    didDrag = true;
+                    e.preventDefault(); // prevent page scroll while rotating globe
+                    const dx = t.clientX - lastX, dy = t.clientY - lastY;
+                    earth.rotation.y += dx * DRAG_SENS;
+                    earth.rotation.x = Math.max(-1, Math.min(1, earth.rotation.x + dy * DRAG_SENS * 0.5));
+                    const ns = (earth as any).__ns;
+                    if (ns) { ns.rotation.y = earth.rotation.y; ns.rotation.x = earth.rotation.x; }
+                }
+                lastX = t.clientX; lastY = t.clientY;
+            };
+            const onTouchEnd = () => { dragging = false; };
+
             window.addEventListener('mousedown', onDown);
             window.addEventListener('mousemove', onMove);
             window.addEventListener('mouseup', onUp);
+            canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+            canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+            canvas.addEventListener('touchend', onTouchEnd, { passive: true });
 
             /* ── Tick ────────────────────────────────────────────────────── */
             const tick = () => {
@@ -292,6 +345,9 @@ export function GlobeBackground() {
                 window.removeEventListener('mousedown', onDown);
                 window.removeEventListener('mousemove', onMove);
                 window.removeEventListener('mouseup', onUp);
+                canvas.removeEventListener('touchstart', onTouchStart);
+                canvas.removeEventListener('touchmove', onTouchMove);
+                canvas.removeEventListener('touchend', onTouchEnd);
                 R.dispose();
             };
         });
@@ -309,7 +365,8 @@ export function GlobeBackground() {
             ref={canvasRef}
             style={{
                 position: 'fixed', inset: 0, width: '100vw', height: '100vh',
-                zIndex: -1, pointerEvents: 'none', display: 'block'
+                zIndex: -1, pointerEvents: 'auto', display: 'block',
+                touchAction: 'none',
             }}
             aria-hidden
         />

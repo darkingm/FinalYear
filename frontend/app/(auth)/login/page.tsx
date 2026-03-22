@@ -70,7 +70,7 @@ function LeftPanel() {
   ];
 
   return (
-    <div className="hidden lg:flex w-[58%] relative overflow-hidden flex-col bg-[#06060e]">
+    <div className="hidden lg:flex w-[58%] relative overflow-hidden flex-col bg-black/40 backdrop-blur-[2px]">
       {/* Grid overlay */}
       <div className="absolute inset-0" style={{
         backgroundImage: 'linear-gradient(rgba(240,185,11,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(240,185,11,0.04) 1px, transparent 1px)',

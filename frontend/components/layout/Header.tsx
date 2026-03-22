@@ -11,7 +11,7 @@ import {
   Menu, X, ShoppingBag, Wallet, Package,
   LogOut, User, Shield, Bell,
   TrendingUp, Zap, BarChart3, ChevronDown, Copy, Check,
-  Building, Brain,
+  Building, Brain, Fish, Activity,
 } from 'lucide-react';
 import { useState, useEffect, memo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -28,6 +28,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import { WhaleAlertBadge } from '@/components/whale-tracker/WhaleAlertBadge';
+import { WhalePanelSlideOver } from '@/components/whale-tracker/WhalePanelSlideOver';
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * TickerItem — isolated memo component, only re-renders for its OWN symbol
@@ -119,6 +121,7 @@ export function Header() {
   const [, setLang] = useState(i18n.language);
   const [addrCopied, setAddrCopied] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [whaleOpen, setWhaleOpen] = useState(false);
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -148,6 +151,7 @@ export function Header() {
     { href: '/', label: 'Trang chủ', authRequired: false },
     { href: '/products', label: 'Sản phẩm', authRequired: false },
     { href: '/trading/BTCUSDT', label: 'Giao dịch', icon: TrendingUp, authRequired: false },
+    { href: '/whale-tracker', label: 'On-Chain', icon: Activity, authRequired: false },
     { href: '/orders', label: 'Đơn hàng', icon: ShoppingBag, authRequired: true },
     { href: '/wallet', label: 'Ví', authRequired: true },
   ];
@@ -168,6 +172,7 @@ export function Header() {
   return (
     <TooltipProvider delayDuration={300}>
       <>
+        <WhalePanelSlideOver open={whaleOpen} onClose={() => setWhaleOpen(false)} />
         {/* Ticker bar — isolated TickerCoin memos, smooth CSS marquee */}
         <TickerBar />
 
@@ -237,6 +242,22 @@ export function Header() {
 
               {/* Right Side */}
               <div className="hidden md:flex items-center gap-1.5">
+
+                {/* Whale Tracker Button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setWhaleOpen(true)}
+                      className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors"
+                      aria-label="Whale Tracker"
+                    >
+                      <Fish className="w-5 h-5" />
+                      <WhaleAlertBadge />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Theo dõi cá voi</TooltipContent>
+                </Tooltip>
+
                 <ThemeToggle />
                 <LanguageSwitcher />
 

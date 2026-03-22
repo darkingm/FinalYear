@@ -5,6 +5,7 @@ import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '@/lib/i18n/config';
+import { WhalePollingProvider } from '@/components/whale-tracker/WhalePollingProvider';
 
 /**
  * WalletProviders is dynamically imported with ssr:false.
@@ -26,7 +27,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
         <I18nextProvider i18n={i18n}>
-          <WalletProviders>{children}</WalletProviders>
+          <WalletProviders>
+            <WhalePollingProvider />
+            {children}
+          </WalletProviders>
         </I18nextProvider>
       </ThemeProvider>
     </SessionProvider>
