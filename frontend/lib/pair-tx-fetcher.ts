@@ -454,14 +454,10 @@ export async function fetchPairTxs(
     const swaps = await querySubgraph(chain, q);
     if (swaps && swaps.length > 0) {
         const mapped = swaps.map(s => mapSwap(s, pairAddress)).filter(Boolean) as PairTx[];
-        if (mapped.length > 0) {
-            console.info(`[pair-tx] ✅ Subgraph returned ${mapped.length} swaps`);
-            return mapped;
-        }
+        if (mapped.length > 0) return mapped;
     }
 
-    // 2. Fallback: Direct RPC eth_getLogs — free, no API key, always works
-    console.info('[pair-tx] Subgraph returned 0, falling back to direct RPC eth_getLogs');
+    // 2. Fallback: Direct RPC eth_getLogs
     return fetchFromRpc(chain, tokenAddress, pairAddress, limit);
 }
 
