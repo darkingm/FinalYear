@@ -48,7 +48,7 @@ function PctBadge({ v }: { v: number }) {
     );
 }
 
-export function LiveTxFeed({ chain, tokenAddress, pairAddress, tokenSymbol, quoteSymbol = 'WBNB', pollSeconds = 5 }: Props) {
+export function LiveTxFeed({ chain, tokenAddress, pairAddress, tokenSymbol, quoteSymbol = 'WBNB', pollSeconds = 3 }: Props) {
     const [txs, setTxs] = useState<PairTx[]>([]);
     const [stats, setStats] = useState<PairStats | null>(null);
     const [newHashes, setNewHashes] = useState<Set<string>>(new Set());
@@ -180,10 +180,10 @@ export function LiveTxFeed({ chain, tokenAddress, pairAddress, tokenSymbol, quot
                     ]).map(({ key, label, count }) => (
                         <button key={key} onClick={() => setFilter(key)}
                             className={`text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all ${filter === key
-                                    ? key === 'BUY' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                        : key === 'SELL' ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                                            : 'bg-violet-500/20 text-violet-400 border-violet-500/30'
-                                    : 'text-white/30 border-transparent hover:text-white/60'
+                                ? key === 'BUY' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                    : key === 'SELL' ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                                        : 'bg-violet-500/20 text-violet-400 border-violet-500/30'
+                                : 'text-white/30 border-transparent hover:text-white/60'
                                 }`}>
                             {label} <span className="opacity-50">({count})</span>
                         </button>
@@ -193,7 +193,7 @@ export function LiveTxFeed({ chain, tokenAddress, pairAddress, tokenSymbol, quot
                 <div className="flex items-center gap-1.5">
                     <button onClick={() => setLive(l => !l)}
                         className={`flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-md border font-bold transition-all ${live ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                : 'border-white/10 text-white/30'
+                            : 'border-white/10 text-white/30'
                             }`}>
                         {live ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
                         {live ? `${pollSeconds}s` : 'OFF'}
