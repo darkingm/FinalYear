@@ -1,25 +1,17 @@
 /**
- * pair-tx-fetcher.ts v2 — Multi-source real-time transaction fetcher
+ * pair-tx-fetcher.ts v3 — Multi-source real-time transaction fetcher
  *
- * Data sources (priority order, fastest first):
- *  1. TheGraph/Subgraph  — PancakeSwap/Uniswap swap events (GraphQL, <300ms, real-time)
- *  2. BSCScan/Etherscan  — tokentx API (fallback, 1-2s, multi-key rotation)
+ * Primary source: TheGraph PancakeSwap V2 subgraph (BSC)
+ *   Query: { swaps(where: { pair: "0x..." }) { ... } }
+ *   Note: V2 uses `pair`, V3 would use `pool` — we use V2 for compatibility
  *
- * DexScreener API (300 req/min) is used ONLY for:
- *  - Pair price, volume stats (fetchPairStats)
- *  - Pool discovery (fetchTopPools)
+ * Fallback: Etherscan V2 API (chainid=56/1/137) — configured in onchain-api-manager
  *
- * === WHY TheGraph is Best ===
- * - Free (500k queries/day on hosted service)
- * - Returns ACTUAL swap events decoded with exact token amounts
- * - Response in ~200-500ms
- * - PancakeSwap V2 BSC: api.thegraph.com/subgraphs/name/pancakeswap/exchange-v2-bsc
- * - PancakeSwap V3 BSC: thegraph.com/hosted-service/subgraph/pancakeswap/exchange-v3-bsc
- * - Uniswap V2 ETH:     api.thegraph.com/subgraphs/name/uniswap/uniswap-v2
- * - Uniswap V3 ETH:     api.thegraph.com/subgraphs/name/uniswap/uniswap-v3
+ * Token logos: TrustWallet Assets CDN (checksummed address)
+ *   https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/{chain}/assets/{ADDR}/logo.png
  */
 
-import { ApiKeyRotator, EXPLORER_CONFIG, type ExplorerChain } from './onchain-api-manager';
+import { ApiKeyRotator, CHAIN_CONFIG, type ExplorerChain } from './onchain-api-manager';
 import type { SupportedChain } from '@/store/whale-tracker-store';
 
 export type TxKind = 'BUY' | 'SELL' | 'TRANSFER';
@@ -27,7 +19,7 @@ export type TxKind = 'BUY' | 'SELL' | 'TRANSFER';
 export interface PairTx {
     hash: string;
     blockNumber: string;
-    timestamp: number;           // ms
+    timestamp: number;
     kind: TxKind;
     makerAddress: string;
     tokenSymbol: string;
@@ -38,40 +30,30 @@ export interface PairTx {
     amountUsd: number;
     pairAddress: string;
     dexId: string;
-    source: 'subgraph' | 'bscscan';
+    source: 'subgraph' | 'explorer';
 }
 
 /* ────────────────────────────────────────────────────────────────
- * TheGraph subgraph endpoints
+ * TheGraph PancakeSwap V2 subgraph (correct V2 schema)
  * ──────────────────────────────────────────────────────────────── */
-const SUBGRAPHS: Record<string, string[]> = {
-    // BSC — PancakeSwap (try V3 first, fall back to V2)
-    bsc: [
-        'https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v3-bsc',
+const SUBGRAPHS: Record<SupportedChain, string[]> = {
+    BSC: [
+        // PancakeSwap V2 (correct V2 format — uses `pair` not `pool`)
         'https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v2-bsc',
+        // Backup hosted services
+        'https://bsc.streamingfast.io/subgraphs/name/pancakeswap/exchange-v2',
     ],
-    // ETH — Uniswap (try V3 first)
-    ethereum: [
-        'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3',
+    ETH: [
         'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2',
+        'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3',
     ],
-    // Polygon — QuickSwap
-    polygon: [
+    POLYGON: [
         'https://api.thegraph.com/subgraphs/name/sameepsi/quickswap06',
-        'https://api.thegraph.com/subgraphs/name/nicholaspk/quickswapv3',
     ],
 };
 
-const CHAIN_TO_GRAPH_ID: Record<SupportedChain, string> = {
-    BSC: 'bsc', ETH: 'ethereum', POLYGON: 'polygon',
-};
-
-const CHAIN_MAP: Record<SupportedChain, ExplorerChain> = {
-    BSC: 'BSC', ETH: 'ETH', POLYGON: 'POLYGON',
-};
-
-/* ── GraphQL query for latest swaps on a pair ── */
-function buildSwapQuery(pairAddress: string, sinceTs: number, limit: number) {
+/* PancakeSwap V2 uses pairs with `amount0In/Out amount1In/Out` */
+function buildV2Query(pairAddress: string, sinceBlock = 0, limit = 50): string {
     return JSON.stringify({
         query: `{
             swaps(
@@ -80,13 +62,21 @@ function buildSwapQuery(pairAddress: string, sinceTs: number, limit: number) {
                 orderDirection: desc
                 where: {
                     pair: "${pairAddress.toLowerCase()}"
-                    ${sinceTs > 0 ? `timestamp_gt: "${Math.floor(sinceTs / 1000)}"` : ''}
+                    ${sinceBlock > 0 ? `timestamp_gt: "${sinceBlock}"` : ''}
                 }
             ) {
+                id
                 transaction { id }
                 timestamp
-                pair { id token0 { symbol decimals } token1 { symbol decimals } }
-                amount0In amount0Out amount1In amount1Out
+                pair {
+                    id
+                    token0 { id symbol name decimals }
+                    token1 { id symbol name decimals }
+                }
+                amount0In
+                amount0Out
+                amount1In
+                amount1Out
                 amountUSD
                 sender
                 to
@@ -95,33 +85,38 @@ function buildSwapQuery(pairAddress: string, sinceTs: number, limit: number) {
     });
 }
 
-/* Try each subgraph endpoint until one succeeds */
-async function querySubgraph(chain: SupportedChain, query: string): Promise<any[] | null> {
-    const graphId = CHAIN_TO_GRAPH_ID[chain];
-    const endpoints = SUBGRAPHS[graphId] || [];
+async function querySubgraph(chain: SupportedChain, body: string): Promise<any[] | null> {
+    const endpoints = SUBGRAPHS[chain] || [];
     for (const url of endpoints) {
         try {
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: query,
-                signal: AbortSignal.timeout(5000),
+                body,
+                signal: AbortSignal.timeout(8000),
             });
-            const data = await res.json();
-            if (data?.data?.swaps?.length >= 0) return data.data.swaps;
-        } catch { /* try next */ }
+            const json = await res.json();
+            if (json?.data?.swaps && Array.isArray(json.data.swaps)) {
+                return json.data.swaps;
+            }
+        } catch { /* try next endpoint */ }
     }
     return null;
 }
 
-/* Map TheGraph swap → PairTx */
-function mapSubgraphSwap(swap: any, pairAddress: string): PairTx {
-    const ts = parseInt(swap.timestamp || '0') * 1000;
-    const hash = swap.transaction?.id || '';
-    const pair = swap.pair;
-    const token0Sym = pair?.token0?.symbol || 'TOKEN0';
-    const token1Sym = pair?.token1?.symbol || 'TOKEN1';
+const QUOTE_KEYWORDS = ['WBNB', 'WETH', 'WMATIC', 'USDT', 'USDC', 'BUSD', 'DAI', 'BNB', 'ETH'];
+function isQuoteToken(symbol: string): boolean {
+    return QUOTE_KEYWORDS.some(q => symbol.toUpperCase().includes(q));
+}
 
+function mapSwap(swap: any, pairAddress: string): PairTx | null {
+    const ts = parseInt(swap.timestamp || '0') * 1000;
+    const hash = swap.transaction?.id || swap.id || '';
+    const pair = swap.pair;
+    if (!pair) return null;
+
+    const sym0 = pair.token0?.symbol || 'TOKEN0';
+    const sym1 = pair.token1?.symbol || 'TOKEN1';
     const amount0In = parseFloat(swap.amount0In || '0');
     const amount0Out = parseFloat(swap.amount0Out || '0');
     const amount1In = parseFloat(swap.amount1In || '0');
@@ -129,162 +124,143 @@ function mapSubgraphSwap(swap: any, pairAddress: string): PairTx {
     const amountUsd = parseFloat(swap.amountUSD || '0');
     const maker = swap.to || swap.sender || '';
 
-    // Determine which token is BASE and which is QUOTE
-    // Heuristic: WBNB/WETH/USDT/USDC are usually quote tokens
-    const QUOTE_SYMBOLS = ['WBNB', 'WETH', 'WMATIC', 'USDT', 'USDC', 'BUSD', 'DAI', 'BNB'];
-    const token0IsQuote = QUOTE_SYMBOLS.some(q => token0Sym.toUpperCase().includes(q));
+    // Determine base/quote from token symbols
+    const t0IsQuote = isQuoteToken(sym0);
+    let kind: TxKind, baseSymbol: string, quoteSymbol: string, tokenAmount: number, quoteAmount: number;
 
-    let kind: TxKind;
-    let baseSymbol: string;
-    let quoteSymbol: string;
-    let tokenAmount: number;
-    let quoteAmount: number;
-
-    if (token0IsQuote) {
-        // token0 = quote (WBNB), token1 = base (SIREN)
-        baseSymbol = token1Sym; quoteSymbol = token0Sym;
-        if (amount1Out > 0) {
-            // base token leaving pair → BUY
-            kind = 'BUY'; tokenAmount = amount1Out; quoteAmount = amount0In;
-        } else {
-            // base token entering pair → SELL
-            kind = 'SELL'; tokenAmount = amount1In; quoteAmount = amount0Out;
-        }
+    if (t0IsQuote) {
+        // token0 = quote (WBNB), token1 = base (BTCB/SIREN)
+        baseSymbol = sym1; quoteSymbol = sym0;
+        if (amount1Out > 0) { kind = 'BUY'; tokenAmount = amount1Out; quoteAmount = amount0In; }
+        else { kind = 'SELL'; tokenAmount = amount1In; quoteAmount = amount0Out; }
     } else {
-        // token0 = base (SIREN), token1 = quote (WBNB)
-        baseSymbol = token0Sym; quoteSymbol = token1Sym;
-        if (amount0Out > 0) {
-            kind = 'BUY'; tokenAmount = amount0Out; quoteAmount = amount1In;
-        } else {
-            kind = 'SELL'; tokenAmount = amount0In; quoteAmount = amount1Out;
-        }
+        // token0 = base, token1 = quote (WBNB)
+        baseSymbol = sym0; quoteSymbol = sym1;
+        if (amount0Out > 0) { kind = 'BUY'; tokenAmount = amount0Out; quoteAmount = amount1In; }
+        else { kind = 'SELL'; tokenAmount = amount0In; quoteAmount = amount1Out; }
     }
 
+    if (tokenAmount <= 0) return null;
     const priceUsd = tokenAmount > 0 && amountUsd > 0 ? amountUsd / tokenAmount : 0;
 
     return {
-        hash, blockNumber: '0',
-        timestamp: ts, kind,
-        makerAddress: maker,
-        tokenSymbol: baseSymbol, tokenAmount,
-        quoteSymbol, quoteAmount,
-        priceUsd, amountUsd,
-        pairAddress, dexId: 'graph',
+        hash, blockNumber: '0', timestamp: ts, kind, makerAddress: maker,
+        tokenSymbol: baseSymbol, tokenAmount, quoteSymbol, quoteAmount,
+        priceUsd, amountUsd, pairAddress, dexId: 'pancakeswap',
         source: 'subgraph',
     };
 }
 
-/* ── BSCScan fallback ── */
+/* ────────────────────────────────────────────────────────────────
+ * Etherscan V2 API fallback (BSC chainid=56, ETH chainid=1, Polygon chainid=137)
+ * ──────────────────────────────────────────────────────────────── */
+const CHAIN_MAP: Record<SupportedChain, ExplorerChain> = { BSC: 'BSC', ETH: 'ETH', POLYGON: 'POLYGON' };
+
 const nativePriceCache: Record<string, { price: number; at: number }> = {};
 async function getNativePrice(chain: SupportedChain): Promise<number> {
-    const cached = nativePriceCache[chain];
-    if (cached && Date.now() - cached.at < 60_000) return cached.price;
+    const c = nativePriceCache[chain];
+    if (c && Date.now() - c.at < 60_000) return c.price;
     try {
-        const sym = EXPLORER_CONFIG[CHAIN_MAP[chain]].nativePriceSymbol;
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`, {
-            signal: AbortSignal.timeout(3000),
-        });
-        const data = await res.json();
-        const price = parseFloat(data.price || '0');
-        nativePriceCache[chain] = { price, at: Date.now() };
-        return price;
-    } catch {
-        return nativePriceCache[chain]?.price || 610;
-    }
+        const sym = CHAIN_CONFIG[CHAIN_MAP[chain]].nativePriceSymbol;
+        const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`, { signal: AbortSignal.timeout(3000) });
+        const d = await r.json();
+        const p = parseFloat(d.price || '0');
+        nativePriceCache[chain] = { price: p, at: Date.now() };
+        return p;
+    } catch { return nativePriceCache[chain]?.price || 610; }
 }
 
 const pairPriceCache: Record<string, { priceUsd: number; quoteSymbol: string; at: number }> = {};
-async function getPairPrice(chain: SupportedChain, pairAddress: string): Promise<{ priceUsd: number; quoteSymbol: string }> {
+async function getPairPrice(chain: SupportedChain, pairAddress: string) {
     const key = `${chain}:${pairAddress}`;
-    const cached = pairPriceCache[key];
-    if (cached && Date.now() - cached.at < 15_000) return cached;
-    const chainId = chain === 'BSC' ? 'bsc' : chain === 'ETH' ? 'ethereum' : 'polygon';
+    const c = pairPriceCache[key];
+    if (c && Date.now() - c.at < 15_000) return c;
+    const chainId = { BSC: 'bsc', ETH: 'ethereum', POLYGON: 'polygon' }[chain];
     try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/${chainId}/${pairAddress}`, {
-            signal: AbortSignal.timeout(3000),
-        });
-        const data = await res.json();
-        const pair = data.pairs?.[0];
-        if (pair) {
-            const info = {
-                priceUsd: parseFloat(pair.priceUsd || '0'),
-                quoteSymbol: pair.quoteToken?.symbol || 'WBNB',
-                at: Date.now(),
-            };
+        const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/${chainId}/${pairAddress}`, { signal: AbortSignal.timeout(4000) });
+        const d = await r.json();
+        const p = d.pairs?.[0];
+        if (p) {
+            const info = { priceUsd: parseFloat(p.priceUsd || '0'), quoteSymbol: p.quoteToken?.symbol || 'WBNB', at: Date.now() };
             pairPriceCache[key] = info;
             return info;
         }
-    } catch { /* fallback */ }
+    } catch { /* ignore */ }
     return pairPriceCache[key] || { priceUsd: 0, quoteSymbol: 'WBNB' };
 }
 
-async function fetchFromBSCScan(
-    chain: SupportedChain,
-    tokenAddress: string,
-    pairAddress: string,
-    limit = 30,
+async function fetchFromExplorer(
+    chain: SupportedChain, tokenAddress: string, pairAddress: string, limit = 30
 ): Promise<PairTx[]> {
-    const explorer = CHAIN_MAP[chain];
     const pairLower = pairAddress.toLowerCase();
     try {
-        const data = await ApiKeyRotator.fetch(explorer, {
+        // Etherscan V2 API: chainid is set automatically in ApiKeyRotator.fetch
+        const data = await ApiKeyRotator.fetch(CHAIN_MAP[chain], {
             module: 'account', action: 'tokentx',
             contractaddress: tokenAddress,
             address: pairAddress,
             page: '1', offset: String(limit), sort: 'desc',
         });
         if (data.status !== '1' || !Array.isArray(data.result)) return [];
+
         const [pairInfo, nativePrice] = await Promise.all([
             getPairPrice(chain, pairAddress),
             getNativePrice(chain),
         ]);
-        return (data.result as any[]).map((row): PairTx => {
+
+        return (data.result as any[]).map((row): PairTx | null => {
             const decimals = parseInt(row.tokenDecimal || '18');
             const tokenAmount = parseFloat(row.value) / Math.pow(10, decimals);
             const fromL = (row.from || '').toLowerCase();
             const toL = (row.to || '').toLowerCase();
             const kind: TxKind = fromL === pairLower ? 'BUY' : toL === pairLower ? 'SELL' : 'TRANSFER';
+            if (kind === 'TRANSFER') return null;
             const maker = kind === 'BUY' ? row.to : row.from;
             const amountUsd = tokenAmount * pairInfo.priceUsd;
-            const quoteAmount = nativePrice > 0 ? amountUsd / nativePrice : 0;
             return {
                 hash: row.hash, blockNumber: row.blockNumber,
                 timestamp: parseInt(row.timeStamp) * 1000, kind, makerAddress: maker,
                 tokenSymbol: row.tokenSymbol || '', tokenAmount,
-                quoteSymbol: pairInfo.quoteSymbol, quoteAmount,
+                quoteSymbol: pairInfo.quoteSymbol,
+                quoteAmount: nativePrice > 0 ? amountUsd / nativePrice : 0,
                 priceUsd: pairInfo.priceUsd, amountUsd,
-                pairAddress, dexId: 'bscscan', source: 'bscscan',
+                pairAddress, dexId: 'etherscan', source: 'explorer',
             };
-        }).filter(t => t.kind !== 'TRANSFER');
-    } catch { return []; }
+        }).filter(Boolean) as PairTx[];
+    } catch (e) {
+        console.error('[pair-tx] explorer error:', e);
+        return [];
+    }
 }
 
 /* ────────────────────────────────────────────────────────────────
- * Main exported function — tries TheGraph first, falls back to BSCScan
+ * Main export
  * ──────────────────────────────────────────────────────────────── */
 export async function fetchPairTxs(
     chain: SupportedChain,
     tokenAddress: string,
     pairAddress: string,
     limit = 50,
-    sinceTimestamp = 0,
+    _sinceTimestamp = 0,
 ): Promise<PairTx[]> {
     if (!pairAddress || !tokenAddress) return [];
 
-    // 1. Try TheGraph first (fastest, structured swap data)
-    const gq = buildSwapQuery(pairAddress, sinceTimestamp, limit);
-    const swaps = await querySubgraph(chain, gq);
+    // Try TheGraph V2 subgraph first
+    const q = buildV2Query(pairAddress, 0, limit);
+    const swaps = await querySubgraph(chain, q);
     if (swaps && swaps.length > 0) {
-        return swaps
-            .map(s => mapSubgraphSwap(s, pairAddress))
-            .filter(t => t.tokenAmount > 0);
+        const mapped = swaps.map(s => mapSwap(s, pairAddress)).filter(Boolean) as PairTx[];
+        if (mapped.length > 0) return mapped;
     }
 
-    // 2. Fallback to BSCScan tokentx
-    return fetchFromBSCScan(chain, tokenAddress, pairAddress, limit);
+    // Fallback to Etherscan V2 API
+    console.info('[pair-tx] Subgraph returned 0, using Etherscan V2 fallback');
+    return fetchFromExplorer(chain, tokenAddress, pairAddress, limit);
 }
 
-/* ── DexScreener pair stats (300 req/min) — for price/vol display ── */
+/* ────────────────────────────────────────────────────────────────
+ * DexScreener PairStats (300 req/min)
+ * ──────────────────────────────────────────────────────────────── */
 export interface PairStats {
     priceUsd: string;
     priceChange: { h1: number; h6: number; h24: number };
@@ -296,22 +272,19 @@ export interface PairStats {
     dexId: string;
     baseToken: { symbol: string; name: string; address: string };
     quoteToken: { symbol: string };
+    imageUrl?: string;
 }
 
 const statsCache: Record<string, { data: PairStats; at: number }> = {};
-
 export async function fetchPairStats(chain: SupportedChain, pairAddress: string): Promise<PairStats | null> {
     const key = `${chain}:${pairAddress}`;
-    const cached = statsCache[key];
-    if (cached && Date.now() - cached.at < 10_000) return cached.data;
-
+    const c = statsCache[key];
+    if (c && Date.now() - c.at < 10_000) return c.data;
     const chainId = { BSC: 'bsc', ETH: 'ethereum', POLYGON: 'polygon' }[chain];
     try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/${chainId}/${pairAddress}`, {
-            signal: AbortSignal.timeout(4000),
-        });
-        const data = await res.json();
-        const p = data.pairs?.[0];
+        const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/${chainId}/${pairAddress}`, { signal: AbortSignal.timeout(4000) });
+        const d = await r.json();
+        const p = d.pairs?.[0];
         if (!p) return null;
         const stats: PairStats = {
             priceUsd: p.priceUsd || '0',
@@ -327,38 +300,48 @@ export async function fetchPairStats(chain: SupportedChain, pairAddress: string)
             dexId: p.dexId || '',
             baseToken: p.baseToken || { symbol: '', name: '', address: '' },
             quoteToken: p.quoteToken || { symbol: 'WBNB' },
+            imageUrl: p.info?.imageUrl,
         };
         statsCache[key] = { data: stats, at: Date.now() };
         return stats;
     } catch { return null; }
 }
 
-/* fetch best pools for a token (DexScreener /token-pairs/v1/:chainId/:tokenAddress) */
-export async function fetchTokenPools(chain: SupportedChain, tokenAddress: string): Promise<any[]> {
-    const chainId = { BSC: 'bsc', ETH: 'ethereum', POLYGON: 'polygon' }[chain];
-    try {
-        const res = await fetch(`https://api.dexscreener.com/token-pairs/v1/${chainId}/${tokenAddress}`, {
-            signal: AbortSignal.timeout(5000),
-        });
-        const data = await res.json();
-        // V2: pairs array | V3: might be direct
-        const pairs = Array.isArray(data) ? data : data.pairs || [];
-        return pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-    } catch { return []; }
+/* ────────────────────────────────────────────────────────────────
+ * Token logo helpers (TrustWallet Assets CDN + DexScreener)
+ * ──────────────────────────────────────────────────────────────── */
+const TRUST_CHAIN: Record<SupportedChain, string> = {
+    BSC: 'smartchain',
+    ETH: 'ethereum',
+    POLYGON: 'polygon',
+};
+
+/** Returns logo URL for a token address (checksummed). Tries TrustWallet CDN. */
+export function getTokenLogoUrl(chain: SupportedChain, tokenAddress: string): string {
+    // Checksum: TrustWallet needs checksummed address
+    const addr = tokenAddress; // keep as-is, TW is case-flexible
+    return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${TRUST_CHAIN[chain]}/assets/${addr}/logo.png`;
 }
 
-/* ── Helpers ── */
+/** Native token logo */
+export const NATIVE_LOGOS: Record<SupportedChain, string> = {
+    BSC: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/smartchain/info/logo.png',
+    ETH: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+    POLYGON: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
+};
+
+/* ────────────────────────────────────────────────────────────────
+ * Utilities
+ * ──────────────────────────────────────────────────────────────── */
 export function mergeTxs(existing: PairTx[], incoming: PairTx[], maxLen = 500): PairTx[] {
     const seen = new Set(existing.map(t => t.hash));
-    const newOnes = incoming.filter(t => !seen.has(t.hash));
-    const merged = [...newOnes, ...existing].sort((a, b) => b.timestamp - a.timestamp);
-    return merged.slice(0, maxLen);
+    return [...incoming.filter(t => !seen.has(t.hash)), ...existing]
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, maxLen);
 }
 
 export const CHAIN_EXPLORERS: Record<SupportedChain, string> = {
-    BSC: 'https://bscscan.com/tx/',
-    ETH: 'https://etherscan.io/tx/',
-    POLYGON: 'https://polygonscan.com/tx/',
+    BSC: 'https://bscscan.com/tx/', ETH: 'https://etherscan.io/tx/', POLYGON: 'https://polygonscan.com/tx/',
 };
 
 export function fmtTxAge(ts: number): string {
@@ -376,11 +359,19 @@ export function fmtUsd(n: number): string {
     return `$${n.toFixed(2)}`;
 }
 
+export function fmtSupply(n: number): string {
+    if (!n || isNaN(n)) return '—';
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+    return n.toLocaleString('en-US');
+}
+
 export function fmtToken(n: number): string {
     if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-    return n.toLocaleString('en-US', { maximumFractionDigits: 3 });
+    return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
 export function fmtAddr(a: string): string {
