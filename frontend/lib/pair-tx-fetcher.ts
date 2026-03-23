@@ -265,7 +265,9 @@ async function fetchFromExplorer(
 
 // PancakeSwap V2 / Uniswap V2 Swap event:
 // Swap(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, address indexed to)
-const SWAP_EVENT_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37965b04fd9617cd8cfc8b6b1e';
+const SWAP_TOPIC_V2 = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37965b04fd9617cd8cfc8b6b1e';
+// PancakeSwap V3 / Uniswap V3 Swap event (different signature, different data layout)
+const SWAP_TOPIC_V3 = '0x19b47279256b2a23a1665c810c8d55a1758940ee09377d4f8d26497a3577dc83';
 
 /** Map chain to RPC chainId number */
 const CHAIN_ID: Record<SupportedChain, string> = { BSC: '56', ETH: '1', POLYGON: '137' };
@@ -365,42 +367,46 @@ function decodeSwapLog(
     } catch { return null; }
 }
 
-/** Fetch swaps from last ~200 BSC blocks (~10 min) using eth_getLogs */
+/** Fetch swaps using eth_getLogs on Ankr/public RPC — no API key needed */
 async function fetchFromRpc(
     chain: SupportedChain,
     tokenAddress: string,
     pairAddress: string,
     limit = 50,
 ): Promise<PairTx[]> {
-    // Try progressively smaller block ranges if node returns limit error
-    const blockRanges = [200, 100, 50];
+    // Try from largest to smallest range — stop as soon as we get data
+    // BSC: ~3s/block → 3000 blocks ≈ 25min, 1000 ≈ 8min, 300 ≈ 1.5min
+    const blockRanges = [3000, 1000, 300];
 
     for (const blockRange of blockRanges) {
         try {
             // 1. Get current block number
             const blockHex = await rpcPost(chain, 'eth_blockNumber', []) as string;
             const currentBlock = parseInt(blockHex, 16);
-            // BSC: ~3s/block → 200 blocks ≈ 10 minutes
-            const fromBlock = '0x' + Math.max(0, currentBlock - blockRange).toString(16);
 
-            // 2. Get swap event logs for this pair
-            const logs = await rpcPost(chain, 'eth_getLogs', [{
-                address: pairAddress,
-                topics: [SWAP_EVENT_TOPIC],
-                fromBlock,
-                toBlock: 'latest',
-            }]) as any[];
+            // 2. Get swap event logs — try V2 and V3 topics in parallel
+            const fromBlock = '0x' + Math.max(0, currentBlock - blockRange).toString(16);
+            const logFilter = { address: pairAddress, fromBlock, toBlock: 'latest' as const };
+
+            const [logsV2, logsV3] = await Promise.allSettled([
+                rpcPost(chain, 'eth_getLogs', [{ ...logFilter, topics: [SWAP_TOPIC_V2] }]),
+                rpcPost(chain, 'eth_getLogs', [{ ...logFilter, topics: [SWAP_TOPIC_V3] }]),
+            ]);
+
+            const rawV2 = logsV2.status === 'fulfilled' && Array.isArray(logsV2.value) ? logsV2.value : [];
+            const rawV3 = logsV3.status === 'fulfilled' && Array.isArray(logsV3.value) ? logsV3.value : [];
+            const isV3 = rawV3.length > 0 && rawV2.length === 0;
+            const logs = isV3 ? rawV3 : rawV2;
 
             if (!Array.isArray(logs)) {
-                console.warn('[pair-tx] RPC returned non-array for getLogs, retrying with smaller range...');
+                console.warn('[pair-tx] RPC non-array response, retrying...');
                 continue;
             }
             if (logs.length === 0) {
-                console.info(`[pair-tx] RPC 0 logs in last ${blockRange} blocks for`, pairAddress.slice(0, 10));
-                // Don't retry — just no swaps in this range
-                return [];
+                console.info(`[pair-tx] 0 Swap events in last ${blockRange} blocks — will try larger range`);
+                continue; // try next (larger) range
             }
-            console.info(`[pair-tx] ✅ RPC eth_getLogs: ${logs.length} Swap events in last ${blockRange} blocks`);
+            console.info(`[pair-tx] ✅ RPC: ${logs.length} ${isV3 ? 'V3' : 'V2'} Swap events in last ${blockRange} blocks (~${Math.round(blockRange * 3 / 60)}min)`);
 
             // 3. Get token ordering and price data in parallel
             const [tokenOrder, pairInfo] = await Promise.all([
