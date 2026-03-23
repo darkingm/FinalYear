@@ -259,6 +259,161 @@ async function fetchFromExplorer(
 
 
 /* ────────────────────────────────────────────────────────────────
+ * Direct RPC fallback — eth_getLogs on public BSC/ETH/Polygon nodes
+ * No API key needed. Uses PancakeSwap V2 Swap event signature.
+ * ──────────────────────────────────────────────────────────────── */
+
+// PancakeSwap V2 / Uniswap V2 Swap event:
+// Swap(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, address indexed to)
+const SWAP_EVENT_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37965b04fd9617cd8cfc8b6b1e';
+
+/** Map chain to RPC chainId number */
+const CHAIN_ID: Record<SupportedChain, string> = { BSC: '56', ETH: '1', POLYGON: '137' };
+
+/** Call /api/proxy/rpc — routes to public BSC/ETH/Polygon RPC nodes */
+async function rpcPost(chain: SupportedChain, method: string, params: any[]): Promise<any> {
+    const res = await fetch('/api/proxy/rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chainId: CHAIN_ID[chain], method, params }),
+        signal: AbortSignal.timeout(12_000),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.result;
+}
+
+/** Cache: pairAddress → { token0Addr, token1Addr } */
+const tokenOrderCache: Record<string, { token0: string; token1: string }> = {};
+
+/** Get token0/token1 address for a pair via eth_call (cached) */
+async function getPairTokenOrder(chain: SupportedChain, pairAddress: string) {
+    const key = `${chain}:${pairAddress}`;
+    if (tokenOrderCache[key]) return tokenOrderCache[key];
+    try {
+        // token0() = 0x0dfe1681, token1() = 0xd21220a7
+        const [t0, t1] = await Promise.all([
+            rpcPost(chain, 'eth_call', [{ to: pairAddress, data: '0x0dfe1681' }, 'latest']),
+            rpcPost(chain, 'eth_call', [{ to: pairAddress, data: '0xd21220a7' }, 'latest']),
+        ]);
+        const result = {
+            token0: ('0x' + (t0 as string).slice(26)).toLowerCase(),
+            token1: ('0x' + (t1 as string).slice(26)).toLowerCase(),
+        };
+        tokenOrderCache[key] = result;
+        return result;
+    } catch { return null; }
+}
+
+/** Decode a raw Swap log into PairTx */
+function decodeSwapLog(
+    log: any,
+    pairAddress: string,
+    tokenAddr: string,
+    token0Addr: string,
+    priceUsd: number,
+    quoteSymbol: string,
+): PairTx | null {
+    try {
+        const data = (log.data as string).slice(2); // strip 0x
+        // Data: amount0In (32B) | amount1In (32B) | amount0Out (32B) | amount1Out (32B)
+        const a0In = parseFloat((BigInt('0x' + data.slice(0, 64))).toString());   // raw int
+        const a1In = parseFloat((BigInt('0x' + data.slice(64, 128))).toString());
+        const a0Out = parseFloat((BigInt('0x' + data.slice(128, 192))).toString());
+        const a1Out = parseFloat((BigInt('0x' + data.slice(192, 256))).toString());
+
+        // Determine if our token is token0 or token1
+        const isToken0 = tokenAddr.toLowerCase() === token0Addr.toLowerCase();
+
+        let kind: TxKind;
+        let tokenAmountRaw: number;
+
+        if (isToken0) {
+            // base = token0
+            kind = a0Out > 0 ? 'BUY' : 'SELL';
+            tokenAmountRaw = kind === 'BUY' ? a0Out : a0In;
+        } else {
+            // base = token1
+            kind = a1Out > 0 ? 'BUY' : 'SELL';
+            tokenAmountRaw = kind === 'BUY' ? a1Out : a1In;
+        }
+
+        if (tokenAmountRaw <= 0) return null;
+
+        // We don't know decimals from raw log — assume 18 (covers BNB, ETH, most tokens)
+        // For BTCB (18 decimals) and WBNB (18 decimals) this is correct
+        const decimals = 18;
+        const tokenAmount = tokenAmountRaw / Math.pow(10, decimals);
+        const amountUsd = tokenAmount * priceUsd;
+
+        // sender = topics[1] (padded), to = topics[2]
+        const maker = '0x' + (log.topics[2] as string).slice(26);
+        const hash = log.transactionHash || log.hash || '';
+        const blockNumber = parseInt(log.blockNumber, 16).toString();
+        const timestamp = Date.now(); // approximate — getting block timestamp is expensive
+
+        return {
+            hash, blockNumber, timestamp, kind, makerAddress: maker,
+            tokenSymbol: '', tokenAmount,
+            quoteSymbol,
+            quoteAmount: priceUsd > 0 ? amountUsd / priceUsd : 0,
+            priceUsd, amountUsd,
+            pairAddress: pairAddress.toLowerCase(),
+            dexId: 'pancakeswap',
+            source: 'subgraph', // tag it as subgraph-equivalent
+        };
+    } catch { return null; }
+}
+
+/** Fetch swaps from last ~1000 BSC blocks (~50 min) using eth_getLogs */
+async function fetchFromRpc(
+    chain: SupportedChain,
+    tokenAddress: string,
+    pairAddress: string,
+    limit = 50,
+): Promise<PairTx[]> {
+    try {
+        // 1. Get current block number
+        const blockHex = await rpcPost(chain, 'eth_blockNumber', []) as string;
+        const currentBlock = parseInt(blockHex, 16);
+        // BSC: ~3s/block → 1000 blocks ≈ 50 minutes
+        const fromBlock = '0x' + Math.max(0, currentBlock - 1000).toString(16);
+
+        // 2. Get swap event logs for this pair
+        const logs = await rpcPost(chain, 'eth_getLogs', [{
+            address: pairAddress,
+            topics: [SWAP_EVENT_TOPIC],
+            fromBlock,
+            toBlock: 'latest',
+        }]) as any[];
+
+        if (!Array.isArray(logs) || logs.length === 0) {
+            console.info('[pair-tx] RPC returned 0 swap logs for', pairAddress);
+            return [];
+        }
+        console.info(`[pair-tx] ✅ RPC eth_getLogs returned ${logs.length} Swap events`);
+
+        // 3. Get token ordering and price data in parallel
+        const [tokenOrder, pairInfo] = await Promise.all([
+            getPairTokenOrder(chain, pairAddress),
+            getPairPrice(chain, pairAddress),
+        ]);
+
+        if (!tokenOrder) return [];
+
+        // 4. Decode logs → PairTx (take last `limit` events, newest first)
+        return logs
+            .slice(-limit)
+            .reverse()
+            .map(log => decodeSwapLog(log, pairAddress, tokenAddress, tokenOrder.token0, pairInfo.priceUsd, pairInfo.quoteSymbol))
+            .filter(Boolean) as PairTx[];
+    } catch (e) {
+        console.error('[pair-tx] RPC fallback error:', e);
+        return [];
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────
  * Main export
  * ──────────────────────────────────────────────────────────────── */
 export async function fetchPairTxs(
@@ -270,17 +425,20 @@ export async function fetchPairTxs(
 ): Promise<PairTx[]> {
     if (!pairAddress || !tokenAddress) return [];
 
-    // Try TheGraph V2 subgraph first
+    // 1. Try Goldsky / Graph Network subgraph (GraphQL, fast, structured)
     const q = buildV2Query(pairAddress, 0, limit);
     const swaps = await querySubgraph(chain, q);
     if (swaps && swaps.length > 0) {
         const mapped = swaps.map(s => mapSwap(s, pairAddress)).filter(Boolean) as PairTx[];
-        if (mapped.length > 0) return mapped;
+        if (mapped.length > 0) {
+            console.info(`[pair-tx] ✅ Subgraph returned ${mapped.length} swaps`);
+            return mapped;
+        }
     }
 
-    // Fallback to Etherscan V2 API
-    console.info('[pair-tx] Subgraph returned 0, using Etherscan V2 fallback');
-    return fetchFromExplorer(chain, tokenAddress, pairAddress, limit);
+    // 2. Fallback: Direct RPC eth_getLogs — free, no API key, always works
+    console.info('[pair-tx] Subgraph returned 0, falling back to direct RPC eth_getLogs');
+    return fetchFromRpc(chain, tokenAddress, pairAddress, limit);
 }
 
 /* ────────────────────────────────────────────────────────────────
