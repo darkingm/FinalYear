@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, ExternalLink, Plus } from 'lucide-react';
+import { Search, Loader2, ExternalLink } from 'lucide-react';
 import { searchTokenPairs } from '@/lib/whale-api';
 import { useWhaleTrackerStore, CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { TokenPair, SupportedChain } from '@/store/whale-tracker-store';
@@ -53,10 +53,8 @@ function TokenLogo({ pair }: { pair: TokenPair }) {
     );
 }
 
-function PairRow({ pair, onSelect, onRowClick, isSelected }: {
-
+function PairRow({ pair, onRowClick, isSelected }: {
     pair: TokenPair;
-    onSelect?: () => void;
     onRowClick?: () => void;
     isSelected?: boolean;
 }) {
@@ -106,19 +104,14 @@ function PairRow({ pair, onSelect, onRowClick, isSelected }: {
                 </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Hover: only DexScreener link */}
+            <div className="flex items-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                 <a href={dexUrl} target="_blank" rel="noopener noreferrer"
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
+                    onClick={(e) => e.stopPropagation()}
+                    title="Xem trên DexScreener">
                     <ExternalLink className="w-3.5 h-3.5" />
                 </a>
-                {onSelect && (
-                    <button onClick={onSelect}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#8247e5]/10 border border-[#8247e5]/30 text-[#8247e5] text-xs font-semibold hover:bg-[#8247e5]/20 transition-colors">
-                        <Plus className="w-3 h-3" /> Theo dõi
-                    </button>
-                )}
             </div>
         </div>
     );
@@ -185,9 +178,8 @@ export function TokenSearchPanel({ onSelectForWallet, onSelectRow, selectedPairA
                         <PairRow
                             key={p.pairAddress}
                             pair={p}
-                            onRowClick={onSelectRow ? () => onSelectRow(p) : undefined}
+                            onRowClick={() => { onSelectRow?.(p); onSelectForWallet?.(p); }}
                             isSelected={selectedPairAddress === p.pairAddress}
-                            onSelect={onSelectForWallet ? () => { onSelectForWallet(p); onSelectRow?.(p); } : (onSelectRow ? () => onSelectRow(p) : undefined)}
                         />
                     ))}
                 </div>
