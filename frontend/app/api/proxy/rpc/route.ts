@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 function getAnkrKey(): string {
-    return process.env.NEXT_PUBLIC_ANKR_API_KEY?.trim() ?? '';
+    return process.env.ANKR_API_KEY?.trim() ?? '';
 }
 
 function buildNodes(chainId: string): string[] {

@@ -26,14 +26,14 @@ function pickKey(envVar: string | undefined): string {
 
 function getApiKey(chainid: string): string {
     if (chainid === '56') {
-        return pickKey(process.env.NEXT_PUBLIC_BSCSCAN_API_KEY)
-            || pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY); // fallback
+        return pickKey(process.env.BSCSCAN_API_KEY)
+            || pickKey(process.env.ETHERSCAN_API_KEY);
     }
     if (chainid === '137') {
-        return pickKey(process.env.NEXT_PUBLIC_POLYGONSCAN_API_KEY)
-            || pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY);
+        return pickKey(process.env.POLYGONSCAN_API_KEY)
+            || pickKey(process.env.ETHERSCAN_API_KEY);
     }
-    return pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY);
+    return pickKey(process.env.ETHERSCAN_API_KEY);
 }
 
 export async function GET(req: NextRequest) {
