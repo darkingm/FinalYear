@@ -285,18 +285,20 @@ async function rpcPost(chain: SupportedChain, method: string, params: any[]): Pr
     return data.result;
 }
 
-/** Cache: pairAddress → { token0Addr, token1Addr } */
+/** Cache: pairAddress → { token0, token1 } */
 const tokenOrderCache: Record<string, { token0: string; token1: string }> = {};
 
-/** Get token0/token1 address for a pair via eth_call (cached) */
+/** Cache: tokenAddress → decimals (fetched once via eth_call) */
+const decimalsCache: Record<string, number> = {};
+
+/** Get token0/token1 addresses for a pair (cached, 1 RPC call per pair) */
 async function getPairTokenOrder(chain: SupportedChain, pairAddress: string) {
     const key = `${chain}:${pairAddress}`;
     if (tokenOrderCache[key]) return tokenOrderCache[key];
     try {
-        // token0() = 0x0dfe1681, token1() = 0xd21220a7
         const [t0, t1] = await Promise.all([
-            rpcPost(chain, 'eth_call', [{ to: pairAddress, data: '0x0dfe1681' }, 'latest']),
-            rpcPost(chain, 'eth_call', [{ to: pairAddress, data: '0xd21220a7' }, 'latest']),
+            rpcPost(chain, 'eth_call', [{ to: pairAddress, data: '0x0dfe1681' }, 'latest']), // token0()
+            rpcPost(chain, 'eth_call', [{ to: pairAddress, data: '0xd21220a7' }, 'latest']), // token1()
         ]);
         const result = {
             token0: ('0x' + (t0 as string).slice(26)).toLowerCase(),
@@ -307,64 +309,103 @@ async function getPairTokenOrder(chain: SupportedChain, pairAddress: string) {
     } catch { return null; }
 }
 
-/** Decode a raw Swap log into PairTx */
-function decodeSwapLog(
-    log: any,
-    pairAddress: string,
-    tokenAddr: string,
-    token0Addr: string,
-    priceUsd: number,
-    quoteSymbol: string,
-): PairTx | null {
+/** Get ERC20 decimals for a token address (cached, 1 RPC call per token) */
+async function getTokenDecimals(chain: SupportedChain, tokenAddress: string): Promise<number> {
+    const key = `${chain}:${tokenAddress}`;
+    if (decimalsCache[key] !== undefined) return decimalsCache[key];
     try {
-        const data = (log.data as string).slice(2); // strip 0x
-        // Data: amount0In (32B) | amount1In (32B) | amount0Out (32B) | amount1Out (32B)
-        const a0In = parseFloat((BigInt('0x' + data.slice(0, 64))).toString());   // raw int
-        const a1In = parseFloat((BigInt('0x' + data.slice(64, 128))).toString());
-        const a0Out = parseFloat((BigInt('0x' + data.slice(128, 192))).toString());
-        const a1Out = parseFloat((BigInt('0x' + data.slice(192, 256))).toString());
+        const res = await rpcPost(chain, 'eth_call', [{ to: tokenAddress, data: '0x313ce567' }, 'latest']); // decimals()
+        const dec = parseInt((res as string).slice(-2), 16); // last byte
+        const safe = (dec > 0 && dec <= 36) ? dec : 18;
+        decimalsCache[key] = safe;
+        return safe;
+    } catch { return 18; } // assume 18 if call fails
+}
 
-        // Determine if our token is token0 or token1
-        const isToken0 = tokenAddr.toLowerCase() === token0Addr.toLowerCase();
+/** Parse a 32-byte hex word as a signed int256 (two's complement) */
+function parseInt256(hex64: string): bigint {
+    const val = BigInt('0x' + hex64);
+    const TWO255 = 0x8000000000000000000000000000000000000000000000000000000000000000n;
+    // If high bit set → negative (two's complement)
+    return val >= TWO255 ? val - (TWO255 * 2n) : val;
+}
 
-        let kind: TxKind;
-        let tokenAmountRaw: number;
+/** Decode a PancakeSwap/Uniswap V2 Swap log */
+function decodeV2Log(
+    log: any, pairAddress: string, tokenAddr: string, token0Addr: string,
+    decimals: number, priceUsd: number, quoteSymbol: string,
+): PairTx | null {
+    // V2 data: uint256 amount0In | uint256 amount1In | uint256 amount0Out | uint256 amount1Out
+    const data = (log.data as string).slice(2);
+    const a0In = parseFloat(BigInt('0x' + data.slice(0, 64)).toString());
+    const a1In = parseFloat(BigInt('0x' + data.slice(64, 128)).toString());
+    const a0Out = parseFloat(BigInt('0x' + data.slice(128, 192)).toString());
+    const a1Out = parseFloat(BigInt('0x' + data.slice(192, 256)).toString());
 
-        if (isToken0) {
-            // base = token0
-            kind = a0Out > 0 ? 'BUY' : 'SELL';
-            tokenAmountRaw = kind === 'BUY' ? a0Out : a0In;
-        } else {
-            // base = token1
-            kind = a1Out > 0 ? 'BUY' : 'SELL';
-            tokenAmountRaw = kind === 'BUY' ? a1Out : a1In;
-        }
+    const isToken0 = tokenAddr.toLowerCase() === token0Addr.toLowerCase();
+    let kind: TxKind;
+    let rawAmt: number;
+    if (isToken0) {
+        kind = a0Out > 0 ? 'BUY' : 'SELL';
+        rawAmt = kind === 'BUY' ? a0Out : a0In;
+    } else {
+        kind = a1Out > 0 ? 'BUY' : 'SELL';
+        rawAmt = kind === 'BUY' ? a1Out : a1In;
+    }
+    if (rawAmt <= 0) return null;
 
-        if (tokenAmountRaw <= 0) return null;
+    const tokenAmount = rawAmt / Math.pow(10, decimals);
+    const amountUsd = tokenAmount * priceUsd;
+    const maker = '0x' + (log.topics[2] as string).slice(26);
 
-        // We don't know decimals from raw log — assume 18 (covers BNB, ETH, most tokens)
-        // For BTCB (18 decimals) and WBNB (18 decimals) this is correct
-        const decimals = 18;
-        const tokenAmount = tokenAmountRaw / Math.pow(10, decimals);
-        const amountUsd = tokenAmount * priceUsd;
+    return {
+        hash: log.transactionHash || '', blockNumber: parseInt(log.blockNumber, 16).toString(),
+        timestamp: Date.now(), kind, makerAddress: maker,
+        tokenSymbol: '', tokenAmount, quoteSymbol,
+        quoteAmount: priceUsd > 0 ? amountUsd / priceUsd : 0,
+        priceUsd, amountUsd,
+        pairAddress: pairAddress.toLowerCase(), dexId: 'pancakeswap', source: 'subgraph',
+    };
+}
 
-        // sender = topics[1] (padded), to = topics[2]
-        const maker = '0x' + (log.topics[2] as string).slice(26);
-        const hash = log.transactionHash || log.hash || '';
-        const blockNumber = parseInt(log.blockNumber, 16).toString();
-        const timestamp = Date.now(); // approximate — getting block timestamp is expensive
+/** Decode a PancakeSwap/Uniswap V3 Swap log */
+function decodeV3Log(
+    log: any, pairAddress: string, tokenAddr: string, token0Addr: string,
+    decimals: number, priceUsd: number, quoteSymbol: string,
+): PairTx | null {
+    // V3 data: int256 amount0 | int256 amount1 | uint160 sqrtPriceX96 | uint128 liquidity | int24 tick
+    // amount0/amount1 are SIGNED: negative = token left pool (received by trader) = BUY that token
+    const data = (log.data as string).slice(2);
+    const amt0 = parseInt256(data.slice(0, 64)); // positive = token entered pool, negative = left pool
+    const amt1 = parseInt256(data.slice(64, 128));
 
-        return {
-            hash, blockNumber, timestamp, kind, makerAddress: maker,
-            tokenSymbol: '', tokenAmount,
-            quoteSymbol,
-            quoteAmount: priceUsd > 0 ? amountUsd / priceUsd : 0,
-            priceUsd, amountUsd,
-            pairAddress: pairAddress.toLowerCase(),
-            dexId: 'pancakeswap',
-            source: 'subgraph', // tag it as subgraph-equivalent
-        };
-    } catch { return null; }
+    const isToken0 = tokenAddr.toLowerCase() === token0Addr.toLowerCase();
+    let kind: TxKind;
+    let rawAmt: bigint;
+
+    if (isToken0) {
+        // amt0 < 0 → SIREN left pool → someone BOUGHT SIREN
+        kind = amt0 < 0n ? 'BUY' : 'SELL';
+        rawAmt = amt0 < 0n ? -amt0 : amt0; // abs value
+    } else {
+        kind = amt1 < 0n ? 'BUY' : 'SELL';
+        rawAmt = amt1 < 0n ? -amt1 : amt1;
+    }
+    if (rawAmt <= 0n) return null;
+
+    // V3 has sender in topics[1], recipient in topics[2]
+    const maker = '0x' + (log.topics[2] as string).slice(26);
+    const tokenAmount = parseFloat(rawAmt.toString()) / Math.pow(10, decimals);
+    const amountUsd = tokenAmount * priceUsd;
+
+    return {
+        hash: log.transactionHash || '', blockNumber: parseInt(log.blockNumber, 16).toString(),
+        timestamp: Date.now(), kind, makerAddress: maker,
+        tokenSymbol: '', tokenAmount, quoteSymbol,
+        quoteAmount: priceUsd > 0 ? amountUsd / priceUsd : 0,
+        priceUsd, amountUsd,
+        pairAddress: pairAddress.toLowerCase(), dexId: 'pancakeswap-v3', source: 'subgraph',
+    };
 }
 
 /** Fetch swaps using eth_getLogs on Ankr/public RPC — no API key needed */
@@ -402,25 +443,23 @@ async function fetchFromRpc(
                 console.warn('[pair-tx] RPC non-array response, retrying...');
                 continue;
             }
-            if (logs.length === 0) {
-                console.info(`[pair-tx] 0 Swap events in last ${blockRange} blocks — will try larger range`);
-                continue; // try next (larger) range
-            }
-            console.info(`[pair-tx] ✅ RPC: ${logs.length} ${isV3 ? 'V3' : 'V2'} Swap events in last ${blockRange} blocks (~${Math.round(blockRange * 3 / 60)}min)`);
+            if (logs.length === 0) { continue; } // try larger range
 
-            // 3. Get token ordering and price data in parallel
-            const [tokenOrder, pairInfo] = await Promise.all([
+            // 3. Get token ordering, price, and real token decimals in parallel
+            const [tokenOrder, pairInfo, decimals] = await Promise.all([
                 getPairTokenOrder(chain, pairAddress),
                 getPairPrice(chain, pairAddress),
+                getTokenDecimals(chain, tokenAddress),
             ]);
 
             if (!tokenOrder) return [];
 
-            // 4. Decode logs → PairTx (take last `limit` events, newest first)
+            // 4. Decode logs → PairTx using correct V2/V3 decoder
+            const decode = isV3 ? decodeV3Log : decodeV2Log;
             return logs
                 .slice(-limit)
                 .reverse()
-                .map(log => decodeSwapLog(log, pairAddress, tokenAddress, tokenOrder.token0, pairInfo.priceUsd, pairInfo.quoteSymbol))
+                .map(log => decode(log, pairAddress, tokenAddress, tokenOrder.token0, decimals, pairInfo.priceUsd, pairInfo.quoteSymbol))
                 .filter(Boolean) as PairTx[];
 
         } catch (e: any) {
