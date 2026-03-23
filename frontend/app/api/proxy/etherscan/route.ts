@@ -1,50 +1,72 @@
 /**
  * /api/proxy/etherscan/route.ts
- * Server-side proxy for Etherscan V2 API — avoids CORS and keeps API key server-only.
+ * Server-side proxy — tries BSCScan first (for BSC), then Etherscan V2 fallback.
+ * Avoids CORS, keeps API keys server-side.
  * Usage: GET /api/proxy/etherscan?chainid=56&module=account&action=tokentx&...
  */
 import { NextRequest, NextResponse } from 'next/server';
 
 const V2_BASE = 'https://api.etherscan.io/v2/api';
+const BSCSCAN_BASE = 'https://api.bscscan.com/api';
 
-// Keys on server side (can use non-NEXT_PUBLIC_ for security, but NEXT_PUBLIC_ also works)
-function getKey(): string {
-    const keys = (
-        process.env.NEXT_PUBLIC_ETHERSCAN_KEYS ||
-        process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY ||
-        ''
-    ).split(',').map(k => k.trim()).filter(Boolean);
-    return keys[Math.floor(Math.random() * keys.length)] || '';
+function pickKey(envVar: string | undefined): string {
+    if (!envVar) return '';
+    const keys = envVar.split(',').map(k => k.trim()).filter(k => k.length > 0);
+    return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : '';
 }
 
 export async function GET(req: NextRequest) {
     const params = req.nextUrl.searchParams;
+    const chainid = params.get('chainid') ?? '56';
 
-    // Validate required params
-    const chainid = params.get('chainid');
-    const module = params.get('module');
-    const action = params.get('action');
-    if (!chainid || !module || !action) {
-        return NextResponse.json({ status: '0', message: 'Missing params', result: [] }, { status: 400 });
+    const ethKey = pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_KEYS || process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY);
+    const bscKey = pickKey(process.env.NEXT_PUBLIC_BSCSCAN_API_KEY);
+    const isBSC = chainid === '56';
+
+    // Build universal query string (without apikey — will add per attempt)
+    const base = new URLSearchParams();
+    params.forEach((v, k) => { if (k !== 'apikey') base.set(k, v); });
+
+    // Attempt order: BSCScan (if BSC + key available) → Etherscan V2
+    type Attempt = { url: string; key: string; label: string };
+    const attempts: Attempt[] = [];
+
+    if (isBSC && bscKey) {
+        const q = new URLSearchParams(base); q.set('apikey', bscKey);
+        attempts.push({ url: `${BSCSCAN_BASE}?${q}`, key: bscKey, label: 'BSCScan' });
+    }
+    {
+        const q = new URLSearchParams(base);
+        if (ethKey) q.set('apikey', ethKey);
+        attempts.push({ url: `${V2_BASE}?${q}`, key: ethKey, label: 'Etherscan-V2' });
+    }
+    if (isBSC && !bscKey) {
+        // Try BSCScan without key (5 req/s free tier)
+        const q = new URLSearchParams(base);
+        q.delete('chainid'); // BSCScan doesn't use chainid param
+        attempts.push({ url: `${BSCSCAN_BASE}?${q}`, key: '', label: 'BSCScan-nokey' });
     }
 
-    // Forward all params except apikey (we inject our own)
-    const query = new URLSearchParams();
-    params.forEach((v, k) => { if (k !== 'apikey') query.set(k, v); });
-    const apiKey = getKey();
-    if (apiKey) query.set('apikey', apiKey);
+    for (const attempt of attempts) {
+        try {
+            const res = await fetch(attempt.url, { signal: AbortSignal.timeout(10_000) });
+            const data = await res.json();
 
-    try {
-        const url = `${V2_BASE}?${query.toString()}`;
-        const upstream = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-        const data = await upstream.json();
+            if (data.status === '1' && Array.isArray(data.result)) {
+                console.info(`[etherscan-proxy] ✅ ${attempt.label} returned ${data.result.length} results`);
+                return NextResponse.json(data);
+            }
 
-        // Detect rate limit
-        if (typeof data.result === 'string' && data.result.toLowerCase().includes('rate limit')) {
-            return NextResponse.json(data, { status: 429 });
+            console.warn(`[etherscan-proxy] ${attempt.label} NOTOK:`, {
+                message: data.message,
+                result: typeof data.result === 'string' ? data.result.slice(0, 150) : '(array/empty)',
+                keyPresent: !!attempt.key,
+                keyPrefix: attempt.key ? attempt.key.slice(0, 6) + '...' : 'NONE',
+            });
+        } catch (e: any) {
+            console.error(`[etherscan-proxy] ${attempt.label} fetch error:`, e?.message);
         }
-        return NextResponse.json(data);
-    } catch (e: any) {
-        return NextResponse.json({ status: '0', message: e?.message || 'Upstream error', result: [] }, { status: 502 });
     }
+
+    return NextResponse.json({ status: '0', message: 'NOTOK', result: [] });
 }

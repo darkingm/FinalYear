@@ -40,18 +40,21 @@ const ETHERSCANPROXY = '/api/proxy/etherscan';
 /* Subgraph URLs per chain (server-side, no CORS issue via proxy) */
 const SUBGRAPHS: Record<SupportedChain, string[]> = {
     BSC: [
-        // PancakeSwap V2 on Goldsky (more reliable than hosted service)
-        'https://api.goldsky.com/api/public/project_clk3w4qlomh7a2ixuf4vc/subgraphs/exchange-v2-bsc/version/gn/gn',
-        // PancakeSwap V2 original hosted service
-        'https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v2-bsc',
+        // PancakeSwap V2 — Goldsky (actively maintained, free public endpoint)
+        'https://api.goldsky.com/api/public/project_clk3w4qlomh7a2ixuf4vc/subgraphs/exchange-v2-bsc/prod/gn',
+        // PancakeSwap V2 — The Graph decentralized network (query URL, no key needed for public)
+        'https://gateway-arbitrum.network.thegraph.com/api/public/subgraphs/id/9opCZr5miEFWHkGFpkqTMEcGXAB2sFTR9s5JAorEGDf4',
     ],
     ETH: [
-        'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2',
+        // Uniswap V2 — The Graph decentralized network
+        'https://gateway-arbitrum.network.thegraph.com/api/public/subgraphs/id/EYCKATKGBKLWvSfwvBjzfCBmGwYNdVkduYXVivCsLRFu',
     ],
     POLYGON: [
-        'https://api.thegraph.com/subgraphs/name/sameepsi/quickswap06',
+        // QuickSwap — Goldsky
+        'https://api.goldsky.com/api/public/project_clk3w4qlomh7a2ixuf4vc/subgraphs/quickswap-v2-polygon/prod/gn',
     ],
 };
+
 
 /* PancakeSwap V2 uses pairs with `amount0In/Out amount1In/Out` */
 function buildV2Query(pairAddress: string, sinceBlock = 0, limit = 50): string {
