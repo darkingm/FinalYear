@@ -206,6 +206,10 @@ export interface TokenInfo {
     circulatingSupply?: string;
     holders?: number;
     ageSeconds?: number;
+    // Supply details
+    burnedSupply?: string;          // tokens sent to burn addresses
+    burnedPercent?: number;         // % of total supply burned
+    logoUrl?: string;               // token logo from DexScreener/GeckoTerminal
 }
 
 export async function fetchTokenInfo(tokenAddressOrSymbol: string, chain: SupportedChain): Promise<TokenInfo | null> {
@@ -252,6 +256,9 @@ export async function fetchTokenInfo(tokenAddressOrSymbol: string, chain: Suppor
                     info.circulatingSupply = extra.circulatingSupply;
                     info.holders = extra.holders;
                     info.ageSeconds = extra.ageSeconds;
+                    info.burnedSupply = extra.burnedSupply;
+                    info.burnedPercent = extra.burnedPercent;
+                    info.logoUrl = extra.logoUrl;
                 }
             }).catch(() => {/* ignore */ });
         }
@@ -263,8 +270,39 @@ export async function fetchTokenInfo(tokenAddressOrSymbol: string, chain: Suppor
     }
 }
 
+/* Common burn/dead addresses across EVM chains */
+const BURN_ADDRESSES = [
+    '0x000000000000000000000000000000000000dead',
+    '0x0000000000000000000000000000000000000000',
+    '0xdead000000000000000042069420694206942069',
+];
+
+async function fetchBurnedAmount(
+    tokenAddress: string,
+    chain: SupportedChain,
+    decimals = 18,
+): Promise<number> {
+    const explorerChain: ExplorerChain = chain === 'BSC' ? 'BSC' : chain === 'ETH' ? 'ETH' : 'POLYGON';
+    let burned = 0;
+    for (const addr of BURN_ADDRESSES) {
+        try {
+            const data = await ApiKeyRotator.fetch(explorerChain, {
+                module: 'account', action: 'tokenbalance',
+                contractaddress: tokenAddress,
+                address: addr,
+                tag: 'latest',
+            });
+            if (data.status === '1' && data.result) {
+                burned += parseFloat(data.result) / Math.pow(10, decimals);
+            }
+        } catch { /* ignore */ }
+    }
+    return burned;
+}
+
 async function fetchGeckoTerminalInfo(tokenAddress: string, geckoDexChain: string): Promise<{
     totalSupply?: string; circulatingSupply?: string; holders?: number; ageSeconds?: number;
+    burnedSupply?: string; burnedPercent?: number; logoUrl?: string;
 } | null> {
     try {
         const chainMap: Record<string, string> = {
@@ -273,10 +311,23 @@ async function fetchGeckoTerminalInfo(tokenAddress: string, geckoDexChain: strin
         const chain = chainMap[geckoDexChain];
         if (!chain) return null;
         const url = `https://api.geckoterminal.com/api/v2/networks/${chain}/tokens/${tokenAddress}`;
-        const res = await fetch(url, { headers: { Accept: 'application/json;version=20230302' } });
+        const res = await fetch(url, { headers: { Accept: 'application/json;version=20230302' }, signal: AbortSignal.timeout(5000) });
         const data = await res.json();
         const attr = data?.data?.attributes;
         if (!attr) return null;
+
+        const totalSupplyRaw = parseFloat(attr.total_supply || '0');
+        const decimals = parseInt(attr.decimals || '18');
+        const totalSupplyHuman = totalSupplyRaw > 0
+            ? totalSupplyRaw / Math.pow(10, Math.max(0, decimals - 18)) // already normalized usually
+            : 0;
+
+        // Don't block — fetch burned concurrently
+        const supportedChain: SupportedChain = chain === 'bsc' ? 'BSC' : chain === 'eth' ? 'ETH' : 'POLYGON';
+        const [burned] = await Promise.allSettled([fetchBurnedAmount(tokenAddress, supportedChain)]);
+        const burnedAmt = burned.status === 'fulfilled' ? burned.value : 0;
+        const burnedPct = totalSupplyHuman > 0 ? (burnedAmt / totalSupplyHuman) * 100 : 0;
+
         return {
             totalSupply: attr.total_supply,
             circulatingSupply: attr.circulating_supply,
@@ -284,6 +335,9 @@ async function fetchGeckoTerminalInfo(tokenAddress: string, geckoDexChain: strin
             ageSeconds: attr.pool_created_at
                 ? Math.floor((Date.now() - new Date(attr.pool_created_at).getTime()) / 1000)
                 : undefined,
+            burnedSupply: burnedAmt > 0 ? String(burnedAmt) : undefined,
+            burnedPercent: burnedPct > 0 ? burnedPct : undefined,
+            logoUrl: attr.image_url ?? undefined,
         };
     } catch {
         return null;
