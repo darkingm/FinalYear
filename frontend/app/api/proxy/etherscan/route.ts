@@ -1,68 +1,79 @@
 /**
  * /api/proxy/etherscan/route.ts
- * Server-side proxy for Etherscan API V2 — the unified multichain API.
  *
- * As of Aug 15, 2025, Etherscan V1 is DEPRECATED.
- * V2 uses ONE endpoint + chainid param for all 60+ networks:
- *   Base URL: https://api.etherscan.io/v2/api
- *   BSC:      ?chainid=56&module=...&action=...&apikey=KEY
- *   ETH:      ?chainid=1&module=...&action=...&apikey=KEY
- *   Polygon:  ?chainid=137&module=...&action=...&apikey=KEY
+ * Routes blockchain explorer API calls server-side (no CORS).
+ * Per-chain endpoints (same query format for all):
+ *   BSC     → api.bscscan.com/api         (free, register at bscscan.com/myapikey)
+ *   ETH     → api.etherscan.io/v2/api?chainid=1  (Etherscan V2 free covers ETH only)
+ *   Polygon → api.polygonscan.com/api     (free, register at polygonscan.com/myapikey)
  *
- * One Etherscan API key (registered at etherscan.io) works for ALL chains.
- * Docs: https://docs.etherscan.io/v2-migration
+ * NOTE: Etherscan V2 free tier does NOT cover BSC/Polygon — separate keys needed.
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-const V2_BASE = 'https://api.etherscan.io/v2/api';
+// Per-chain base URLs — SAME query format (module/action/apikey), different host
+const CHAIN_ENDPOINTS: Record<string, string> = {
+    '56': 'https://api.bscscan.com/api',                        // BSC  → BSCScan (free)
+    '1': 'https://api.etherscan.io/v2/api',                    // ETH  → Etherscan V2
+    '137': 'https://api.polygonscan.com/api',                    // POLY → Polygonscan (free)
+};
 
-function getApiKey(): string {
-    const keys = (process.env.NEXT_PUBLIC_ETHERSCAN_KEYS ?? process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY ?? '')
-        .split(',')
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
+function pickKey(envVar: string | undefined): string {
+    if (!envVar) return '';
+    const keys = envVar.split(',').map(k => k.trim()).filter(k => k.length > 0);
     return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : '';
+}
+
+function getApiKey(chainid: string): string {
+    if (chainid === '56') {
+        return pickKey(process.env.NEXT_PUBLIC_BSCSCAN_API_KEY)
+            || pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY); // fallback
+    }
+    if (chainid === '137') {
+        return pickKey(process.env.NEXT_PUBLIC_POLYGONSCAN_API_KEY)
+            || pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY);
+    }
+    return pickKey(process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY);
 }
 
 export async function GET(req: NextRequest) {
     const params = req.nextUrl.searchParams;
+    const chainid = params.get('chainid') ?? '56';
 
-    // Build query: forward all params, inject API key
+    const baseUrl = CHAIN_ENDPOINTS[chainid] ?? CHAIN_ENDPOINTS['56'];
+    const apiKey = getApiKey(chainid);
+
+    // Build query
     const query = new URLSearchParams();
     params.forEach((v, k) => { if (k !== 'apikey') query.set(k, v); });
+    // For Etherscan V2 (ETH), keep chainid; for BSCScan/Polygonscan, remove it
+    if (chainid !== '1') query.delete('chainid');
+    if (apiKey) query.set('apikey', apiKey);
 
-    const apiKey = getApiKey();
-    if (apiKey) {
-        query.set('apikey', apiKey);
-    } else {
-        console.error('[etherscan-proxy] ⚠️  No API key found! Set NEXT_PUBLIC_ETHERSCAN_API_KEY in .env.local and RESTART the dev server.');
+    if (!apiKey) {
+        console.warn(`[explorer-proxy] ⚠️  No API key for chainid=${chainid}. Set NEXT_PUBLIC_BSCSCAN_API_KEY for BSC. Will try without key (rate limited).`);
     }
 
-    const url = `${V2_BASE}?${query.toString()}`;
-
+    const url = `${baseUrl}?${query.toString()}`;
     try {
         const upstream = await fetch(url, { signal: AbortSignal.timeout(12_000) });
         const data = await upstream.json();
 
         if (data.status === '1' && Array.isArray(data.result)) {
-            console.info(`[etherscan-proxy] ✅ chainid=${params.get('chainid')} returned ${data.result.length} results`);
+            console.info(`[explorer-proxy] ✅ chainid=${chainid} → ${baseUrl.split('/')[2]} returned ${data.result.length} results`);
             return NextResponse.json(data);
         }
 
-        // Log the actual Etherscan error message (not just "NOTOK")
-        console.warn('[etherscan-proxy] ❌ Etherscan V2 error:', {
-            chainid: params.get('chainid'),
-            module: params.get('module'),
-            action: params.get('action'),
-            status: data.status,
+        console.warn('[explorer-proxy] ❌ Error:', {
+            host: baseUrl.split('/')[2],
+            chainid,
             message: data.message,
-            result: typeof data.result === 'string' ? data.result : JSON.stringify(data.result).slice(0, 200),
-            keyPrefix: apiKey ? apiKey.slice(0, 6) + '...' : 'MISSING — restart dev server after setting .env.local',
+            result: typeof data.result === 'string' ? data.result.slice(0, 200) : '(non-string)',
+            keyPrefix: apiKey ? apiKey.slice(0, 6) + '...' : 'MISSING',
         });
-
         return NextResponse.json(data);
     } catch (e: any) {
-        console.error('[etherscan-proxy] Fetch error:', e?.message);
-        return NextResponse.json({ status: '0', message: 'upstream_error', result: e?.message }, { status: 502 });
+        console.error('[explorer-proxy] Fetch error:', e?.message);
+        return NextResponse.json({ status: '0', message: 'timeout', result: [] }, { status: 502 });
     }
 }
