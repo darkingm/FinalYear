@@ -1,31 +1,40 @@
 /**
  * /api/proxy/rpc/route.ts
- * Server-side JSON-RPC proxy for EVM chains (BSC, ETH, Polygon).
- * Routes to public RPC nodes — no API key needed, no CORS issues.
- *
- * Methods allowed: eth_getLogs, eth_blockNumber, eth_call
+ * Server-side JSON-RPC proxy for EVM chains.
+ * Uses Ankr (with API key) → publicnode → Pocket fallback.
+ * Methods: eth_getLogs, eth_blockNumber, eth_call
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-const RPC_NODES: Record<string, string[]> = {
-    '56': [  // BSC — ordered by eth_getLogs permissiveness
-        'https://rpc.ankr.com/bsc',           // Ankr — best limits, no key needed
-        'https://bsc.meowrpc.com',             // MeowRPC — generous public BSC node
-        'https://bsc-pokt.nodies.app',         // Pocket Network
-        'https://bsc.publicnode.com',          // PublicNode
-        'https://bsc-dataseed3.binance.org',   // Binance — strict limits, last resort
-        'https://bsc-dataseed4.binance.org',
-    ],
-    '1': [  // Ethereum
-        'https://rpc.ankr.com/eth',
-        'https://ethereum.publicnode.com',
-    ],
-    '137': [  // Polygon
-        'https://rpc.ankr.com/polygon',
-        'https://polygon.publicnode.com',
-    ],
-};
+function getAnkrKey(): string {
+    return process.env.NEXT_PUBLIC_ANKR_API_KEY?.trim() ?? '';
+}
 
+function buildNodes(chainId: string): string[] {
+    const key = getAnkrKey();
+    const chain = { '56': 'bsc', '1': 'eth', '137': 'polygon' }[chainId] ?? 'bsc';
+
+    const nodes: string[] = [];
+
+    // 1. Ankr with key — best eth_getLogs support
+    if (key) nodes.push(`https://rpc.ankr.com/${chain}/${key}`);
+
+    // 2. Chain-specific public nodes that support eth_getLogs
+    if (chainId === '56') {
+        nodes.push(
+            'https://bsc-pokt.nodies.app',          // Pocket Network BSC
+            'https://bsc.publicnode.com',            // PublicNode BSC
+            'https://bsc-dataseed3.binance.org',     // Binance (limited range)
+            'https://bsc-dataseed4.binance.org',
+        );
+    } else if (chainId === '1') {
+        nodes.push('https://ethereum.publicnode.com');
+    } else if (chainId === '137') {
+        nodes.push('https://polygon.publicnode.com');
+    }
+
+    return nodes;
+}
 
 const ALLOWED_METHODS = new Set(['eth_getLogs', 'eth_blockNumber', 'eth_call']);
 
@@ -40,7 +49,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Method ${method} not allowed` }, { status: 403 });
     }
 
-    const nodes = RPC_NODES[String(chainId)] ?? RPC_NODES['56'];
+    const nodes = buildNodes(String(chainId));
     for (const url of nodes) {
         try {
             const res = await fetch(url, {
@@ -50,13 +59,19 @@ export async function POST(req: NextRequest) {
                 signal: AbortSignal.timeout(8_000),
             });
             const data = await res.json();
+
             if (data.result !== undefined) {
+                const label = url.includes('ankr') ? 'Ankr' : url.split('/')[2];
+                console.info(`[rpc-proxy] ✅ ${label} → ${method} OK`);
                 return NextResponse.json(data);
             }
-            console.warn('[rpc-proxy] Node error:', url, data.error?.message);
+
+            const errMsg = data.error?.message ?? JSON.stringify(data.error ?? '').slice(0, 120);
+            console.warn(`[rpc-proxy] ❌ ${url.split('/')[2]}: ${errMsg}`);
         } catch (e: any) {
-            console.warn('[rpc-proxy] Node unreachable:', url, e?.message);
+            console.warn(`[rpc-proxy] Timeout: ${url.split('/')[2]} — ${e?.message}`);
         }
     }
+
     return NextResponse.json({ error: 'All RPC nodes failed', jsonrpc: '2.0', id: 1 }, { status: 502 });
 }
