@@ -56,13 +56,20 @@ export default function WhaleTrackerPage() {
     const [showApiTips, setShowApiTips] = useState(false);
 
     // Selected token/pair for LiveTxFeed
+    // Default: BTCB/WBNB on BSC PancakeSwap V2 (high liquidity, always active)
     const [selectedPair, setSelectedPair] = useState<{
         chain: SupportedChain;
         tokenAddress: string;
         pairAddress: string;
         tokenSymbol: string;
         quoteSymbol: string;
-    } | null>(null);
+    } | null>({
+        chain: 'BSC',
+        tokenAddress: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', // BTCB (Binance-Pegged BTC)
+        pairAddress: '0x61EB789d75A95CAa3fF50ed7E47b96c132fEc082',   // BTCB/WBNB PancakeSwap V3
+        tokenSymbol: 'BTCB',
+        quoteSymbol: 'WBNB',
+    });
 
     const unread = unreadCount();
     const filteredAlerts = alertFilter === 'ALL' ? alerts : alerts.filter(a => a.tx.type === alertFilter);
