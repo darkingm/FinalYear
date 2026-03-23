@@ -5,6 +5,7 @@ import { useWhaleTrackerStore, getBuySellCounts, CHAIN_LABELS } from '@/store/wh
 import { WalletWatchCard } from '@/components/whale-tracker/WalletWatchCard';
 import { AddWalletModal } from '@/components/whale-tracker/AddWalletModal';
 import { TokenSearchPanel } from '@/components/whale-tracker/TokenSearchPanel';
+import { TokenInfoPanel } from '@/components/whale-tracker/TokenInfoPanel';
 import { PoolSellDetector } from '@/components/whale-tracker/PoolSellDetector';
 import { WalletDetailModal } from '@/components/whale-tracker/WalletDetailModal';
 import type { WatchedWallet, WhaleTx } from '@/store/whale-tracker-store';
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+
 
 type AlertFilter = 'ALL' | 'SELL' | 'BUY' | 'TRANSFER';
 
@@ -30,6 +32,7 @@ export default function WhaleTrackerPage() {
     const [addOpen, setAddOpen] = useState(false);
     const [alertFilter, setAlertFilter] = useState<AlertFilter>('ALL');
     const [detailWallet, setDetailWallet] = useState<WatchedWallet | null>(null);
+    const [selectedToken, setSelectedToken] = useState<{ address?: string; symbol?: string; chain: WatchedWallet['chain'] } | null>(null);
 
     const unread = unreadCount();
 
@@ -121,7 +124,7 @@ export default function WhaleTrackerPage() {
                         ) : (
                             <div className="space-y-2">
                                 {wallets.map((w) => (
-                                    <WalletWatchCard key={w.id} wallet={w} compact />
+                                    <WalletWatchCard key={w.id} wallet={w} />
                                 ))}
                             </div>
                         )}
@@ -194,9 +197,24 @@ export default function WhaleTrackerPage() {
                         <div className="space-y-2">
                             <h2 className="text-sm font-bold text-foreground">🔍 Tìm token</h2>
                             <div className="rounded-xl border border-border bg-card/40 p-3">
-                                <TokenSearchPanel compact />
+                                <TokenSearchPanel compact onSelectForWallet={(token) =>
+                                    setSelectedToken({ address: token.baseToken.address, symbol: token.baseToken.symbol, chain: token.chain })
+                                } />
                             </div>
                         </div>
+
+                        {/* Token Info Panel — shows after search */}
+                        {selectedToken && (
+                            <div className="space-y-2">
+                                <h2 className="text-sm font-bold text-foreground">📋 Thông tin token</h2>
+                                <TokenInfoPanel
+                                    tokenAddress={selectedToken.address}
+                                    tokenSymbol={selectedToken.symbol}
+                                    chain={selectedToken.chain}
+                                    onClose={() => setSelectedToken(null)}
+                                />
+                            </div>
+                        )}
 
                         {/* Pool Sell Detector */}
                         <div className="space-y-2">
@@ -230,10 +248,10 @@ export default function WhaleTrackerPage() {
                                     return (
                                         <button key={f} onClick={() => setAlertFilter(f)}
                                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${alertFilter === f
-                                                    ? f === 'SELL' ? 'bg-red-500/20 border-red-500/50 text-red-400'
-                                                        : f === 'BUY' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                                                            : 'bg-[#8247e5]/20 border-[#8247e5]/50 text-[#8247e5]'
-                                                    : 'border-border text-muted-foreground'
+                                                ? f === 'SELL' ? 'bg-red-500/20 border-red-500/50 text-red-400'
+                                                    : f === 'BUY' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                                                        : 'bg-[#8247e5]/20 border-[#8247e5]/50 text-[#8247e5]'
+                                                : 'border-border text-muted-foreground'
                                                 }`}>
                                             {f === 'ALL' ? `Tất cả (${count})` : `${f} (${count})`}
                                         </button>
@@ -274,7 +292,10 @@ export default function WhaleTrackerPage() {
             </div>
 
             <AddWalletModal open={addOpen} onClose={() => setAddOpen(false)} />
-            <WalletDetailModal wallet={detailWallet} open={!!detailWallet} onClose={() => setDetailWallet(null)} />
+            {detailWallet && (
+                <WalletDetailModal wallet={detailWallet} onClose={() => setDetailWallet(null)} />
+            )}
+
         </div>
     );
 }

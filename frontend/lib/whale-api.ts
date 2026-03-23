@@ -1,212 +1,138 @@
 /**
- * whale-api.ts — Blockchain explorer API helpers + DexScreener integration
+ * whale-api.ts v3 — On-Chain Tracker API helpers
  *
- * Uses 1 Etherscan API key for ALL chains via chainid parameter:
- *   chainid=1   → Ethereum
- *   chainid=56  → BNB Chain (BSC)
- *   chainid=137 → Polygon
- *
- * Set NEXT_PUBLIC_ETHERSCAN_API_KEY in .env.local
+ * Changes vs v2:
+ * - Uses `ApiKeyRotator` for multi-key round-robin per chain
+ * - Correct per-chain explorer endpoints (BSCScan / Etherscan / Polygonscan)
+ * - `fetchTokenInfo()` — GeckoTerminal + DexScreener token fundamentals
+ * - `recordTx()` — persists BUY/SELL to backend DB
+ * - `getWalletStats()` — reads persistent counters from backend
+ * - Improved BUY/SELL classification using full DEX router list
  */
 
 import type { SupportedChain, WhaleTx, PoolInfo, TxType, TxDirection, TokenPair } from '@/store/whale-tracker-store';
 import { classifyWhaleSize, CHAIN_LABELS, DEXSCREENER_CHAIN_MAP } from '@/store/whale-tracker-store';
+import { ApiKeyRotator, EXPLORER_CONFIG, type ExplorerChain, classifyTxType } from './onchain-api-manager';
 
-/* ──────────────────────────────────────────
- * Single Etherscan API endpoint + chain IDs
- * ────────────────────────────────────────── */
-const ETHERSCAN_API = 'https://api.etherscan.io/api';
-const API_KEY = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY || '';
-
-const CHAIN_CONFIG: Record<SupportedChain, { chainId: string; nativeSymbol: string; nativePriceUrl: string }> = {
-    BSC: { chainId: '56', nativeSymbol: 'BNB', nativePriceUrl: 'https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT' },
-    ETH: { chainId: '1', nativeSymbol: 'ETH', nativePriceUrl: 'https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT' },
-    POLYGON: { chainId: '137', nativeSymbol: 'MATIC', nativePriceUrl: 'https://api.binance.com/api/v3/ticker/price?symbol=MATICUSDT' },
+/* ── Mapped types ── */
+const CHAIN_TO_EXPLORER: Record<SupportedChain, ExplorerChain> = {
+    BSC: 'BSC', ETH: 'ETH', POLYGON: 'POLYGON',
 };
 
-/* ──────────────────────────────────────────
- * DEX Router addresses → classify SELL
- * ────────────────────────────────────────── */
-const DEX_ROUTERS: Record<string, string> = {
-    '0x10ed43c718714eb63d5aa57b78b54704e256024e': 'PancakeSwap V2',
-    '0x13f4ea83d0bd40e75c8222255bc855a974568dd4': 'PancakeSwap V3',
-    '0x1b02da8cb0d097eb8d57a175b88c7d8b47997506': 'SushiSwap',
-    '0x7a250d5630b4cf539739df2c5dacb4c659f2488d': 'Uniswap V2',
-    '0xe592427a0aece92de3edee1f18e0157c05861564': 'Uniswap V3',
-    '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f': 'SushiSwap ETH',
-    '0xef1c6e67703c7bd7107eed8303fbe6ec2554bf6b': 'Uniswap Universal Router',
-    '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad': 'Uniswap Universal Router V2',
-    '0xa5e0829caced8ffdd4de3c43696c57f7d7a678ff': 'QuickSwap',
-};
-
-/* ──────────────────────────────────────────
- * Native price cache (60s TTL)
- * ────────────────────────────────────────── */
-const priceCache: Record<string, { price: number; fetchedAt: number }> = {};
+/* ── Native price cache (60s TTL) ── */
+const priceCache: Record<string, { price: number; at: number }> = {};
 
 export async function getNativePrice(chain: SupportedChain): Promise<number> {
-    const cfg = CHAIN_CONFIG[chain];
     const cached = priceCache[chain];
-    if (cached && Date.now() - cached.fetchedAt < 60_000) return cached.price;
+    if (cached && Date.now() - cached.at < 60_000) return cached.price;
     try {
-        const res = await fetch(cfg.nativePriceUrl);
+        const sym = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]].nativePriceSymbol;
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
         const data = await res.json();
         const price = parseFloat(data.price || '0');
-        priceCache[chain] = { price, fetchedAt: Date.now() };
+        priceCache[chain] = { price, at: Date.now() };
         return price;
     } catch {
-        return cached?.price || 300;
+        return priceCache[chain]?.price || 300;
     }
 }
 
-/* ──────────────────────────────────────────
- * fetchWalletTxs — native coin transactions
- * ────────────────────────────────────────── */
+/* ── Map Etherscan token tx row → WhaleTx ── */
+function mapTokenTxRow(tx: any, walletAddress: string, nativeSymbol: string): WhaleTx {
+    const decimals = parseInt(tx.tokenDecimal || '18');
+    const rawValue = parseFloat(tx.value) / Math.pow(10, decimals);
+    const { type, dexName } = classifyTxType(tx.to || '', tx.from || '', walletAddress);
+    const direction: TxDirection = (tx.to || '').toLowerCase() === walletAddress.toLowerCase() ? 'IN' : 'OUT';
+
+    return {
+        hash: tx.hash, from: tx.from, to: tx.to,
+        value: `${rawValue.toLocaleString('en-US', { maximumFractionDigits: 4 })} ${tx.tokenSymbol}`,
+        valueUSD: 0,
+        tokenSymbol: tx.tokenSymbol,
+        tokenAddress: tx.contractAddress,
+        type, direction, timestamp: parseInt(tx.timeStamp) * 1000,
+        pool: dexName, dexRouter: dexName ? (tx.to || '').toLowerCase() : undefined,
+        blockNumber: tx.blockNumber,
+        whaleSize: classifyWhaleSize(0),
+        pairTokenSymbol: direction === 'OUT' ? nativeSymbol : undefined,
+    };
+}
+
+/* ── Map native tx row → WhaleTx ── */
+function mapNativeTxRow(tx: any, walletAddress: string, chain: SupportedChain, nativePrice: number): WhaleTx {
+    const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
+    const valueEth = parseFloat(tx.value) / 1e18;
+    const valueUSD = valueEth * nativePrice;
+    const { type, dexName } = classifyTxType(tx.to || '', tx.from || '', walletAddress);
+    const direction: TxDirection = (tx.to || '').toLowerCase() === walletAddress.toLowerCase() ? 'IN' : 'OUT';
+
+    return {
+        hash: tx.hash, from: tx.from, to: tx.to,
+        value: `${valueEth.toFixed(4)} ${cfg.nativeSymbol}`,
+        valueUSD, tokenSymbol: cfg.nativeSymbol, type, direction,
+        timestamp: parseInt(tx.timeStamp) * 1000,
+        pool: dexName, dexRouter: dexName ? (tx.to || '').toLowerCase() : undefined,
+        blockNumber: tx.blockNumber,
+        whaleSize: classifyWhaleSize(valueUSD),
+    };
+}
+
+/* ── fetchWalletTxs — native coin txs ── */
 export async function fetchWalletTxs(address: string, chain: SupportedChain, limit = 20): Promise<WhaleTx[]> {
-    const cfg = CHAIN_CONFIG[chain];
     const nativePrice = await getNativePrice(chain);
-
-    const url = new URL(ETHERSCAN_API);
-    url.searchParams.set('module', 'account');
-    url.searchParams.set('action', 'txlist');
-    url.searchParams.set('address', address);
-    url.searchParams.set('chainid', cfg.chainId);
-    url.searchParams.set('startblock', '0');
-    url.searchParams.set('endblock', '99999999');
-    url.searchParams.set('page', '1');
-    url.searchParams.set('offset', String(limit));
-    url.searchParams.set('sort', 'desc');
-    if (API_KEY) url.searchParams.set('apikey', API_KEY);
-
+    const explorer = CHAIN_TO_EXPLORER[chain];
     try {
-        const res = await fetch(url.toString());
-        const data = await res.json();
-        if (data.status !== '1') return [];
-
-        return (data.result as any[]).map((tx) => {
-            const valueEth = parseFloat(tx.value) / 1e18;
-            const valueUSD = valueEth * nativePrice;
-            const toAddr = (tx.to || '').toLowerCase();
-            const routerName = DEX_ROUTERS[toAddr];
-            const direction: TxDirection = tx.to?.toLowerCase() === address.toLowerCase() ? 'IN' : 'OUT';
-            let type: TxType = routerName ? 'SELL' : 'TRANSFER';
-            if (direction === 'IN' && !routerName) type = 'TRANSFER';
-
-            return {
-                hash: tx.hash, from: tx.from, to: tx.to,
-                value: `${valueEth.toFixed(4)} ${cfg.nativeSymbol}`,
-                valueUSD, tokenSymbol: cfg.nativeSymbol, type,
-                timestamp: parseInt(tx.timeStamp) * 1000,
-                pool: routerName, dexRouter: routerName ? toAddr : undefined,
-                direction, blockNumber: tx.blockNumber,
-                whaleSize: classifyWhaleSize(valueUSD),
-            } satisfies WhaleTx;
+        const data = await ApiKeyRotator.fetch(explorer, {
+            module: 'account', action: 'txlist',
+            address, startblock: '0', endblock: '99999999',
+            page: '1', offset: String(limit), sort: 'desc',
         });
+        if (data.status !== '1') return [];
+        return (data.result as any[]).map(tx => mapNativeTxRow(tx, address, chain, nativePrice));
     } catch (e) {
-        console.error('[whale-api] fetchWalletTxs error:', e);
+        console.error('[whale-api] fetchWalletTxs:', e);
         return [];
     }
 }
 
-/* ──────────────────────────────────────────
- * fetchTokenTransfers — ERC20/BEP20 transfers (all tokens)
- * ────────────────────────────────────────── */
+/* ── fetchTokenTransfers — ERC20/BEP20 (all tokens) ── */
 export async function fetchTokenTransfers(address: string, chain: SupportedChain, limit = 20): Promise<WhaleTx[]> {
-    const cfg = CHAIN_CONFIG[chain];
-
-    const url = new URL(ETHERSCAN_API);
-    url.searchParams.set('module', 'account');
-    url.searchParams.set('action', 'tokentx');
-    url.searchParams.set('address', address);
-    url.searchParams.set('chainid', cfg.chainId);
-    url.searchParams.set('page', '1');
-    url.searchParams.set('offset', String(limit));
-    url.searchParams.set('sort', 'desc');
-    if (API_KEY) url.searchParams.set('apikey', API_KEY);
-
+    const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
+    const explorer = CHAIN_TO_EXPLORER[chain];
     try {
-        const res = await fetch(url.toString());
-        const data = await res.json();
+        const data = await ApiKeyRotator.fetch(explorer, {
+            module: 'account', action: 'tokentx',
+            address, page: '1', offset: String(limit), sort: 'desc',
+        });
         if (data.status !== '1') return [];
-        return mapTokenTxs(data.result, address, cfg.nativeSymbol);
+        return (data.result as any[]).map(tx => mapTokenTxRow(tx, address, cfg.nativeSymbol));
     } catch (e) {
-        console.error('[whale-api] fetchTokenTransfers error:', e);
+        console.error('[whale-api] fetchTokenTransfers:', e);
         return [];
     }
 }
 
-/* ──────────────────────────────────────────
- * fetchWalletTxsByToken — filter by specific token contract (v2)
- * Uses contractaddress param so only txs for that token are returned
- * ────────────────────────────────────────── */
+/* ── fetchWalletTxsByToken — filter by specific token contract ── */
 export async function fetchWalletTxsByToken(
-    address: string,
-    chain: SupportedChain,
-    tokenAddress: string,
-    limit = 50
+    address: string, chain: SupportedChain, tokenAddress: string, limit = 50
 ): Promise<WhaleTx[]> {
-    const cfg = CHAIN_CONFIG[chain];
-
-    const url = new URL(ETHERSCAN_API);
-    url.searchParams.set('module', 'account');
-    url.searchParams.set('action', 'tokentx');
-    url.searchParams.set('address', address);
-    url.searchParams.set('contractaddress', tokenAddress);  // ← key filter
-    url.searchParams.set('chainid', cfg.chainId);
-    url.searchParams.set('page', '1');
-    url.searchParams.set('offset', String(limit));
-    url.searchParams.set('sort', 'desc');
-    if (API_KEY) url.searchParams.set('apikey', API_KEY);
-
+    const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
+    const explorer = CHAIN_TO_EXPLORER[chain];
     try {
-        const res = await fetch(url.toString());
-        const data = await res.json();
+        const data = await ApiKeyRotator.fetch(explorer, {
+            module: 'account', action: 'tokentx',
+            address, contractaddress: tokenAddress,
+            page: '1', offset: String(limit), sort: 'desc',
+        });
         if (data.status !== '1') return [];
-        return mapTokenTxs(data.result, address, cfg.nativeSymbol);
+        return (data.result as any[]).map(tx => mapTokenTxRow(tx, address, cfg.nativeSymbol));
     } catch (e) {
-        console.error('[whale-api] fetchWalletTxsByToken error:', e);
+        console.error('[whale-api] fetchWalletTxsByToken:', e);
         return [];
     }
 }
 
-/* ──────────────────────────────────────────
- * Helper: map Etherscan token tx rows → WhaleTx[]
- * ────────────────────────────────────────── */
-function mapTokenTxs(rows: any[], walletAddress: string, nativeSymbol: string): WhaleTx[] {
-    return rows.map((tx) => {
-        const decimals = parseInt(tx.tokenDecimal || '18');
-        const rawValue = parseFloat(tx.value) / Math.pow(10, decimals);
-        const toAddr = (tx.to || '').toLowerCase();
-        const routerName = DEX_ROUTERS[toAddr];
-        const direction: TxDirection = tx.to?.toLowerCase() === walletAddress.toLowerCase() ? 'IN' : 'OUT';
-
-        let type: TxType;
-        if (routerName) {
-            type = direction === 'OUT' ? 'SELL' : 'BUY';
-        } else {
-            type = direction === 'OUT' ? 'TRANSFER' : 'TRANSFER';
-        }
-
-        return {
-            hash: tx.hash, from: tx.from, to: tx.to,
-            value: `${rawValue.toLocaleString('en-US', { maximumFractionDigits: 4 })} ${tx.tokenSymbol}`,
-            valueUSD: 0,
-            tokenSymbol: tx.tokenSymbol,
-            tokenAddress: tx.contractAddress,
-            type,
-            timestamp: parseInt(tx.timeStamp) * 1000,
-            pool: routerName,
-            dexRouter: routerName ? toAddr : undefined,
-            direction, blockNumber: tx.blockNumber,
-            whaleSize: classifyWhaleSize(0),
-            pairTokenSymbol: direction === 'OUT' ? nativeSymbol : undefined,
-        } satisfies WhaleTx;
-    });
-}
-
-/* ──────────────────────────────────────────
- * fetchAllWalletActivity — native + token, deduped + sorted
- * ────────────────────────────────────────── */
+/* ── fetchAllWalletActivity -— native + token, deduped ── */
 export async function fetchAllWalletActivity(address: string, chain: SupportedChain): Promise<WhaleTx[]> {
     const [native, tokens] = await Promise.all([
         fetchWalletTxs(address, chain, 15),
@@ -215,92 +141,173 @@ export async function fetchAllWalletActivity(address: string, chain: SupportedCh
     const seen = new Set<string>();
     const all: WhaleTx[] = [];
     for (const tx of [...native, ...tokens]) {
-        if (!seen.has(tx.hash + tx.tokenSymbol)) {
-            seen.add(tx.hash + tx.tokenSymbol);
-            all.push(tx);
-        }
+        const key = tx.hash + tx.tokenSymbol;
+        if (!seen.has(key)) { seen.add(key); all.push(tx); }
     }
     return all.sort((a, b) => b.timestamp - a.timestamp).slice(0, 30);
 }
 
-/* ──────────────────────────────────────────
- * searchTokenPairs — DexScreener search (v2)
- * Returns pairs from ALL DEXes: PancakeSwap V2/V3, Uniswap, QuickSwap etc.
- * Works for small/unknown tokens too
- * ────────────────────────────────────────── */
+/* ── searchTokenPairs — DexScreener ── */
 export async function searchTokenPairs(query: string, chainFilter?: SupportedChain): Promise<TokenPair[]> {
     if (!query.trim()) return [];
-
     const url = query.startsWith('0x')
         ? `https://api.dexscreener.com/latest/dex/tokens/${query.trim()}`
         : `https://api.dexscreener.com/latest/dex/search/?q=${encodeURIComponent(query.trim())}`;
-
     try {
         const res = await fetch(url);
         const data = await res.json();
-        const pairs: any[] = data.pairs || [];
-
-        const SUPPORTED_CHAINS = new Set(['bsc', 'ethereum', 'polygon']);
-
-        return pairs
-            .filter((p) => {
-                if (!SUPPORTED_CHAINS.has(p.chainId)) return false;
-                if (chainFilter) {
-                    const mapped = DEXSCREENER_CHAIN_MAP[p.chainId];
-                    if (mapped !== chainFilter) return false;
-                }
+        const SUPPORTED = new Set(['bsc', 'ethereum', 'polygon']);
+        return (data.pairs || [])
+            .filter((p: any) => {
+                if (!SUPPORTED.has(p.chainId)) return false;
+                if (chainFilter && DEXSCREENER_CHAIN_MAP[p.chainId] !== chainFilter) return false;
                 return true;
             })
             .slice(0, 20)
-            .map((p): TokenPair => ({
+            .map((p: any): TokenPair => ({
                 pairAddress: p.pairAddress,
-                baseToken: {
-                    address: p.baseToken?.address || '',
-                    symbol: p.baseToken?.symbol || '',
-                    name: p.baseToken?.name || '',
-                },
-                quoteToken: {
-                    address: p.quoteToken?.address || '',
-                    symbol: p.quoteToken?.symbol || '',
-                },
-                dexId: p.dexId || '',
-                priceUsd: p.priceUsd || '0',
+                baseToken: { address: p.baseToken?.address || '', symbol: p.baseToken?.symbol || '', name: p.baseToken?.name || '' },
+                quoteToken: { address: p.quoteToken?.address || '', symbol: p.quoteToken?.symbol || '' },
+                dexId: p.dexId || '', priceUsd: p.priceUsd || '0',
                 volume24h: p.volume?.h24 || 0,
                 liquidity: p.liquidity?.usd || 0,
                 chainId: p.chainId,
                 chain: DEXSCREENER_CHAIN_MAP[p.chainId] || 'BSC',
                 priceChange24h: p.priceChange?.h24 || 0,
             }))
-            .sort((a, b) => b.liquidity - a.liquidity);
+            .sort((a: TokenPair, b: TokenPair) => b.liquidity - a.liquidity);
     } catch (e) {
-        console.error('[whale-api] searchTokenPairs error:', e);
+        console.error('[whale-api] searchTokenPairs:', e);
         return [];
     }
 }
 
-/* ──────────────────────────────────────────
- * fetchPoolData — DexScreener pool info
- * ────────────────────────────────────────── */
-export async function fetchPoolData(tokenAddressOrSymbol: string, chain: SupportedChain): Promise<PoolInfo[]> {
-    const chainId = CHAIN_LABELS[chain].dexScreenerId;
-    const isAddress = tokenAddressOrSymbol.startsWith('0x');
-    const url = isAddress
+/* ── fetchTokenInfo — DexScreener + GeckoTerminal fundamentals ── */
+export interface TokenInfo {
+    symbol: string;
+    name: string;
+    address: string;
+    chainId: string;
+    priceUsd: string;
+    priceChange1h: number;
+    priceChange24h: number;
+    volume1h: number;
+    volume4h: number;
+    volume24h: number;
+    buys24h: number;
+    sells24h: number;
+    liquidity: number;
+    fdv: number;
+    marketCap: number;
+    pairAddress: string;
+    dexId: string;
+    // GeckoTerminal extras
+    totalSupply?: string;
+    circulatingSupply?: string;
+    holders?: number;
+    ageSeconds?: number;
+}
+
+export async function fetchTokenInfo(tokenAddressOrSymbol: string, chain: SupportedChain): Promise<TokenInfo | null> {
+    const dexChain = CHAIN_LABELS[chain].dexScreenerId;
+    const isAddr = tokenAddressOrSymbol.startsWith('0x');
+    const url = isAddr
         ? `https://api.dexscreener.com/latest/dex/tokens/${tokenAddressOrSymbol}`
         : `https://api.dexscreener.com/latest/dex/search/?q=${encodeURIComponent(tokenAddressOrSymbol)}`;
 
     try {
         const res = await fetch(url);
         const data = await res.json();
-        const pairs: any[] = data.pairs || [];
+        const pairs: any[] = (data.pairs || []).filter((p: any) => p.chainId === dexChain);
+        if (!pairs.length) return null;
 
-        return pairs
-            .filter((p) => p.chainId === chainId || !isAddress)
+        // Take highest liquidity pair
+        const p = pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+
+        const info: TokenInfo = {
+            symbol: p.baseToken?.symbol || '',
+            name: p.baseToken?.name || '',
+            address: p.baseToken?.address || '',
+            chainId: p.chainId,
+            priceUsd: p.priceUsd || '0',
+            priceChange1h: p.priceChange?.h1 || 0,
+            priceChange24h: p.priceChange?.h24 || 0,
+            volume1h: p.volume?.h1 || 0,
+            volume4h: p.volume?.h6 || 0,   // DexScreener uses h6 for 4-6h
+            volume24h: p.volume?.h24 || 0,
+            buys24h: p.txns?.h24?.buys || 0,
+            sells24h: p.txns?.h24?.sells || 0,
+            liquidity: p.liquidity?.usd || 0,
+            fdv: p.fdv || 0,
+            marketCap: p.marketCap || 0,
+            pairAddress: p.pairAddress || '',
+            dexId: p.dexId || '',
+        };
+
+        // Try GeckoTerminal for extra token fundamentals (non-blocking)
+        if (info.address) {
+            fetchGeckoTerminalInfo(info.address, dexChain).then(extra => {
+                if (extra) {
+                    info.totalSupply = extra.totalSupply;
+                    info.circulatingSupply = extra.circulatingSupply;
+                    info.holders = extra.holders;
+                    info.ageSeconds = extra.ageSeconds;
+                }
+            }).catch(() => {/* ignore */ });
+        }
+
+        return info;
+    } catch (e) {
+        console.error('[whale-api] fetchTokenInfo:', e);
+        return null;
+    }
+}
+
+async function fetchGeckoTerminalInfo(tokenAddress: string, geckoDexChain: string): Promise<{
+    totalSupply?: string; circulatingSupply?: string; holders?: number; ageSeconds?: number;
+} | null> {
+    try {
+        const chainMap: Record<string, string> = {
+            bsc: 'bsc', ethereum: 'eth', polygon_pos: 'polygon_pos',
+        };
+        const chain = chainMap[geckoDexChain];
+        if (!chain) return null;
+        const url = `https://api.geckoterminal.com/api/v2/networks/${chain}/tokens/${tokenAddress}`;
+        const res = await fetch(url, { headers: { Accept: 'application/json;version=20230302' } });
+        const data = await res.json();
+        const attr = data?.data?.attributes;
+        if (!attr) return null;
+        return {
+            totalSupply: attr.total_supply,
+            circulatingSupply: attr.circulating_supply,
+            holders: attr.holders,
+            ageSeconds: attr.pool_created_at
+                ? Math.floor((Date.now() - new Date(attr.pool_created_at).getTime()) / 1000)
+                : undefined,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/* ── fetchPoolData — DexScreener pool info ── */
+export async function fetchPoolData(tokenAddressOrSymbol: string, chain: SupportedChain): Promise<PoolInfo[]> {
+    const chainId = CHAIN_LABELS[chain].dexScreenerId;
+    const isAddress = tokenAddressOrSymbol.startsWith('0x');
+    const url = isAddress
+        ? `https://api.dexscreener.com/latest/dex/tokens/${tokenAddressOrSymbol}`
+        : `https://api.dexscreener.com/latest/dex/search/?q=${encodeURIComponent(tokenAddressOrSymbol)}`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        return (data.pairs || [])
+            .filter((p: any) => p.chainId === chainId || !isAddress)
             .slice(0, 5)
-            .map((p) => {
+            .map((p: any) => {
                 const buys = p.txns?.h24?.buys || 0;
                 const sells = p.txns?.h24?.sells || 1;
-                const totalVol = p.volume?.h24 || 0;
                 const sellRatio = sells / (buys + sells);
+                const totalVol = p.volume?.h24 || 0;
                 return {
                     poolAddress: p.pairAddress,
                     dexId: p.dexId,
@@ -310,25 +317,88 @@ export async function fetchPoolData(tokenAddressOrSymbol: string, chain: Support
                     buyVolume24h: totalVol * (1 - sellRatio),
                     sellVolume24h: totalVol * sellRatio,
                     liquidity: p.liquidity?.usd || 0,
-                    sellRatio,
-                    priceChange24h: p.priceChange?.h24 || 0,
+                    sellRatio, priceChange24h: p.priceChange?.h24 || 0,
                     chainId: p.chainId,
                 } satisfies PoolInfo;
             });
     } catch (e) {
-        console.error('[whale-api] fetchPoolData error:', e);
+        console.error('[whale-api] fetchPoolData:', e);
         return [];
     }
 }
 
 export async function detectSellPressure(tokenAddress: string, chain: SupportedChain): Promise<PoolInfo[]> {
-    const pools = await fetchPoolData(tokenAddress, chain);
-    return pools.sort((a, b) => b.sellRatio - a.sellRatio);
+    return (await fetchPoolData(tokenAddress, chain)).sort((a, b) => b.sellRatio - a.sellRatio);
 }
 
-export function getSellPressureLabel(sellRatio: number): { label: string; color: string; icon: string } {
-    if (sellRatio >= 0.7) return { label: 'Xả mạnh', color: 'text-red-500', icon: '🚨' };
-    if (sellRatio >= 0.55) return { label: 'Bán nhiều', color: 'text-orange-500', icon: '⚠️' };
-    if (sellRatio >= 0.45) return { label: 'Cân bằng', color: 'text-yellow-500', icon: '⚖️' };
+export function getSellPressureLabel(r: number) {
+    if (r >= 0.7) return { label: 'Xả mạnh', color: 'text-red-500', icon: '🚨' };
+    if (r >= 0.55) return { label: 'Bán nhiều', color: 'text-orange-500', icon: '⚠️' };
+    if (r >= 0.45) return { label: 'Cân bằng', color: 'text-yellow-500', icon: '⚖️' };
     return { label: 'Mua nhiều', color: 'text-emerald-500', icon: '🟢' };
+}
+
+/* ── Backend integration ── */
+const BACKEND = '/api/onchain';
+
+export interface WalletStats {
+    wallet_address: string;
+    chain: string;
+    token_address: string;
+    token_symbol?: string;
+    buy_count: number;
+    sell_count: number;
+    transfer_count: number;
+    buy_volume_usd: number;
+    sell_volume_usd: number;
+    last_tx_hash?: string;
+    last_activity?: string;
+}
+
+/** Get persistent counters from backend (with Redis cache) */
+export async function getWalletStats(
+    wallet: string, chain: SupportedChain, token = 'native'
+): Promise<WalletStats> {
+    try {
+        const res = await fetch(`${BACKEND}/wallet/${wallet}/stats?chain=${chain}&token=${token}`);
+        if (res.ok) return res.json();
+    } catch { /* fall to default */ }
+    return {
+        wallet_address: wallet, chain, token_address: token,
+        buy_count: 0, sell_count: 0, transfer_count: 0,
+        buy_volume_usd: 0, sell_volume_usd: 0,
+    };
+}
+
+/** Record a TX to backend (idempotent — duplicate tx_hash ignored) */
+export async function recordTx(payload: {
+    walletAddress: string; chain: string;
+    txHash: string; tokenAddress?: string; tokenSymbol?: string;
+    txType: 'BUY' | 'SELL' | 'TRANSFER';
+    amountToken?: number; amountUsd?: number; priceUsd?: number;
+    pairSymbol?: string; dexName?: string;
+    blockNumber?: number; txTimestamp?: number;
+}): Promise<void> {
+    try {
+        await fetch(`${BACKEND}/tx/record`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+    } catch (e) {
+        console.warn('[whale-api] recordTx failed (non-critical):', e);
+    }
+}
+
+/** Get full TX history from backend */
+export async function getWalletHistory(
+    wallet: string, chain: SupportedChain, token = 'native', limit = 50, type?: string
+): Promise<any[]> {
+    try {
+        const params = new URLSearchParams({ chain, token, limit: String(limit) });
+        if (type) params.set('type', type);
+        const res = await fetch(`${BACKEND}/wallet/${wallet}/history?${params}`);
+        if (res.ok) return res.json();
+    } catch { /* ignore */ }
+    return [];
 }

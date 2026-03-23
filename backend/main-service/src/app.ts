@@ -18,6 +18,8 @@ import walletsRoutes from './modules/wallets/wallets.routes';
 import { nftRouter } from './modules/nft/nft.routes';
 import { reviewsRouter } from './modules/reviews/reviews.routes';
 import { sellerRouter } from './modules/seller/seller.routes';
+import onchainRoutes from './modules/onchain/onchain.routes';
+
 
 const app = express();
 
@@ -152,6 +154,8 @@ app.use('/api/wallets', walletsRoutes);
 app.use('/api/nft', nftRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/seller', sellerRouter);
+app.use('/api/onchain', onchainRoutes);
+
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });

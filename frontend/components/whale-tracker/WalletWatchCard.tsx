@@ -1,159 +1,262 @@
 'use client';
 
-import { useState } from 'react';
-import { Trash2, RefreshCw, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
-import { useWhaleTrackerStore, CHAIN_LABELS, getBuySellCounts } from '@/store/whale-tracker-store';
+/**
+ * WalletWatchCard v3 — Persistent BUY/SELL counters from backend DB
+ * Polls /api/onchain/wallet/:addr/stats every 15s
+ * Auto-records new txs to backend for persistence
+ */
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RefreshCw, X, Eye, AlertTriangle, TrendingDown, Activity } from 'lucide-react';
 import type { WatchedWallet } from '@/store/whale-tracker-store';
-import { fetchAllWalletActivity, fetchWalletTxsByToken } from '@/lib/whale-api';
+import { useWhaleTrackerStore, CHAIN_LABELS } from '@/store/whale-tracker-store';
+import { fetchAllWalletActivity, fetchWalletTxsByToken, getWalletStats, recordTx, type WalletStats } from '@/lib/whale-api';
+import type { WhaleTx } from '@/store/whale-tracker-store';
 import { WalletDetailModal } from './WalletDetailModal';
-import Link from 'next/link';
 
 interface Props {
     wallet: WatchedWallet;
-    compact?: boolean;
+    compact?: boolean;  // accepted for backward compat (v2 callers), unused in v3
 }
 
-export function WalletWatchCard({ wallet, compact = false }: Props) {
-    const { txHistory, isLoading, removeWallet, setTxHistory, setLoading, setLastFetched, lastFetched } = useWhaleTrackerStore();
-    const [expanded, setExpanded] = useState(!compact);
+function fmtUsd(n: number) {
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+    return `$${n.toFixed(0)}`;
+}
+function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}`; }
+function fmtTime(ts: number) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    return `${Math.floor(s / 3600)}h ago`;
+}
+
+export function WalletWatchCard({ wallet }: Props) {
+    const { removeWallet, setTxHistory } = useWhaleTrackerStore();
+
+    const [stats, setStats] = useState<WalletStats | null>(null);
+    const [recentTxs, setRecentTxs] = useState<WhaleTx[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
+    const [sellFlash, setSellFlash] = useState(false);
+    const prevSellRef = useRef(0);
 
-    const txs = txHistory[wallet.id] || [];
-    const loading = isLoading[wallet.id] || false;
-    const chain = CHAIN_LABELS[wallet.chain];
-    const lastFetch = lastFetched[wallet.id];
+    const chainInfo = CHAIN_LABELS[wallet.chain];
 
-    const { buys, sells } = getBuySellCounts(txs);
-    const hasSellAlert = sells > 0 && txs.slice(0, 3).some((t) => t.type === 'SELL');
+    // Poll backend stats every 15s
+    const refreshStats = useCallback(async () => {
+        const token = wallet.tokenAddress || 'native';
+        const s = await getWalletStats(wallet.address, wallet.chain, token);
+        setStats(s);
+        // Flash if sell count increased
+        if (s.sell_count > prevSellRef.current && prevSellRef.current > 0) {
+            setSellFlash(true);
+            setTimeout(() => setSellFlash(false), 2000);
+        }
+        prevSellRef.current = s.sell_count;
+    }, [wallet.address, wallet.chain, wallet.tokenAddress]);
 
-    const refresh = async () => {
-        setLoading(wallet.id, true);
+    // Fetch on-chain txs and POST new ones to backend
+    const refreshTxs = useCallback(async () => {
+        setLoading(true);
         try {
-            const data = wallet.tokenAddress
-                ? await fetchWalletTxsByToken(wallet.address, wallet.chain, wallet.tokenAddress, 50)
-                : await fetchAllWalletActivity(wallet.address, wallet.chain);
-            setTxHistory(wallet.id, data);
-            setLastFetched(wallet.id);
-        } finally { setLoading(wallet.id, false); }
-    };
+            let txs: WhaleTx[];
+            if (wallet.tokenAddress) {
+                txs = await fetchWalletTxsByToken(wallet.address, wallet.chain, wallet.tokenAddress, 20);
+            } else {
+                txs = await fetchAllWalletActivity(wallet.address, wallet.chain);
+            }
 
-    const addrShort = `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`;
-    const explorerBase = wallet.chain === 'ETH' ? 'etherscan.io'
-        : wallet.chain === 'POLYGON' ? 'polygonscan.com' : 'bscscan.com';
+            setRecentTxs(txs.slice(0, 5));
+            setTxHistory(wallet.id, txs);
+
+            setLastRefresh(new Date());
+
+            // Persist new txs to backend (non-blocking, idempotent)
+            for (const tx of txs.slice(0, 10)) {
+                if (tx.type === 'BUY' || tx.type === 'SELL' || tx.type === 'TRANSFER') {
+                    recordTx({
+                        walletAddress: wallet.address,
+                        chain: wallet.chain,
+                        txHash: tx.hash,
+                        tokenAddress: tx.tokenAddress || wallet.tokenAddress || 'native',
+                        tokenSymbol: tx.tokenSymbol,
+                        txType: tx.type,
+                        amountUsd: tx.valueUSD,
+                        dexName: tx.pool,
+                        blockNumber: Number(tx.blockNumber),
+                        txTimestamp: tx.timestamp,
+                    }).catch(() => {/* non-critical */ });
+                }
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [wallet, setTxHistory]);
+
+
+    useEffect(() => {
+        refreshStats();
+        refreshTxs();
+        const statPoll = setInterval(refreshStats, 15_000);
+        const txPoll = setInterval(refreshTxs, 30_000);
+        return () => { clearInterval(statPoll); clearInterval(txPoll); };
+    }, [refreshStats, refreshTxs]);
+
+    const buyCount = stats?.buy_count ?? 0;
+    const sellCount = stats?.sell_count ?? 0;
+    const buyVol = stats?.buy_volume_usd ?? 0;
+    const sellVol = stats?.sell_volume_usd ?? 0;
+    const hasSellActivity = sellCount > 0;
+    const recentSell = recentTxs.find(t => t.type === 'SELL');
 
     return (
         <>
-            <div className={`rounded-xl border transition-all ${hasSellAlert ? 'border-red-500/40 bg-red-500/5' : 'border-border bg-card/50'
-                }`}>
-                {/* ── Card header ───────────────────────── */}
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                    {/* Status dot */}
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${hasSellAlert ? 'bg-red-500 animate-pulse' : sells > 0 ? 'bg-orange-400' : 'bg-emerald-500'
-                        }`} />
-
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-semibold text-foreground truncate">{wallet.label}</span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border"
-                                style={{ color: chain.color, borderColor: chain.color + '40', backgroundColor: chain.color + '15' }}>
-                                {wallet.chain}
-                            </span>
-                            {wallet.tokenSymbol && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#8247e5]/15 border border-[#8247e5]/30 text-[#8247e5]">
-                                    {wallet.tokenSymbol}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[11px] text-muted-foreground font-mono">{addrShort}</span>
-                            <a href={`https://${explorerBase}/address/${wallet.address}`} target="_blank" rel="noopener noreferrer"
-                                className="text-muted-foreground hover:text-foreground transition-colors">
-                                <ExternalLink className="w-3 h-3" />
-                            </a>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                        {lastFetch && (
-                            <span className="text-[10px] text-muted-foreground hidden sm:block">
-                                {new Date(lastFetch).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+            <motion.div
+                layout
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className={`relative rounded-xl border overflow-hidden transition-all ${sellFlash
+                    ? 'border-red-500/50 bg-red-500/5 shadow-red-500/10 shadow-lg'
+                    : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.05]'
+                    }`}
+            >
+                {/* Header row */}
+                <div className="flex items-center justify-between px-3 pt-3 pb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {/* Chain badge */}
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border"
+                            style={{ color: chainInfo.color, borderColor: `${chainInfo.color}40`, background: `${chainInfo.color}15` }}>
+                            {wallet.chain}
+                        </span>
+                        {/* Token badge */}
+                        {wallet.tokenSymbol && (
+                            <span className="text-[10px] font-bold text-violet-400 bg-violet-400/10 border border-violet-400/20 px-1.5 py-0.5 rounded">
+                                {wallet.tokenSymbol}
                             </span>
                         )}
-                        <button onClick={refresh} disabled={loading}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors disabled:opacity-50">
+                        {/* Label */}
+                        <span className="text-xs font-bold text-white/80 truncate">{wallet.label || fmtAddr(wallet.address)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <button onClick={refreshTxs} disabled={loading}
+                            className="p-1 rounded text-white/30 hover:text-white transition-colors">
                             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                         </button>
-                        {compact && (
-                            <button onClick={() => setExpanded((v) => !v)}
-                                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors">
-                                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            </button>
-                        )}
                         <button onClick={() => removeWallet(wallet.id)}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
+                            className="p-1 rounded text-white/30 hover:text-red-400 transition-colors">
+                            <X className="w-3.5 h-3.5" />
                         </button>
                     </div>
                 </div>
 
-                {/* ── BUY / SELL counter badges ──────────── */}
-                {expanded && (
-                    <div className="px-3 pb-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {/* BUY badge */}
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                                <span className="text-emerald-400 text-xs font-bold">{buys}</span>
-                                <span className="text-emerald-400/70 text-xs">BUY</span>
-                            </div>
+                {/* Wallet address */}
+                <div className="px-3 pb-2">
+                    <p className="text-[10px] font-mono text-white/30">{fmtAddr(wallet.address)}</p>
+                </div>
 
-                            {/* SELL badge */}
-                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${sells > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-accent/5 border-border'
-                                }`}>
-                                <div className={`w-2 h-2 rounded-full ${sells > 0 ? 'bg-red-500 animate-pulse' : 'bg-muted-foreground'}`} />
-                                <span className={`text-xs font-bold ${sells > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{sells}</span>
-                                <span className={`text-xs ${sells > 0 ? 'text-red-400/70' : 'text-muted-foreground/70'}`}>SELL</span>
-                            </div>
-
-                            {/* Sell alert */}
-                            {hasSellAlert && (
-                                <span className="text-xs text-red-400 font-semibold animate-pulse">🚨 Xả gần đây!</span>
-                            )}
-
-                            {/* No data yet */}
-                            {txs.length === 0 && !loading && (
-                                <span className="text-xs text-muted-foreground">Chưa có dữ liệu — nhấn refresh ↺</span>
-                            )}
-                            {loading && (
-                                <span className="text-xs text-muted-foreground animate-pulse">Đang tải…</span>
-                            )}
-
-                            {/* Detail button */}
-                            {txs.length > 0 && (
-                                <button onClick={() => setDetailOpen(true)}
-                                    className="ml-auto text-xs text-[#8247e5] hover:text-[#8247e5]/80 transition-colors font-semibold flex items-center gap-1">
-                                    Xem chi tiết →
-                                </button>
-                            )}
+                {/* BUY / SELL counters */}
+                <div className="grid grid-cols-2 gap-2 px-3 pb-2">
+                    {/* BUY */}
+                    <div className="flex flex-col items-center py-2.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
+                            <span className="text-xs font-black text-emerald-400">BUY</span>
                         </div>
+                        <motion.p
+                            key={buyCount}
+                            initial={{ scale: 1.3, color: '#34d399' }}
+                            animate={{ scale: 1, color: '#fff' }}
+                            className="text-2xl font-black text-white leading-none"
+                        >
+                            {buyCount}
+                        </motion.p>
+                        {buyVol > 0 && (
+                            <p className="text-[9px] text-emerald-400/60 mt-0.5">{fmtUsd(buyVol)}</p>
+                        )}
+                    </div>
 
-                        {/* Latest SELL alert */}
-                        {hasSellAlert && txs.slice(0, 3).filter(t => t.type === 'SELL').slice(0, 1).map(tx => (
-                            <div key={tx.hash} className="mt-2 flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-2.5 py-1.5">
-                                🚨
-                                <span className="font-semibold">SELL {tx.value}</span>
-                                {tx.pool && <span className="text-orange-400">via {tx.pool}</span>}
-                                <span className="ml-auto text-red-400/60">{new Date(tx.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                    {/* SELL */}
+                    <div className={`flex flex-col items-center py-2.5 rounded-lg border transition-all ${hasSellActivity ? 'bg-red-500/8 border-red-500/20' : 'bg-white/[0.02] border-white/10'
+                        }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className={`w-2 h-2 rounded-full ${hasSellActivity ? 'bg-red-500 animate-pulse shadow-lg shadow-red-500/50' : 'bg-white/20'}`} />
+                            <span className={`text-xs font-black ${hasSellActivity ? 'text-red-400' : 'text-white/30'}`}>SELL</span>
+                        </div>
+                        <motion.p
+                            key={sellCount}
+                            initial={{ scale: 1.3, color: '#f87171' }}
+                            animate={{ scale: 1, color: sellCount > 0 ? '#f87171' : 'rgba(255,255,255,0.4)' }}
+                            className="text-2xl font-black leading-none"
+                        >
+                            {sellCount}
+                        </motion.p>
+                        {sellVol > 0 && (
+                            <p className="text-[9px] text-red-400/60 mt-0.5">{fmtUsd(sellVol)}</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Sell alert banner */}
+                <AnimatePresence>
+                    {recentSell && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="mx-3 mb-2 px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
+                                <AlertTriangle className="w-3 h-3 text-red-400 flex-shrink-0" />
+                                <p className="text-[10px] text-red-300">
+                                    Xả gần đây — {fmtTime(recentSell.timestamp)}
+                                    {recentSell.valueUSD > 0 && ` · ${fmtUsd(recentSell.valueUSD)}`}
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Mini TX feed */}
+                {recentTxs.length > 0 && (
+                    <div className="mx-3 mb-2 space-y-0.5">
+                        {recentTxs.slice(0, 3).map(tx => (
+                            <div key={tx.hash} className="flex items-center justify-between text-[9px] py-0.5">
+                                <span className={`font-bold px-1 py-0.5 rounded ${tx.type === 'BUY' ? 'text-emerald-400 bg-emerald-400/10'
+                                    : tx.type === 'SELL' ? 'text-red-400 bg-red-400/10'
+                                        : 'text-blue-400 bg-blue-400/10'
+                                    }`}>{tx.type}</span>
+                                <span className="text-white/40 font-mono truncate mx-1">{tx.value}</span>
+                                <span className="text-white/20">{fmtTime(tx.timestamp)}</span>
                             </div>
                         ))}
                     </div>
                 )}
 
-                {/* ── Bottom padding ──────────────────────── */}
-                {expanded && <div className="pb-2" />}
-            </div>
+                {/* Footer */}
+                <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                    {lastRefresh && (
+                        <p className="text-[9px] text-white/20">{fmtTime(lastRefresh.getTime())}</p>
+                    )}
+                    <button
+                        onClick={() => setDetailOpen(true)}
+                        className="ml-auto flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 transition-colors font-bold"
+                    >
+                        <Eye className="w-3 h-3" />
+                        Xem chi tiết →
+                    </button>
+                </div>
+            </motion.div>
 
-            <WalletDetailModal wallet={wallet} open={detailOpen} onClose={() => setDetailOpen(false)} />
+            {detailOpen && (
+                <WalletDetailModal
+                    wallet={wallet}
+                    onClose={() => setDetailOpen(false)}
+                />
+            )}
         </>
     );
 }

@@ -1,225 +1,283 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useWhaleTrackerStore, CHAIN_LABELS, getBuySellCounts } from '@/store/whale-tracker-store';
-import { fetchWalletTxsByToken, fetchAllWalletActivity } from '@/lib/whale-api';
-import type { WatchedWallet, WhaleTx } from '@/store/whale-tracker-store';
-import {
-    ArrowUpRight, ArrowDownLeft, Repeat, ExternalLink,
-    RefreshCw, TrendingDown, TrendingUp, Loader2,
-} from 'lucide-react';
+/**
+ * WalletDetailModal v3 — DexScreener-style 8-col transaction table
+ * Shows full on-chain tx history: DB history + live chain data combined
+ */
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, ExternalLink, RefreshCw, Filter, TrendingUp, TrendingDown, ArrowRightLeft, ChevronDown } from 'lucide-react';
+import type { WatchedWallet } from '@/store/whale-tracker-store';
+import { CHAIN_LABELS } from '@/store/whale-tracker-store';
+import { fetchWalletTxsByToken, fetchAllWalletActivity, getWalletHistory, getWalletStats, type WalletStats } from '@/lib/whale-api';
+import type { WhaleTx } from '@/store/whale-tracker-store';
 
 interface Props {
-    wallet: WatchedWallet | null;
-    open: boolean;
+    wallet: WatchedWallet;
     onClose: () => void;
 }
 
-type TxFilter = 'ALL' | 'BUY' | 'SELL' | 'TRANSFER';
+type FilterType = 'ALL' | 'BUY' | 'SELL' | 'TRANSFER';
 
-function relativeTime(ts: number): string {
-    const diff = Math.floor((Date.now() - ts) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return new Date(ts).toLocaleDateString('vi-VN');
+const CHAIN_EXPLORERS: Record<string, string> = {
+    BSC: 'https://bscscan.com/tx/',
+    ETH: 'https://etherscan.io/tx/',
+    POLYGON: 'https://polygonscan.com/tx/',
+};
+
+function fmtUsd(n: number) {
+    if (!n) return '$0';
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+    return `$${n.toFixed(2)}`;
+}
+function fmtAddr(a: string) { return `${a.slice(0, 6)}…${a.slice(-4)}`; }
+function fmtAge(ts: number) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h`;
+    return `${Math.floor(s / 86400)}d`;
+}
+function TxTypeBadge({ type }: { type: string }) {
+    const s = {
+        BUY: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
+        TRANSFER: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    }[type] ?? 'bg-white/10 text-white/40';
+    return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${s}`}>{type}</span>;
 }
 
-function TxTableRow({ tx, explorerBase }: { tx: WhaleTx; explorerBase: string }) {
-    const isBuy = tx.type === 'BUY';
-    const isSell = tx.type === 'SELL';
-    const typeColor = isBuy ? 'text-emerald-400' : isSell ? 'text-red-400' : 'text-muted-foreground';
-    const typeBg = isBuy ? 'bg-emerald-500/10' : isSell ? 'bg-red-500/10' : 'bg-accent/10';
-    const TxIcon = isBuy ? ArrowDownLeft : isSell ? ArrowUpRight : Repeat;
+export function WalletDetailModal({ wallet, onClose }: Props) {
+    const [liveTxs, setLiveTxs] = useState<WhaleTx[]>([]);
+    const [dbTxs, setDbTxs] = useState<any[]>([]);
+    const [stats, setStats] = useState<WalletStats | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [filter, setFilter] = useState<FilterType>('ALL');
+    const [source, setSource] = useState<'live' | 'db'>('live');
+    const chainInfo = CHAIN_LABELS[wallet.chain];
+    const explorer = CHAIN_EXPLORERS[wallet.chain] || '';
 
-    return (
-        <tr className="border-b border-border/50 hover:bg-accent/5 transition-colors group">
-            {/* Date */}
-            <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{relativeTime(tx.timestamp)}</td>
-
-            {/* Type */}
-            <td className="px-3 py-2">
-                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${typeBg} ${typeColor}`}>
-                    <TxIcon className="w-3 h-3" />
-                    {tx.type}
-                </span>
-            </td>
-
-            {/* USD */}
-            <td className="px-3 py-2 text-xs font-semibold text-foreground">
-                {tx.valueUSD > 0 ? `$${tx.valueUSD.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
-            </td>
-
-            {/* Token amount */}
-            <td className={`px-3 py-2 text-xs font-mono font-semibold ${typeColor}`}>{tx.value}</td>
-
-            {/* Pair token */}
-            <td className="px-3 py-2 text-xs text-muted-foreground">
-                {tx.pairTokenAmount ? `${tx.pairTokenAmount} ${tx.pairTokenSymbol}` : tx.pairTokenSymbol || '—'}
-            </td>
-
-            {/* Pool */}
-            <td className="px-3 py-2 text-xs text-orange-400">{tx.pool || '—'}</td>
-
-            {/* Maker (from addr) */}
-            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">
-                {tx.from ? `${tx.from.slice(0, 5)}…${tx.from.slice(-4)}` : '—'}
-            </td>
-
-            {/* TXN link */}
-            <td className="px-3 py-2">
-                <a href={`https://${explorerBase}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
-                    className="text-muted-foreground hover:text-[#8247e5] transition-colors opacity-0 group-hover:opacity-100">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-            </td>
-        </tr>
-    );
-}
-
-export function WalletDetailModal({ wallet, open, onClose }: Props) {
-    const { txHistory, setTxHistory, setLoading, setLastFetched, isLoading } = useWhaleTrackerStore();
-    const [filter, setFilter] = useState<TxFilter>('ALL');
-    const [localTxs, setLocalTxs] = useState<WhaleTx[]>([]);
-
-    const txs: WhaleTx[] = wallet ? (txHistory[wallet.id] || []) : [];
-    const loading = wallet ? (isLoading[wallet.id] || false) : false;
-    const { buys, sells, buyVolumeUSD, sellVolumeUSD } = getBuySellCounts(txs);
-
-    const explorerBase = wallet?.chain === 'ETH' ? 'etherscan.io'
-        : wallet?.chain === 'POLYGON' ? 'polygonscan.com'
-            : 'bscscan.com';
-
-    const chainLabel = wallet ? CHAIN_LABELS[wallet.chain] : null;
-
-    // Fetch detail data when opening
-    useEffect(() => {
-        if (!open || !wallet) return;
-        handleRefresh();
-    }, [open, wallet?.id]); // eslint-disable-line
-
-    const handleRefresh = async () => {
-        if (!wallet) return;
-        setLoading(wallet.id, true);
+    const loadLive = useCallback(async () => {
+        setLoading(true);
         try {
-            let data: WhaleTx[];
+            let txs: WhaleTx[];
             if (wallet.tokenAddress) {
-                // Token-specific fetch — much more precise
-                data = await fetchWalletTxsByToken(wallet.address, wallet.chain, wallet.tokenAddress, 50);
+                txs = await fetchWalletTxsByToken(wallet.address, wallet.chain, wallet.tokenAddress, 50);
             } else {
-                data = await fetchAllWalletActivity(wallet.address, wallet.chain);
+                txs = await fetchAllWalletActivity(wallet.address, wallet.chain);
             }
-            setTxHistory(wallet.id, data);
-            setLastFetched(wallet.id);
-            setLocalTxs(data);
+            setLiveTxs(txs);
         } finally {
-            setLoading(wallet.id, false);
+            setLoading(false);
         }
-    };
+    }, [wallet]);
 
-    const displayTxs = (txs.length > 0 ? txs : localTxs).filter((tx) =>
-        filter === 'ALL' ? true : tx.type === filter
-    );
+    const loadDb = useCallback(async () => {
+        setLoading(true);
+        try {
+            const rows = await getWalletHistory(
+                wallet.address, wallet.chain,
+                wallet.tokenAddress || 'native', 100
+            );
+            setDbTxs(rows);
+        } finally {
+            setLoading(false);
+        }
+    }, [wallet]);
 
-    if (!wallet) return null;
+    useEffect(() => {
+        loadLive();
+        getWalletStats(wallet.address, wallet.chain, wallet.tokenAddress || 'native').then(setStats);
+    }, [wallet, loadLive]);
+
+    // Merge display rows
+    const rawRows = source === 'live' ? liveTxs : dbTxs.map(r => ({
+        hash: r.tx_hash, from: wallet.address, to: '',
+        value: `${r.amount_token ?? '—'} ${r.token_symbol || ''}`,
+        valueUSD: parseFloat(r.amount_usd) || 0,
+        tokenSymbol: r.token_symbol,
+        type: r.tx_type as any,
+        timestamp: r.tx_timestamp ? new Date(r.tx_timestamp).getTime() : 0,
+        pool: r.dex_name, direction: 'OUT' as any,
+        blockNumber: r.block_number, whaleSize: 'medium' as any,
+    }));
+
+    const displayRows = filter === 'ALL' ? rawRows : rawRows.filter(r => r.type === filter);
+
+    const totalBuy = stats?.buy_count ?? 0;
+    const totalSell = stats?.sell_count ?? 0;
+    const buyVol = stats?.buy_volume_usd ?? 0;
+    const sellVol = stats?.sell_volume_usd ?? 0;
 
     return (
-        <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-                {/* ── Header ──────────────────────────────────── */}
-                <DialogHeader className="px-5 py-4 border-b border-border flex-shrink-0">
-                    <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <DialogTitle className="flex items-center gap-2 text-base text-foreground">
-                                🐋 {wallet.label}
-                                {chainLabel && (
-                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border"
-                                        style={{ color: chainLabel.color, borderColor: chainLabel.color + '40', backgroundColor: chainLabel.color + '15' }}>
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                {/* Backdrop */}
+                <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={onClose}
+                />
+
+                {/* Modal */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    className="relative w-full max-w-5xl max-h-[90vh] flex flex-col rounded-2xl border border-white/10 bg-[#0c0c18]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+                >
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-black text-white">{wallet.label || fmtAddr(wallet.address)}</span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                        style={{ color: chainInfo.color, background: `${chainInfo.color}20`, border: `1px solid ${chainInfo.color}40` }}>
                                         {wallet.chain}
                                     </span>
-                                )}
-                                {wallet.tokenSymbol && (
-                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#8247e5]/15 border border-[#8247e5]/30 text-[#8247e5]">
-                                        {wallet.tokenSymbol}
-                                    </span>
-                                )}
-                            </DialogTitle>
-                            <p className="text-xs font-mono text-muted-foreground mt-1">{wallet.address}</p>
+                                    {wallet.tokenSymbol && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-violet-400 bg-violet-400/10 border border-violet-400/20">
+                                            {wallet.tokenSymbol}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-[10px] font-mono text-white/30 mt-0.5">{wallet.address}</p>
+                            </div>
                         </div>
-                        <button onClick={handleRefresh} disabled={loading}
-                            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors disabled:opacity-50 flex-shrink-0">
-                            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={source === 'live' ? loadLive : loadDb} disabled={loading}
+                                className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white px-2.5 py-1.5 rounded-lg border border-white/10 hover:border-white/20 transition-all">
+                                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                                Refresh
+                            </button>
+                            <button onClick={onClose} className="p-2 rounded-lg text-white/30 hover:text-white hover:bg-white/10">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Stats row */}
-                    <div className="flex items-center gap-4 mt-3 flex-wrap">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400 font-bold text-sm">{buys} BUY</span>
-                            {buyVolumeUSD > 0 && <span className="text-emerald-400/70 text-xs">· ${(buyVolumeUSD / 1000).toFixed(1)}K</span>}
+                    {/* Stats summary */}
+                    <div className="grid grid-cols-4 divide-x divide-white/8 border-b border-white/8">
+                        {[
+                            { label: 'Tổng BUY', value: totalBuy, color: 'text-emerald-400', sub: buyVol > 0 ? fmtUsd(buyVol) : undefined },
+                            { label: 'Tổng SELL', value: totalSell, color: 'text-red-400', sub: sellVol > 0 ? fmtUsd(sellVol) : undefined },
+                            { label: 'Tổng TX hiển thị', value: displayRows.length, color: 'text-white', sub: filter !== 'ALL' ? `filter: ${filter}` : undefined },
+                            { label: 'Sell pressure', value: totalBuy + totalSell > 0 ? `${Math.round(totalSell / (totalBuy + totalSell) * 100)}%` : '—', color: totalSell > totalBuy ? 'text-red-400' : 'text-emerald-400' },
+                        ].map(({ label, value, color, sub }) => (
+                            <div key={label} className="px-4 py-3 text-center">
+                                <p className="text-[9px] text-white/30 mb-0.5">{label}</p>
+                                <p className={`text-xl font-black ${color}`}>{value}</p>
+                                {sub && <p className="text-[9px] text-white/20">{sub}</p>}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Filter + source tabs */}
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/8 bg-white/[0.01]">
+                        <div className="flex gap-1">
+                            {(['ALL', 'BUY', 'SELL', 'TRANSFER'] as FilterType[]).map(f => (
+                                <button key={f} onClick={() => setFilter(f)}
+                                    className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${filter === f
+                                            ? f === 'BUY' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                                : f === 'SELL' ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                                    : f === 'TRANSFER' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                                        : 'bg-white/10 text-white border border-white/20'
+                                            : 'text-white/30 hover:text-white'
+                                        }`}>
+                                    {f === 'BUY' ? `🟢 ${f}` : f === 'SELL' ? `🔴 ${f}` : f === 'TRANSFER' ? `💜 ${f}` : f}
+                                </button>
+                            ))}
                         </div>
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20">
-                            <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-                            <span className="text-red-400 font-bold text-sm">{sells} SELL</span>
-                            {sellVolumeUSD > 0 && <span className="text-red-400/70 text-xs">· ${(sellVolumeUSD / 1000).toFixed(1)}K</span>}
+                        <div className="flex gap-1">
+                            {(['live', 'db'] as const).map(s => (
+                                <button key={s} onClick={() => { setSource(s); s === 'db' ? loadDb() : loadLive(); }}
+                                    className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all ${source === s ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'text-white/30 hover:text-white'
+                                        }`}>
+                                    {s === 'live' ? '⚡ Live chain' : '🗃️ Lịch sử DB'}
+                                </button>
+                            ))}
                         </div>
-                        <a href={`https://${explorerBase}/address/${wallet.address}`} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                            Xem trên Explorer <ExternalLink className="w-3 h-3" />
+                    </div>
+
+                    {/* Table */}
+                    <div className="flex-1 overflow-y-auto">
+                        {/* Column headers */}
+                        <div className="sticky top-0 grid grid-cols-[70px_50px_80px_120px_80px_80px_100px_50px] gap-2 px-4 py-2 bg-[#0c0c18]/90 border-b border-white/8 text-[9px] font-bold text-white/30 uppercase tracking-wider">
+                            <span>DATE</span><span>TYPE</span><span>USD</span>
+                            <span>AMOUNT</span><span>TOKEN</span><span>DEX</span>
+                            <span>WALLET</span><span className="text-right">TXN</span>
+                        </div>
+
+                        {loading && displayRows.length === 0 ? (
+                            <div className="flex items-center justify-center py-12 text-white/20 text-sm">
+                                <RefreshCw className="w-4 h-4 animate-spin mr-2" />Loading…
+                            </div>
+                        ) : displayRows.length === 0 ? (
+                            <div className="flex items-center justify-center py-12 text-white/20 text-sm">Không có giao dịch</div>
+                        ) : (
+                            <div className="divide-y divide-white/5">
+                                {displayRows.map((tx, i) => (
+                                    <motion.div
+                                        key={tx.hash + i}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                                        className="grid grid-cols-[70px_50px_80px_120px_80px_80px_100px_50px] gap-2 px-4 py-2 hover:bg-white/[0.02] transition-colors items-center"
+                                    >
+                                        {/* DATE */}
+                                        <span className="text-[10px] text-white/40 font-mono">{fmtAge(tx.timestamp)}</span>
+
+                                        {/* TYPE */}
+                                        <TxTypeBadge type={tx.type} />
+
+                                        {/* USD */}
+                                        <span className={`text-xs font-bold ${tx.type === 'BUY' ? 'text-emerald-400' : tx.type === 'SELL' ? 'text-red-400' : 'text-white/60'
+                                            }`}>
+                                            {tx.valueUSD > 0 ? fmtUsd(tx.valueUSD) : '—'}
+                                        </span>
+
+                                        {/* AMOUNT */}
+                                        <span className="text-[10px] text-white/70 font-mono truncate">{tx.value}</span>
+
+                                        {/* TOKEN */}
+                                        <span className="text-[10px] font-bold text-violet-300">{tx.tokenSymbol || '—'}</span>
+
+                                        {/* DEX */}
+                                        <span className="text-[9px] text-white/30 truncate">{tx.pool || '—'}</span>
+
+                                        {/* WALLET */}
+                                        <span className="text-[10px] font-mono text-white/30">
+                                            {fmtAddr(tx.type === 'BUY' ? (tx.from || '') : (tx.to || ''))}
+                                        </span>
+
+                                        {/* TXN link */}
+                                        <div className="flex justify-end">
+                                            <a href={`${explorer}${tx.hash}`} target="_blank" rel="noopener noreferrer"
+                                                className="text-white/20 hover:text-violet-400 transition-colors">
+                                                <ExternalLink className="w-3 h-3" />
+                                            </a>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-5 py-3 border-t border-white/8 flex items-center justify-between">
+                        <p className="text-[10px] text-white/20">
+                            {displayRows.length} giao dịch · {source === 'live' ? '⚡ Từ blockchain' : '🗃️ Từ DB'}
+                        </p>
+                        <a href={`${explorer.replace('/tx/', '/address/')}${wallet.address}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-[10px] text-violet-400 hover:text-violet-300 flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" />Xem trên Explorer
                         </a>
                     </div>
-
-                    {/* Filter chips */}
-                    <div className="flex gap-1.5 mt-2 flex-wrap">
-                        {(['ALL', 'BUY', 'SELL', 'TRANSFER'] as TxFilter[]).map((f) => {
-                            const count = f === 'ALL' ? txs.length : txs.filter((t) => t.type === f).length;
-                            return (
-                                <button key={f} onClick={() => setFilter(f)}
-                                    className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${filter === f
-                                            ? f === 'BUY' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                                                : f === 'SELL' ? 'bg-red-500/20 border-red-500/50 text-red-400'
-                                                    : 'bg-[#8247e5]/20 border-[#8247e5]/50 text-[#8247e5]'
-                                            : 'border-border text-muted-foreground hover:border-border/80'
-                                        }`}>
-                                    {f === 'ALL' ? `Tất cả (${count})` : `${f} (${count})`}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </DialogHeader>
-
-                {/* ── Table ───────────────────────────────────── */}
-                <div className="flex-1 overflow-auto">
-                    {loading && displayTxs.length === 0 ? (
-                        <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-                            <Loader2 className="w-5 h-5 animate-spin" /> Đang tải lịch sử giao dịch…
-                        </div>
-                    ) : displayTxs.length === 0 ? (
-                        <div className="text-center py-16 text-sm text-muted-foreground">
-                            Không có giao dịch nào
-                        </div>
-                    ) : (
-                        <table className="w-full text-left">
-                            <thead className="sticky top-0 bg-background border-b border-border">
-                                <tr>
-                                    {['DATE', 'TYPE', 'USD', 'TOKEN', 'PAIR', 'POOL', 'MAKER', 'TXN'].map((col) => (
-                                        <th key={col} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                                            {col}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {displayTxs.map((tx) => (
-                                    <TxTableRow key={tx.hash + tx.tokenSymbol} tx={tx} explorerBase={explorerBase} />
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
+                </motion.div>
+            </div>
+        </AnimatePresence>
     );
 }
