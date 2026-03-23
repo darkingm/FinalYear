@@ -365,52 +365,70 @@ function decodeSwapLog(
     } catch { return null; }
 }
 
-/** Fetch swaps from last ~1000 BSC blocks (~50 min) using eth_getLogs */
+/** Fetch swaps from last ~200 BSC blocks (~10 min) using eth_getLogs */
 async function fetchFromRpc(
     chain: SupportedChain,
     tokenAddress: string,
     pairAddress: string,
     limit = 50,
 ): Promise<PairTx[]> {
-    try {
-        // 1. Get current block number
-        const blockHex = await rpcPost(chain, 'eth_blockNumber', []) as string;
-        const currentBlock = parseInt(blockHex, 16);
-        // BSC: ~3s/block → 1000 blocks ≈ 50 minutes
-        const fromBlock = '0x' + Math.max(0, currentBlock - 1000).toString(16);
+    // Try progressively smaller block ranges if node returns limit error
+    const blockRanges = [200, 100, 50];
 
-        // 2. Get swap event logs for this pair
-        const logs = await rpcPost(chain, 'eth_getLogs', [{
-            address: pairAddress,
-            topics: [SWAP_EVENT_TOPIC],
-            fromBlock,
-            toBlock: 'latest',
-        }]) as any[];
+    for (const blockRange of blockRanges) {
+        try {
+            // 1. Get current block number
+            const blockHex = await rpcPost(chain, 'eth_blockNumber', []) as string;
+            const currentBlock = parseInt(blockHex, 16);
+            // BSC: ~3s/block → 200 blocks ≈ 10 minutes
+            const fromBlock = '0x' + Math.max(0, currentBlock - blockRange).toString(16);
 
-        if (!Array.isArray(logs) || logs.length === 0) {
-            console.info('[pair-tx] RPC returned 0 swap logs for', pairAddress);
+            // 2. Get swap event logs for this pair
+            const logs = await rpcPost(chain, 'eth_getLogs', [{
+                address: pairAddress,
+                topics: [SWAP_EVENT_TOPIC],
+                fromBlock,
+                toBlock: 'latest',
+            }]) as any[];
+
+            if (!Array.isArray(logs)) {
+                console.warn('[pair-tx] RPC returned non-array for getLogs, retrying with smaller range...');
+                continue;
+            }
+            if (logs.length === 0) {
+                console.info(`[pair-tx] RPC 0 logs in last ${blockRange} blocks for`, pairAddress.slice(0, 10));
+                // Don't retry — just no swaps in this range
+                return [];
+            }
+            console.info(`[pair-tx] ✅ RPC eth_getLogs: ${logs.length} Swap events in last ${blockRange} blocks`);
+
+            // 3. Get token ordering and price data in parallel
+            const [tokenOrder, pairInfo] = await Promise.all([
+                getPairTokenOrder(chain, pairAddress),
+                getPairPrice(chain, pairAddress),
+            ]);
+
+            if (!tokenOrder) return [];
+
+            // 4. Decode logs → PairTx (take last `limit` events, newest first)
+            return logs
+                .slice(-limit)
+                .reverse()
+                .map(log => decodeSwapLog(log, pairAddress, tokenAddress, tokenOrder.token0, pairInfo.priceUsd, pairInfo.quoteSymbol))
+                .filter(Boolean) as PairTx[];
+
+        } catch (e: any) {
+            const msg = (e?.message || '').toLowerCase();
+            if (msg.includes('limit') || msg.includes('range') || msg.includes('block range')) {
+                console.warn(`[pair-tx] RPC block range ${blockRange} too large, retrying smaller...`);
+                continue;
+            }
+            console.error('[pair-tx] RPC fallback error:', e);
             return [];
         }
-        console.info(`[pair-tx] ✅ RPC eth_getLogs returned ${logs.length} Swap events`);
-
-        // 3. Get token ordering and price data in parallel
-        const [tokenOrder, pairInfo] = await Promise.all([
-            getPairTokenOrder(chain, pairAddress),
-            getPairPrice(chain, pairAddress),
-        ]);
-
-        if (!tokenOrder) return [];
-
-        // 4. Decode logs → PairTx (take last `limit` events, newest first)
-        return logs
-            .slice(-limit)
-            .reverse()
-            .map(log => decodeSwapLog(log, pairAddress, tokenAddress, tokenOrder.token0, pairInfo.priceUsd, pairInfo.quoteSymbol))
-            .filter(Boolean) as PairTx[];
-    } catch (e) {
-        console.error('[pair-tx] RPC fallback error:', e);
-        return [];
     }
+    console.error('[pair-tx] RPC: all block ranges exceeded limits on all nodes');
+    return [];
 }
 
 /* ────────────────────────────────────────────────────────────────

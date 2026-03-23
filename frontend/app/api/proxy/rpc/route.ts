@@ -8,21 +8,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const RPC_NODES: Record<string, string[]> = {
-    '56': [  // BSC — PancakeSwap lives here
-        'https://bsc-dataseed1.binance.org',
-        'https://bsc-dataseed2.binance.org',
-        'https://bsc-dataseed3.binance.org',
-        'https://bsc.publicnode.com',
+    '56': [  // BSC — ordered by eth_getLogs permissiveness
+        'https://rpc.ankr.com/bsc',           // Ankr — best limits, no key needed
+        'https://bsc.meowrpc.com',             // MeowRPC — generous public BSC node
+        'https://bsc-pokt.nodies.app',         // Pocket Network
+        'https://bsc.publicnode.com',          // PublicNode
+        'https://bsc-dataseed3.binance.org',   // Binance — strict limits, last resort
+        'https://bsc-dataseed4.binance.org',
     ],
     '1': [  // Ethereum
-        'https://ethereum.publicnode.com',
         'https://rpc.ankr.com/eth',
+        'https://ethereum.publicnode.com',
     ],
     '137': [  // Polygon
-        'https://polygon.publicnode.com',
         'https://rpc.ankr.com/polygon',
+        'https://polygon.publicnode.com',
     ],
 };
+
 
 const ALLOWED_METHODS = new Set(['eth_getLogs', 'eth_blockNumber', 'eth_call']);
 
