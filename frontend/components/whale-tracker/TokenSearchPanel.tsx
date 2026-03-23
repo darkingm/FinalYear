@@ -16,9 +16,14 @@ const CHAIN_FILTERS: { value: SupportedChain | 'ALL'; label: string }[] = [
 interface Props {
     /** When a pair is selected to attach to a new wallet */
     onSelectForWallet?: (pair: TokenPair) => void;
+    /** When a pair row is clicked to view its live TX feed */
+    onSelectRow?: (pair: TokenPair) => void;
+    /** Currently selected pair address (for highlight) */
+    selectedPairAddress?: string;
     /** Compact mode for slide panel */
     compact?: boolean;
 }
+
 
 function formatK(n: number) {
     if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -26,7 +31,12 @@ function formatK(n: number) {
     return `$${n.toFixed(0)}`;
 }
 
-function PairRow({ pair, onSelect }: { pair: TokenPair; onSelect?: () => void }) {
+function PairRow({ pair, onSelect, onRowClick, isSelected }: {
+    pair: TokenPair;
+    onSelect?: () => void;
+    onRowClick?: () => void;
+    isSelected?: boolean;
+}) {
     const chain = CHAIN_LABELS[pair.chain];
     const price = parseFloat(pair.priceUsd);
     const priceUp = pair.priceChange24h >= 0;
@@ -39,7 +49,13 @@ function PairRow({ pair, onSelect }: { pair: TokenPair; onSelect?: () => void })
     const dexName = dexLabel[pair.dexId?.toLowerCase()] || pair.dexId;
 
     return (
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border hover:border-[#8247e5]/30 hover:bg-[#8247e5]/5 transition-all group">
+        <div
+            onClick={onRowClick}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all group cursor-pointer ${isSelected
+                    ? 'border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-500/30'
+                    : 'border-border hover:border-[#8247e5]/30 hover:bg-[#8247e5]/5'
+                }`}
+        >
             {/* Token info */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -83,7 +99,7 @@ function PairRow({ pair, onSelect }: { pair: TokenPair; onSelect?: () => void })
     );
 }
 
-export function TokenSearchPanel({ onSelectForWallet, compact = false }: Props) {
+export function TokenSearchPanel({ onSelectForWallet, onSelectRow, selectedPairAddress, compact = false }: Props) {
     const [query, setQuery] = useState('');
     const [chainFilter, setChainFilter] = useState<SupportedChain | 'ALL'>('ALL');
     const [pairs, setPairs] = useState<TokenPair[]>([]);
@@ -128,8 +144,8 @@ export function TokenSearchPanel({ onSelectForWallet, compact = false }: Props) 
                 {CHAIN_FILTERS.map((f) => (
                     <button key={f.value} onClick={() => setChainFilter(f.value)}
                         className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${chainFilter === f.value
-                                ? 'bg-[#8247e5]/20 border-[#8247e5]/50 text-[#8247e5]'
-                                : 'border-border text-muted-foreground hover:border-[#8247e5]/30'
+                            ? 'bg-[#8247e5]/20 border-[#8247e5]/50 text-[#8247e5]'
+                            : 'border-border text-muted-foreground hover:border-[#8247e5]/30'
                             }`}>
                         {f.label}
                     </button>
@@ -144,7 +160,9 @@ export function TokenSearchPanel({ onSelectForWallet, compact = false }: Props) 
                         <PairRow
                             key={p.pairAddress}
                             pair={p}
-                            onSelect={onSelectForWallet ? () => onSelectForWallet(p) : undefined}
+                            onRowClick={onSelectRow ? () => onSelectRow(p) : undefined}
+                            isSelected={selectedPairAddress === p.pairAddress}
+                            onSelect={onSelectForWallet ? () => { onSelectForWallet(p); onSelectRow?.(p); } : (onSelectRow ? () => onSelectRow(p) : undefined)}
                         />
                     ))}
                 </div>

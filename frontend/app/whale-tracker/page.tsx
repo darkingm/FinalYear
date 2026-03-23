@@ -185,6 +185,8 @@ export default function WhaleTrackerPage() {
                                 <TokenSearchPanel
                                     compact
                                     onSelectForWallet={handleSelectPair}
+                                    onSelectRow={handleSelectPair}
+                                    selectedPairAddress={selectedPair?.pairAddress}
                                 />
                             </div>
 
@@ -356,10 +358,10 @@ export default function WhaleTrackerPage() {
                                         return (
                                             <button key={f} onClick={() => setAlertFilter(f)}
                                                 className={`text-[9px] px-2 py-0.5 rounded-full border font-bold transition-all ${alertFilter === f
-                                                        ? f === 'SELL' ? 'bg-red-500/20 border-red-500/40 text-red-400'
-                                                            : f === 'BUY' ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                                                                : 'bg-violet-500/20 border-violet-500/40 text-violet-400'
-                                                        : 'border-white/10 text-white/25 hover:text-white/50'
+                                                    ? f === 'SELL' ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                                                        : f === 'BUY' ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                                                            : 'bg-violet-500/20 border-violet-500/40 text-violet-400'
+                                                    : 'border-white/10 text-white/25 hover:text-white/50'
                                                     }`}>
                                                 {f} ({count})
                                             </button>
@@ -375,8 +377,8 @@ export default function WhaleTrackerPage() {
                                         return (
                                             <div key={alert.id}
                                                 className={`rounded-lg border p-2 text-[10px] ${alert.read ? 'border-white/8 opacity-50'
-                                                        : isSell ? 'border-red-500/20 bg-red-500/5'
-                                                            : 'border-emerald-500/15 bg-emerald-500/5'
+                                                    : isSell ? 'border-red-500/20 bg-red-500/5'
+                                                        : 'border-emerald-500/15 bg-emerald-500/5'
                                                     }`}>
                                                 <div className="flex items-start gap-1.5">
                                                     <AlertTriangle className={`w-3 h-3 flex-shrink-0 mt-0.5 ${isSell ? 'text-red-400' : 'text-emerald-400'}`} />
