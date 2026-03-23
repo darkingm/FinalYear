@@ -174,7 +174,9 @@ export async function searchTokenPairs(query: string, chainFilter?: SupportedCha
                 chainId: p.chainId,
                 chain: DEXSCREENER_CHAIN_MAP[p.chainId] || 'BSC',
                 priceChange24h: p.priceChange?.h24 || 0,
+                imageUrl: p.info?.imageUrl ?? p.info?.header ?? undefined,
             }))
+
             .sort((a: TokenPair, b: TokenPair) => b.liquidity - a.liquidity);
     } catch (e) {
         console.error('[whale-api] searchTokenPairs:', e);

@@ -34,6 +34,7 @@ export interface TokenPair {
     chainId: string;         // dexscreener chain id (e.g. "bsc", "ethereum")
     chain: SupportedChain;
     priceChange24h: number;
+    imageUrl?: string;       // token logo from DexScreener info.imageUrl
 }
 
 export interface WhaleTx {

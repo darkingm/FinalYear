@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, ExternalLink, Plus, Check } from 'lucide-react';
+import { Search, Loader2, ExternalLink, Plus } from 'lucide-react';
 import { searchTokenPairs } from '@/lib/whale-api';
 import { useWhaleTrackerStore, CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { TokenPair, SupportedChain } from '@/store/whale-tracker-store';
+import { getTokenLogoUrl } from '@/lib/pair-tx-fetcher';
+
 
 const CHAIN_FILTERS: { value: SupportedChain | 'ALL'; label: string }[] = [
     { value: 'ALL', label: 'Tất cả' },
@@ -31,7 +33,28 @@ function formatK(n: number) {
     return `$${n.toFixed(0)}`;
 }
 
+function TokenLogo({ pair }: { pair: TokenPair }) {
+    const [err, setErr] = useState(false);
+    // Priority: DexScreener imageUrl → TrustWallet CDN → initials
+    const twUrl = pair.baseToken.address ? getTokenLogoUrl(pair.chain, pair.baseToken.address) : null;
+    const src = !err ? (pair.imageUrl || twUrl) : null;
+    const initials = pair.baseToken.symbol.slice(0, 2).toUpperCase();
+    if (!src) {
+        return (
+            <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500/30 to-blue-500/20 flex items-center justify-center text-[11px] font-black text-white/60 flex-shrink-0">
+                {initials}
+            </span>
+        );
+    }
+    return (
+        <img src={src} alt={pair.baseToken.symbol} width={36} height={36}
+            className="rounded-full flex-shrink-0 bg-white/5 border border-white/5"
+            onError={() => setErr(true)} />
+    );
+}
+
 function PairRow({ pair, onSelect, onRowClick, isSelected }: {
+
     pair: TokenPair;
     onSelect?: () => void;
     onRowClick?: () => void;
@@ -51,12 +74,14 @@ function PairRow({ pair, onSelect, onRowClick, isSelected }: {
     return (
         <div
             onClick={onRowClick}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all group cursor-pointer ${isSelected
-                    ? 'border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-500/30'
-                    : 'border-border hover:border-[#8247e5]/30 hover:bg-[#8247e5]/5'
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all group cursor-pointer ${isSelected
+                ? 'border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-500/30'
+                : 'border-border hover:border-[#8247e5]/30 hover:bg-[#8247e5]/5'
                 }`}
         >
-            {/* Token info */}
+            {/* Token logo */}
+            <TokenLogo pair={pair} />
+
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-bold text-sm text-foreground">
