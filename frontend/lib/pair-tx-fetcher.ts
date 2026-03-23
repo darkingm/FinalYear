@@ -11,7 +11,7 @@
  *   https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/{chain}/assets/{ADDR}/logo.png
  */
 
-import { ApiKeyRotator, CHAIN_CONFIG, type ExplorerChain } from './onchain-api-manager';
+import { CHAIN_CONFIG, type ExplorerChain } from './onchain-api-manager';
 import type { SupportedChain } from '@/store/whale-tracker-store';
 
 export type TxKind = 'BUY' | 'SELL' | 'TRANSFER';
@@ -33,19 +33,20 @@ export interface PairTx {
     source: 'subgraph' | 'explorer';
 }
 
-/* ────────────────────────────────────────────────────────────────
- * TheGraph PancakeSwap V2 subgraph (correct V2 schema)
- * ──────────────────────────────────────────────────────────────── */
+/* ── Use Next.js server-side proxies to bypass browser CORS ── */
+const SUBGRAPHPROXY = '/api/proxy/subgraph';
+const ETHERSCANPROXY = '/api/proxy/etherscan';
+
+/* Subgraph URLs per chain (server-side, no CORS issue via proxy) */
 const SUBGRAPHS: Record<SupportedChain, string[]> = {
     BSC: [
-        // PancakeSwap V2 (correct V2 format — uses `pair` not `pool`)
+        // PancakeSwap V2 on Goldsky (more reliable than hosted service)
+        'https://api.goldsky.com/api/public/project_clk3w4qlomh7a2ixuf4vc/subgraphs/exchange-v2-bsc/version/gn/gn',
+        // PancakeSwap V2 original hosted service
         'https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v2-bsc',
-        // Backup hosted services
-        'https://bsc.streamingfast.io/subgraphs/name/pancakeswap/exchange-v2',
     ],
     ETH: [
         'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2',
-        'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3',
     ],
     POLYGON: [
         'https://api.thegraph.com/subgraphs/name/sameepsi/quickswap06',
@@ -89,17 +90,24 @@ async function querySubgraph(chain: SupportedChain, body: string): Promise<any[]
     const endpoints = SUBGRAPHS[chain] || [];
     for (const url of endpoints) {
         try {
-            const res = await fetch(url, {
+            // Route through Next.js server proxy to bypass CORS
+            const proxyUrl = `${SUBGRAPHPROXY}?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body,
-                signal: AbortSignal.timeout(8000),
+                signal: AbortSignal.timeout(12_000),
             });
             const json = await res.json();
             if (json?.data?.swaps && Array.isArray(json.data.swaps)) {
                 return json.data.swaps;
             }
-        } catch { /* try next endpoint */ }
+            if (json?.errors) {
+                console.warn('[pair-tx] Subgraph error:', json.errors[0]?.message);
+            }
+        } catch (e) {
+            console.warn('[pair-tx] Subgraph endpoint failed:', url, e);
+        }
     }
     return null;
 }
@@ -193,15 +201,27 @@ async function fetchFromExplorer(
     chain: SupportedChain, tokenAddress: string, pairAddress: string, limit = 30
 ): Promise<PairTx[]> {
     const pairLower = pairAddress.toLowerCase();
+    const chainId = CHAIN_CONFIG[CHAIN_MAP[chain]].chainId;
     try {
-        // Etherscan V2 API: chainid is set automatically in ApiKeyRotator.fetch
-        const data = await ApiKeyRotator.fetch(CHAIN_MAP[chain], {
-            module: 'account', action: 'tokentx',
+        // Route through Next.js server proxy (API key injected server-side, no CORS)
+        const params = new URLSearchParams({
+            chainid: chainId,
+            module: 'account',
+            action: 'tokentx',
             contractaddress: tokenAddress,
             address: pairAddress,
-            page: '1', offset: String(limit), sort: 'desc',
+            page: '1',
+            offset: String(limit),
+            sort: 'desc',
         });
-        if (data.status !== '1' || !Array.isArray(data.result)) return [];
+        const res = await fetch(`${ETHERSCANPROXY}?${params}`, { signal: AbortSignal.timeout(12_000) });
+        const data = await res.json();
+
+        if (data.status !== '1' || !Array.isArray(data.result)) {
+            console.warn('[pair-tx] Etherscan proxy returned:', data.message || JSON.stringify(data).slice(0, 100));
+            return [];
+        }
+        console.info(`[pair-tx] Etherscan returned ${data.result.length} txs for pair ${pairAddress}`);
 
         const [pairInfo, nativePrice] = await Promise.all([
             getPairPrice(chain, pairAddress),
@@ -228,10 +248,12 @@ async function fetchFromExplorer(
             };
         }).filter(Boolean) as PairTx[];
     } catch (e) {
-        console.error('[pair-tx] explorer error:', e);
+        console.error('[pair-tx] explorer proxy error:', e);
         return [];
     }
 }
+
+
 
 /* ────────────────────────────────────────────────────────────────
  * Main export
