@@ -1,14 +1,14 @@
 /**
- * onchain-api-manager.ts — Etherscan API V2 (unified multichain)
+ * onchain-api-manager.ts — Chain configuration & TX classification
  *
- * V2: ONE key, ONE endpoint, ALL chains via chainid param.
- * Base URL: https://api.etherscan.io/v2/api?chainid={chainId}&apikey=KEY
- * Docs: https://docs.etherscan.io/v2-migration
+ * Provides chain metadata (chainId, native symbol, block explorer URL)
+ * and DEX router classification for buy/sell detection.
+ *
+ * NOTE: All Etherscan API calls now route through /api/proxy/etherscan
+ *       which manages API keys server-side. No keys in this module.
  */
 
 export type ExplorerChain = 'BSC' | 'ETH' | 'POLYGON';
-
-const V2_BASE = 'https://api.etherscan.io/v2/api';
 
 export const CHAIN_CONFIG: Record<ExplorerChain, {
     chainId: string;
@@ -23,22 +23,8 @@ export const CHAIN_CONFIG: Record<ExplorerChain, {
 
 // Backward-compat alias
 export const EXPLORER_CONFIG = Object.fromEntries(
-    Object.entries(CHAIN_CONFIG).map(([k, v]) => [k, { ...v, baseUrl: V2_BASE }])
+    Object.entries(CHAIN_CONFIG).map(([k, v]) => [k, { ...v, baseUrl: 'https://api.etherscan.io/v2/api' }])
 ) as Record<ExplorerChain, typeof CHAIN_CONFIG[ExplorerChain] & { baseUrl: string }>;
-
-/* ── Key pool ── */
-function parseKeys(): string[] {
-    const multi = process.env.NEXT_PUBLIC_ETHERSCAN_KEYS ?? '';
-    const single = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY ?? '';
-    return (multi || single).split(',').map(k => k.trim()).filter(Boolean);
-}
-
-const KEY_POOL: string[] = parseKeys();
-let pointer = 0;
-const rateLimitedUntil: Record<string, number> = {};
-
-function isRateLimited(key: string) { return (rateLimitedUntil[key] || 0) > Date.now(); }
-function markRateLimited(key: string) { rateLimitedUntil[key] = Date.now() + 30_000; }
 
 /* ── DEX router addresses for transaction classification ── */
 const DEX_ROUTERS: Record<string, string> = {
@@ -70,38 +56,3 @@ export function classifyTxType(to: string, from: string, walletAddress: string):
     }
     return { type: 'TRANSFER' };
 }
-
-/* ── ApiKeyRotator — calls Etherscan V2 endpoint directly ── */
-export const ApiKeyRotator = {
-    getKey(_chain?: ExplorerChain): string {
-        const available = KEY_POOL.filter(k => !isRateLimited(k));
-        if (available.length === 0) return KEY_POOL[0] || '';
-        const key = available[pointer % available.length];
-        pointer = (pointer + 1) % available.length;
-        return key;
-    },
-
-    /**
-     * Calls Etherscan V2: https://api.etherscan.io/v2/api?chainid=56&module=...&apikey=KEY
-     * NOTE: From frontend code, use /api/proxy/etherscan instead to avoid CORS.
-     *       This method is for server-side / backend use only.
-     */
-    async fetch(chain: ExplorerChain, params: Record<string, string>): Promise<any> {
-        const key = this.getKey(chain);
-        const cfg = CHAIN_CONFIG[chain];
-        const query = new URLSearchParams({
-            chainid: cfg.chainId,
-            ...params,
-            ...(key ? { apikey: key } : {}),
-        });
-        const url = `${V2_BASE}?${query.toString()}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-        const data = await res.json();
-
-        // Handle rate limit
-        if (typeof data.result === 'string' && data.result.toLowerCase().includes('rate limit')) {
-            markRateLimited(key);
-        }
-        return data;
-    },
-};

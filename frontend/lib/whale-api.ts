@@ -1,9 +1,11 @@
 /**
- * whale-api.ts v3 — On-Chain Tracker API helpers
+ * whale-api.ts v4 — On-Chain Tracker API helpers
  *
- * Changes vs v2:
- * - Uses `ApiKeyRotator` for multi-key round-robin per chain
- * - Correct per-chain explorer endpoints (BSCScan / Etherscan / Polygonscan)
+ * v4 changes:
+ * - Routes ALL Etherscan calls through /api/proxy/etherscan (API keys stay server-side)
+ * - Removed direct ApiKeyRotator.fetch() usage from browser
+ *
+ * Features:
  * - `fetchTokenInfo()` — GeckoTerminal + DexScreener token fundamentals
  * - `recordTx()` — persists BUY/SELL to backend DB
  * - `getWalletStats()` — reads persistent counters from backend
@@ -12,12 +14,22 @@
 
 import type { SupportedChain, WhaleTx, PoolInfo, TxType, TxDirection, TokenPair } from '@/store/whale-tracker-store';
 import { classifyWhaleSize, CHAIN_LABELS, DEXSCREENER_CHAIN_MAP } from '@/store/whale-tracker-store';
-import { ApiKeyRotator, EXPLORER_CONFIG, type ExplorerChain, classifyTxType } from './onchain-api-manager';
+import { EXPLORER_CONFIG, CHAIN_CONFIG, type ExplorerChain, classifyTxType } from './onchain-api-manager';
 
 /* ── Mapped types ── */
 const CHAIN_TO_EXPLORER: Record<SupportedChain, ExplorerChain> = {
     BSC: 'BSC', ETH: 'ETH', POLYGON: 'POLYGON',
 };
+
+/* ── Etherscan proxy helper (API keys stay server-side) ── */
+const ETHERSCAN_PROXY = '/api/proxy/etherscan';
+
+async function fetchViaProxy(chain: ExplorerChain, params: Record<string, string>): Promise<any> {
+    const chainId = CHAIN_CONFIG[chain].chainId;
+    const query = new URLSearchParams({ chainid: chainId, ...params });
+    const res = await fetch(`${ETHERSCAN_PROXY}?${query}`, { signal: AbortSignal.timeout(12_000) });
+    return res.json();
+}
 
 /* ── Native price cache (60s TTL) ── */
 const priceCache: Record<string, { price: number; at: number }> = {};
@@ -82,7 +94,7 @@ export async function fetchWalletTxs(address: string, chain: SupportedChain, lim
     const nativePrice = await getNativePrice(chain);
     const explorer = CHAIN_TO_EXPLORER[chain];
     try {
-        const data = await ApiKeyRotator.fetch(explorer, {
+        const data = await fetchViaProxy(explorer, {
             module: 'account', action: 'txlist',
             address, startblock: '0', endblock: '99999999',
             page: '1', offset: String(limit), sort: 'desc',
@@ -100,7 +112,7 @@ export async function fetchTokenTransfers(address: string, chain: SupportedChain
     const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
     const explorer = CHAIN_TO_EXPLORER[chain];
     try {
-        const data = await ApiKeyRotator.fetch(explorer, {
+        const data = await fetchViaProxy(explorer, {
             module: 'account', action: 'tokentx',
             address, page: '1', offset: String(limit), sort: 'desc',
         });
@@ -119,7 +131,7 @@ export async function fetchWalletTxsByToken(
     const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
     const explorer = CHAIN_TO_EXPLORER[chain];
     try {
-        const data = await ApiKeyRotator.fetch(explorer, {
+        const data = await fetchViaProxy(explorer, {
             module: 'account', action: 'tokentx',
             address, contractaddress: tokenAddress,
             page: '1', offset: String(limit), sort: 'desc',
@@ -288,7 +300,7 @@ async function fetchBurnedAmount(
     let burned = 0;
     for (const addr of BURN_ADDRESSES) {
         try {
-            const data = await ApiKeyRotator.fetch(explorerChain, {
+            const data = await fetchViaProxy(explorerChain, {
                 module: 'account', action: 'tokenbalance',
                 contractaddress: tokenAddress,
                 address: addr,

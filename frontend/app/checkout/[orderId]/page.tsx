@@ -719,18 +719,17 @@ export default function CheckoutPage() {
                           <p className="text-[10px] text-emerald-400/50">Kết nối MetaMask trước để nhận ETH test</p>
                         )}
                         <p className="text-[10px] text-emerald-400/40 pt-0.5">
-                          Hoặc import private key Hardhat #0 (có 10,000 ETH):
+                          Hoặc import private key Hardhat Account #0 (có 10,000 ETH):
                         </p>
-                        <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
-                          <code className="text-[9px] text-emerald-300/60 flex-1 break-all">0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80</code>
-                          <button
-                            onClick={() => copyText('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80', 'private key')}
-                            className="flex-shrink-0 p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-md transition-colors"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="p-2 bg-black/20 rounded-lg">
+                          <p className="text-[10px] text-emerald-300/60">
+                            Xem tại{' '}
+                            <a href="https://hardhat.org/hardhat-network/docs/reference#initial-state" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline hover:text-emerald-300">
+                              Hardhat Docs → Account #0
+                            </a>
+                          </p>
                         </div>
-                        <p className="text-[10px] text-emerald-400/50">Chỉ dùng private key này để test!</p>
+                        <p className="text-[10px] text-emerald-400/50">⚠ Không bao giờ hiển thị private key trên giao diện web!</p>
                       </div>
                     )}
                   </div>

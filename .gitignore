@@ -39,6 +39,7 @@ scripts/vps-diag*.txt
 scripts/vps-deploy*.txt
 scripts/vps-fix*.txt
 scripts/vps-restart*.txt
+scripts/*.log
 
 # ── OS / Editor ───────────────────────────────────────────────
 .DS_Store

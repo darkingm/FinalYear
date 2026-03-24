@@ -1,0 +1,56 @@
+---
+name: web3market-decisions
+description: Use when making architectural decisions or modifying core infrastructure in Web3Market — check existing ADRs to maintain consistency, and add new ADRs when making significant decisions.
+---
+
+# Web3Market — Architecture Decision Records
+
+> **Agent instruction**: Before proposing architectural changes, check if an existing ADR covers the same concern. If making a new significant decision, append a new ADR at the bottom of this file.
+
+## ADR-001: Two Separate PostgreSQL Databases
+- **Context**: Payment data requires isolation from marketplace data for security and cleaner separation
+- **Decision**: `marketplace_db` (users, orders, products, disputes) + `payment_db` (crypto payments, blockchain logs)
+- **Consequence**: `payment-service` must connect to BOTH databases (`DATABASE_URL` → payment_db, `MAIN_DATABASE_URL` → marketplace_db). Migrations in `init_database.sql/migrations/` apply to marketplace_db only.
+- **Status**: Active
+
+## ADR-002: Internal Service Key (not JWT forwarding)
+- **Context**: Forwarding user JWT between services is a security risk and causes auth failures when tokens expire mid-request
+- **Decision**: Use `X-Internal-Service-Key` header for service-to-service calls
+- **Consequence**: `INTERNAL_SERVICE_KEY` env var must match in both main-service and payment-service. The `/release` endpoint uses `authenticateOrInternalKey` middleware.
+- **Status**: Active
+
+## ADR-003: OrderId Encoding — keccak256(UTF-8 bytes)
+- **Context**: Smart contract uses `bytes32` orderId. Need consistent encoding across backend (ethers) and frontend (viem).
+- **Decision**: Always encode as `keccak256(toUTF8Bytes(internal_order_id))`. Never use hex-encoding.
+- **Consequence**: Backend: `ethers.keccak256(ethers.toUtf8Bytes(id))`. Frontend: `keccak256(toBytes(id))` (NOT `stringToHex`). Mismatch causes silent contract failures.
+- **Status**: Active
+
+## ADR-004: Hardhat Node on VPS for Testing
+- **Context**: Need a persistent blockchain for staging/demo without using real testnet (faucet hassles, slow confirmation)
+- **Decision**: Run Hardhat node in Docker on VPS (chain ID 31337), deploy contracts there
+- **Consequence**: Use known Hardhat test accounts (not real keys). `ESCROW_CONTRACT_LOCALHOST` env var points to deployed address. Hardhat node must be running before payment-service starts.
+- **Status**: Active
+
+## ADR-005: Migration System (Never Edit schema.sql)
+- **Context**: `schema.sql` is only used by `docker-entrypoint-initdb.d` for fresh installs. Changing it won't affect existing databases with data volumes.
+- **Decision**: All schema changes go through versioned migration files in `init_database.sql/migrations/`. The `db-migrator` container tracks applied migrations in `schema_migrations` table.
+- **Consequence**: All migrations must be idempotent (`IF NOT EXISTS`, `DO $$ ... EXCEPTION WHEN ...`). Zero-padded 3-digit prefix. End with `SELECT 'Migration NNN applied: ...' AS result;`.
+- **Status**: Active
+
+## ADR-006: Docker Deploy Pipeline (Local build → Docker Hub → VPS pull)
+- **Context**: VPS has limited resources for building. Need reproducible deploys.
+- **Decision**: Build images locally, push to Docker Hub (`kiendzpro/`), VPS pulls and restarts via `scripts/deploy.sh`
+- **Consequence**: Must build on same architecture or use multi-platform builds. Deploy order: postgres → db-migrator → main-api + payment-api → frontend.
+- **Status**: Active
+
+## ADR-007: Vietnamese UI, English Code
+- **Context**: Target users are Vietnamese. Codebase must be maintainable internationally.
+- **Decision**: All UI text in Vietnamese, code/variables/API fields in English, toast messages in Vietnamese, console logs in English
+- **Consequence**: Use i18n system for all user-facing strings. Vietnamese comments OK for complex business logic only.
+- **Status**: Active
+
+## ADR-008: Whale Tracker Uses Client-Side Onchain Queries
+- **Context**: Whale tracker needs real-time DEX swap data from BSC/ETH/Polygon
+- **Decision**: Frontend queries subgraphs + Etherscan + RPC directly (via Next.js API proxy routes to avoid CORS)
+- **Consequence**: Heavy logic in frontend (`pair-tx-fetcher.ts` 625 lines). API keys exposed via `NEXT_PUBLIC_*` env vars. Long-term should move to dedicated backend service.
+- **Status**: Active (tech debt acknowledged)
