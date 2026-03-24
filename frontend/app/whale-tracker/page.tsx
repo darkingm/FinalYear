@@ -39,7 +39,7 @@ export default function WhaleTrackerPage() {
     return (
         <>
             <Header />
-            <div className="min-h-screen bg-[#060612] text-white flex flex-col">
+            <div className="min-h-screen bg-background text-foreground flex flex-col">
 
                 {/* ── Top bar ─────────────────────────────── */}
                 <div className="border-b border-white/8 bg-black/20 backdrop-blur-sm sticky top-0 z-20">

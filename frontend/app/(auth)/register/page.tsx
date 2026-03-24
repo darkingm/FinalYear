@@ -246,7 +246,7 @@ export default function RegisterPage() {
     }`;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#06060e]">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* ── Header ── */}
       <Header />
 

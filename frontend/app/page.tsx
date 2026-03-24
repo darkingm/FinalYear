@@ -29,6 +29,7 @@ import { CoinPriceStrip } from '@/components/home/CoinPriceStrip';
 import {
   Laptop, Shirt, Home as HomeIcon, Dumbbell, BookOpen, Gamepad2, Car, Diamond, Sparkles,
 } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 
 /* ─── Types ──────────────────────────────────────── */
@@ -363,6 +364,22 @@ export default function HomePage() {
     connect(TOP_SYMBOLS);
     // Don't disconnect so CoinPriceStrip can keep polling
   }, [connect]);
+
+  // Show welcome toast after Google/social login redirect
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  useEffect(() => {
+    if (searchParams?.get('welcome') === '1') {
+      toast.success('🎉 Chào mừng bạn trở lại!', {
+        description: 'Bạn đã đăng nhập thành công vào KienAI Marketplace.',
+        duration: 5000,
+      });
+      // Clean up URL without reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete('welcome');
+      router.replace(url.pathname + url.search, { scroll: false });
+    }
+  }, [searchParams]);
 
 
 

@@ -70,7 +70,7 @@ function LeftPanel() {
   ];
 
   return (
-    <div className="hidden lg:flex w-[58%] relative overflow-hidden flex-col bg-black/40 backdrop-blur-[2px]">
+    <div className="hidden lg:flex w-[58%] relative overflow-hidden flex-col bg-black/40 dark:bg-black/40 backdrop-blur-[2px]">
       {/* Grid overlay */}
       <div className="absolute inset-0" style={{
         backgroundImage: 'linear-gradient(rgba(240,185,11,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(240,185,11,0.04) 1px, transparent 1px)',
@@ -286,18 +286,18 @@ export default function LoginPage() {
 
   const handleSocialSignIn = async (provider: 'google' | 'facebook') => {
     setSocialLoading(provider);
-    try { await signIn(provider, { callbackUrl: '/' }); }
+    try { await signIn(provider, { callbackUrl: '/?welcome=1' }); }
     catch { toast.error('Đăng nhập thất bại. Vui lòng thử lại'); setSocialLoading(null); }
   };
 
   const inputCls = (err: boolean) =>
-    `w-full pl-10 pr-4 py-3 bg-white/5 border rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:ring-2 transition-all text-sm ${err
+    `w-full pl-10 pr-4 py-3 bg-secondary border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all text-sm ${err
       ? 'border-red-500/50 focus:ring-red-500/20'
-      : 'border-white/10 focus:border-[#f0b90b]/60 focus:ring-[#f0b90b]/10'
+      : 'border-border focus:border-[#f0b90b]/60 focus:ring-[#f0b90b]/10'
     }`;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#06060e]">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* ── Header ── */}
       <Header />
 
@@ -329,8 +329,8 @@ export default function LoginPage() {
 
             {/* Header */}
             <div className="mb-8">
-              <h2 className="text-3xl font-black text-white mb-2">Đăng nhập</h2>
-              <p className="text-white/40 text-sm">Chào mừng trở lại! Kết nối ví để bắt đầu giao dịch.</p>
+              <h2 className="text-3xl font-black text-foreground mb-2">Đăng nhập</h2>
+              <p className="text-muted-foreground text-sm">Chào mừng trở lại! Kết nối ví để bắt đầu giao dịch.</p>
             </div>
 
             {/* Error banner */}
@@ -352,7 +352,7 @@ export default function LoginPage() {
               <button
                 onClick={() => handleSocialSignIn('google')}
                 disabled={!!socialLoading}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white hover:bg-white/10 hover:border-white/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-secondary border border-border rounded-xl text-foreground hover:bg-accent hover:border-border hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm disabled:opacity-60"
               >
                 {socialLoading === 'google' ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -388,14 +388,14 @@ export default function LoginPage() {
             {/* Divider */}
             <div className="flex items-center gap-3 mb-6">
               <div className="flex-1 h-px bg-white/8" />
-              <span className="text-[11px] text-white/30 uppercase tracking-widest font-semibold">hoặc dùng email</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">hoặc dùng email</span>
               <div className="flex-1 h-px bg-white/8" />
             </div>
 
             {/* Credentials Form */}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-white/70 mb-1.5">Email hoặc Username</label>
+                <label className="block text-sm font-semibold text-foreground/70 mb-1.5">Email hoặc Username</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                   <input
@@ -416,7 +416,7 @@ export default function LoginPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-semibold text-white/70">Mật khẩu</label>
+                  <label className="text-sm font-semibold text-foreground/70">Mật khẩu</label>
                   <Link href="/forgot-password" className="text-xs text-[#f0b90b] hover:text-[#f0b90b]/80 transition-colors">
                     Quên mật khẩu?
                   </Link>
@@ -476,11 +476,11 @@ export default function LoginPage() {
             </p>
 
             {/* Security note */}
-            <div className="mt-8 flex items-center justify-center gap-4 text-[11px] text-white/20">
+            <div className="mt-8 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1"><Shield className="w-3 h-3 text-[#f0b90b]/50" /> SSL Secured</span>
-              <span className="w-px h-3 bg-white/10" />
+              <span className="w-px h-3 bg-border" />
               <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-[#f0b90b]/50" /> Web3 Native</span>
-              <span className="w-px h-3 bg-white/10" />
+              <span className="w-px h-3 bg-border" />
               <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-[#f0b90b]/50" /> Escrow Protected</span>
             </div>
           </motion.div>
