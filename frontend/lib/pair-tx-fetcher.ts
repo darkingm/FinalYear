@@ -356,7 +356,8 @@ function decodeV2Log(
 
     const tokenAmount = rawAmt / Math.pow(10, decimals);
     const amountUsd = tokenAmount * priceUsd;
-    const maker = '0x' + (log.topics[2] as string).slice(26);
+    const makerTopic = log.topics?.[2] || log.topics?.[1] || '';
+    const maker = makerTopic.length >= 42 ? ('0x' + makerTopic.slice(26)) : '';
 
     return {
         hash: log.transactionHash || '', blockNumber: parseInt(log.blockNumber, 16).toString(),
@@ -394,7 +395,8 @@ function decodeV3Log(
     if (rawAmt <= 0n) return null;
 
     // V3 has sender in topics[1], recipient in topics[2]
-    const maker = '0x' + (log.topics[2] as string).slice(26);
+    const makerTopic = log.topics?.[2] || log.topics?.[1] || '';
+    const maker = makerTopic.length >= 42 ? ('0x' + makerTopic.slice(26)) : '';
     const tokenAmount = parseFloat(rawAmt.toString()) / Math.pow(10, decimals);
     const amountUsd = tokenAmount * priceUsd;
 
@@ -617,6 +619,6 @@ export function fmtToken(n: number): string {
 }
 
 export function fmtAddr(a: string): string {
-    if (!a || a.length < 10) return a;
-    return a.slice(-6).toUpperCase();
+    if (!a || a.length < 10) return a || '—';
+    return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
