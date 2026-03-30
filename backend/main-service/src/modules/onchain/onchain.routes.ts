@@ -216,4 +216,129 @@ router.get('/wallet/:address/multi-stats', async (req: Request, res: Response) =
     }
 });
 
+/* ─────────────────────────────────────────────────────────────────
+ * POST /api/onchain/pair/record-batch
+ * Body: { txs: Array<{ chain, pairAddress, txHash, blockNumber,
+ *   txType, makerAddress, tokenAmount, quoteAmount, amountUsd,
+ *   priceUsd, tokenSymbol, quoteSymbol, dexId, txTimestamp }> }
+ * Bulk-inserts decoded swap events (deduped by tx_hash+pair+maker)
+ * ──────────────────────────────────────────────────────────────── */
+router.post('/pair/record-batch', async (req: Request, res: Response) => {
+    const { txs } = req.body;
+    if (!Array.isArray(txs) || txs.length === 0) {
+        return res.status(400).json({ error: 'txs array required' });
+    }
+
+    let inserted = 0;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        for (const tx of txs.slice(0, 200)) {
+            const result = await client.query(
+                `INSERT INTO onchain_pair_txs
+                    (chain, pair_address, tx_hash, block_number, tx_type,
+                     maker_address, token_amount, quote_amount, amount_usd,
+                     price_usd, token_symbol, quote_symbol, dex_id, tx_timestamp)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+                         COALESCE(to_timestamp($14::double precision / 1000), NOW()))
+                 ON CONFLICT (tx_hash, pair_address, maker_address) DO NOTHING
+                 RETURNING id`,
+                [
+                    (tx.chain || 'BSC').toUpperCase(),
+                    (tx.pairAddress || '').toLowerCase(),
+                    tx.txHash || tx.hash || '',
+                    tx.blockNumber || 0,
+                    (tx.txType || tx.kind || 'BUY').toUpperCase(),
+                    (tx.makerAddress || '').toLowerCase(),
+                    tx.tokenAmount || 0,
+                    tx.quoteAmount || 0,
+                    tx.amountUsd || 0,
+                    tx.priceUsd || 0,
+                    tx.tokenSymbol || '',
+                    tx.quoteSymbol || '',
+                    tx.dexId || '',
+                    tx.txTimestamp || tx.timestamp || Date.now(),
+                ]
+            );
+            if (result.rowCount && result.rowCount > 0) inserted++;
+        }
+        await client.query('COMMIT');
+        res.json({ ok: true, inserted, total: txs.length });
+    } catch (err: any) {
+        await client.query('ROLLBACK');
+        logger.error('[onchain] pair record-batch error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
+/* ─────────────────────────────────────────────────────────────────
+ * GET /api/onchain/pair/:pairAddress/txs
+ *   ?chain=BSC&limit=100&type=BUY
+ * Returns recent swap events for a pair (newest first)
+ * ──────────────────────────────────────────────────────────────── */
+router.get('/pair/:pairAddress/txs', async (req: Request, res: Response) => {
+    const pair  = req.params.pairAddress.toLowerCase();
+    const chain = String(req.query.chain || 'BSC').toUpperCase();
+    const limit = Math.min(Number(req.query.limit || 100), 500);
+    const type  = req.query.type ? String(req.query.type).toUpperCase() : null;
+
+    try {
+        let sql = `
+            SELECT tx_hash, chain, pair_address, block_number, tx_type,
+                   maker_address, token_amount, quote_amount, amount_usd,
+                   price_usd, token_symbol, quote_symbol, dex_id, tx_timestamp
+            FROM onchain_pair_txs
+            WHERE pair_address = $1 AND chain = $2`;
+        const params: any[] = [pair, chain];
+
+        if (type && ['BUY', 'SELL'].includes(type)) {
+            sql += ` AND tx_type = $${params.length + 1}`;
+            params.push(type);
+        }
+        sql += ` ORDER BY tx_timestamp DESC NULLS LAST LIMIT $${params.length + 1}`;
+        params.push(limit);
+
+        const result = await pool.query(sql, params);
+        res.json(result.rows);
+    } catch (err: any) {
+        logger.error('[onchain] pair txs error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/* ─────────────────────────────────────────────────────────────────
+ * GET /api/onchain/pair/:pairAddress/top-traders
+ *   ?chain=BSC&limit=50
+ * Returns aggregated trader leaderboard for a pair
+ * ──────────────────────────────────────────────────────────────── */
+router.get('/pair/:pairAddress/top-traders', async (req: Request, res: Response) => {
+    const pair  = req.params.pairAddress.toLowerCase();
+    const chain = String(req.query.chain || 'BSC').toUpperCase();
+    const limit = Math.min(Number(req.query.limit || 50), 200);
+
+    try {
+        const result = await pool.query(
+            `SELECT
+                maker_address,
+                COUNT(*) FILTER (WHERE tx_type = 'BUY')  AS buy_count,
+                COUNT(*) FILTER (WHERE tx_type = 'SELL') AS sell_count,
+                COUNT(*)                                  AS tx_count,
+                COALESCE(SUM(amount_usd), 0)              AS total_volume_usd,
+                MAX(tx_timestamp)                         AS last_active
+             FROM onchain_pair_txs
+             WHERE pair_address = $1 AND chain = $2
+             GROUP BY maker_address
+             ORDER BY total_volume_usd DESC
+             LIMIT $3`,
+            [pair, chain, limit]
+        );
+        res.json(result.rows);
+    } catch (err: any) {
+        logger.error('[onchain] top-traders error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;

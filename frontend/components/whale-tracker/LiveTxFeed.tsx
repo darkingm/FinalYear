@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, ExternalLink, Wifi, WifiOff, ChevronDown, Copy, Check } from 'lucide-react';
 import {
-    fetchPairTxs, fetchPairStats, mergeTxs,
+    fetchPairTxs, fetchPairStats, mergeTxs, recordTxsBatch, fetchTopTraders,
     CHAIN_EXPLORERS, fmtTxAge, fmtUsd, fmtToken, fmtAddr, getTokenLogoUrl,
-    type PairTx, type PairStats,
+    type PairTx, type PairStats, type TopTrader,
 } from '@/lib/pair-tx-fetcher';
 import type { SupportedChain } from '@/store/whale-tracker-store';
 
@@ -109,6 +109,8 @@ export function LiveTxFeed({ chain, tokenAddress, pairAddress, tokenSymbol, quot
             if (incoming.length > 0) {
                 const merged = initial ? incoming : mergeTxs(txsRef.current, incoming, 500);
                 setTxs(merged);
+                // Persist to backend DB (fire-and-forget)
+                recordTxsBatch(chain, incoming);
                 if (!initial) {
                     const hs = new Set(incoming.map(t => t.hash));
                     setNewHashes(hs);

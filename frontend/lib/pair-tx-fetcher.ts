@@ -622,3 +622,59 @@ export function fmtAddr(a: string): string {
     if (!a || a.length < 10) return a || '—';
     return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
+
+/* ────────────────────────────────────────────────────────────────
+ * Backend integration — persist TXs + fetch Top Traders from DB
+ * ──────────────────────────────────────────────────────────────── */
+
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+/** Fire-and-forget: persist decoded TXs to backend DB (deduped) */
+export function recordTxsBatch(chain: string, txs: PairTx[]) {
+    if (!txs.length) return;
+    const payload = txs.map(tx => ({
+        chain,
+        pairAddress: tx.pairAddress,
+        txHash: tx.hash,
+        blockNumber: Number(tx.blockNumber),
+        txType: tx.kind,
+        makerAddress: tx.makerAddress,
+        tokenAmount: tx.tokenAmount,
+        quoteAmount: tx.quoteAmount,
+        amountUsd: tx.amountUsd,
+        priceUsd: tx.priceUsd,
+        tokenSymbol: tx.tokenSymbol,
+        quoteSymbol: tx.quoteSymbol,
+        dexId: tx.dexId,
+        txTimestamp: tx.timestamp,
+    }));
+    // Non-blocking — don't await, don't fail the UI
+    fetch(`${BACKEND}/api/onchain/pair/record-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txs: payload }),
+    }).catch(() => {}); // silently ignore errors
+}
+
+export interface TopTrader {
+    maker_address: string;
+    buy_count: number;
+    sell_count: number;
+    tx_count: number;
+    total_volume_usd: number;
+    last_active: string;
+}
+
+/** Fetch aggregated top traders for a pair from backend DB */
+export async function fetchTopTraders(
+    chain: string, pairAddress: string, limit = 50
+): Promise<TopTrader[]> {
+    try {
+        const res = await fetch(
+            `${BACKEND}/api/onchain/pair/${pairAddress.toLowerCase()}/top-traders?chain=${chain}&limit=${limit}`
+        );
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    } catch { return []; }
+}
