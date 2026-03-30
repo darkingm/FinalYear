@@ -5,6 +5,24 @@ description: Use when deploying Web3Market to VPS (103.20.96.79), building Docke
 
 # Web3Market — Deploy Pipeline
 
+## ⛔ CRITICAL RULE: NEVER BUILD IMAGES ON VPS
+
+**NEVER run `docker build` on the VPS (103.20.96.79).** The VPS has limited resources and building images WILL crash it.
+
+**How it works:**
+1. Push code to GitHub (`git push origin main`)
+2. **GitHub Actions CI/CD** automatically builds Docker images and pushes to Docker Hub (`kiendzpro/*`)
+3. On VPS: only `docker pull` + restart containers
+
+```bash
+# ✅ CORRECT: Pull pre-built images on VPS
+docker pull kiendzpro/marketplace-frontend:latest
+docker compose -f docker-compose.prod.yml --env-file .env up -d frontend
+
+# ❌ WRONG: NEVER do this on VPS
+docker build -t ... -f frontend/Dockerfile frontend  # WILL CRASH VPS!
+```
+
 ## Quick Reference
 
 ```bash
