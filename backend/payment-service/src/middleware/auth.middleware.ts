@@ -23,8 +23,26 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
     req.user = { user_id: decoded.user_id, email: decoded.email, role: decoded.role };
     next();
-  } catch (error) {
-    next(new AppError('Invalid or expired token', 401));
+  } catch (error: any) {
+    // Diagnostic logging (redacted for security)
+    if (error?.name === 'JsonWebTokenError') {
+      console.error('[auth] JWT verify failed:', {
+        secret_len: process.env.JWT_SECRET?.length ?? 0,
+        secret_prefix: (process.env.JWT_SECRET || '').slice(0, 4) + '...',
+        error: error.message,
+        token_preview: (req.headers.authorization || '').slice(7, 20) + '...',
+      });
+    }
+    // Provide specific error message for debugging
+    if (error?.name === 'TokenExpiredError') {
+      next(new AppError('Token expired — please re-login', 401));
+    } else if (error?.name === 'JsonWebTokenError') {
+      next(new AppError('Invalid token signature', 401));
+    } else if (error instanceof AppError) {
+      next(error);
+    } else {
+      next(new AppError('Authentication failed', 401));
+    }
   }
 }
 

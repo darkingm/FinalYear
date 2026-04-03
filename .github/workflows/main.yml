@@ -15,11 +15,47 @@ env:
 
 jobs:
   # ============================================================
-  # JOB 1 — Type-check & test
+  # JOB 0 — Detect which services changed
+  # ============================================================
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      main-api: ${{ steps.filter.outputs.main-api }}
+      payment-api: ${{ steps.filter.outputs.payment-api }}
+      ai-service: ${{ steps.filter.outputs.ai-service }}
+      db-migrator: ${{ steps.filter.outputs.db-migrator }}
+      tokenization: ${{ steps.filter.outputs.tokenization }}
+      any-service: ${{ steps.filter.outputs.frontend == 'true' || steps.filter.outputs.main-api == 'true' || steps.filter.outputs.payment-api == 'true' || steps.filter.outputs.ai-service == 'true' || steps.filter.outputs.db-migrator == 'true' || steps.filter.outputs.tokenization == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            main-api:
+              - 'backend/main-service/**'
+            payment-api:
+              - 'backend/payment-service/**'
+            ai-service:
+              - 'backend/ai-service/**'
+            db-migrator:
+              - 'init_database.sql/**'
+            tokenization:
+              - 'backend/tokenization-service/**'
+            docker:
+              - 'docker/**'
+
+  # ============================================================
+  # JOB 1 — Type-check & test (only services that changed)
   # ============================================================
   test:
     name: Test & Type-check
     runs-on: ubuntu-latest
+    needs: changes
     timeout-minutes: 15
 
     services:
@@ -77,78 +113,48 @@ jobs:
           done
           echo "✓ Database ready"
 
-      - name: Install main-service dependencies
+      - name: Install & type-check main-service
+        if: needs.changes.outputs.main-api == 'true'
         working-directory: backend/main-service
-        run: npm ci
+        run: |
+          npm ci
+          npx tsc --noEmit
 
-      - name: TypeScript compile — main-service
-        working-directory: backend/main-service
-        run: npx tsc --noEmit
-
-      - name: Install payment-service dependencies
+      - name: Install & type-check payment-service
+        if: needs.changes.outputs.payment-api == 'true'
         working-directory: backend/payment-service
-        run: npm ci
+        run: |
+          npm ci
+          npx tsc --noEmit
 
-      - name: TypeScript compile — payment-service
-        working-directory: backend/payment-service
-        run: npx tsc --noEmit
-
-      - name: Install frontend dependencies
+      - name: Install & type-check frontend
+        if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
-        run: npm ci
-
-      - name: TypeScript compile — frontend
-        working-directory: frontend
-        run: npx tsc --noEmit
+        run: |
+          npm ci
+          npx tsc --noEmit
 
   # ============================================================
-  # JOB 2 — Build & Push ALL Docker images (parallel)
+  # JOB 2a — Build & Push Frontend (only if frontend changed)
   # ============================================================
-  build-and-push:
-    name: Build & Push Docker Images
+  build-frontend:
+    name: Build Frontend
     runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    timeout-minutes: 40
+    needs: [test, changes]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      needs.changes.outputs.frontend == 'true'
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & Push main-api
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend/main-service
-          file: ./backend/main-service/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-main-api:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-main-api:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & Push payment-api
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend/payment-service
-          file: ./backend/payment-service/Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-payment-api:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-payment-api:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & Push frontend
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & Push
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -157,10 +163,98 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-frontend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-frontend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
-      - name: Build & Push ai-service
+  # ============================================================
+  # JOB 2b — Build & Push Main API
+  # ============================================================
+  build-main-api:
+    name: Build Main API
+    runs-on: ubuntu-latest
+    needs: [test, changes]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      needs.changes.outputs.main-api == 'true'
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/main-service
+          file: ./backend/main-service/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-main-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-main-api:${{ github.sha }}
+          cache-from: type=gha,scope=main-api
+          cache-to: type=gha,mode=max,scope=main-api
+
+  # ============================================================
+  # JOB 2c — Build & Push Payment API
+  # ============================================================
+  build-payment-api:
+    name: Build Payment API
+    runs-on: ubuntu-latest
+    needs: [test, changes]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      needs.changes.outputs.payment-api == 'true'
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/payment-service
+          file: ./backend/payment-service/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-payment-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-payment-api:${{ github.sha }}
+          cache-from: type=gha,scope=payment-api
+          cache-to: type=gha,mode=max,scope=payment-api
+
+  # ============================================================
+  # JOB 2d — Build & Push Infra (AI, DB Migrator, Tokenization)
+  # ============================================================
+  build-infra:
+    name: Build Infra Services
+    runs-on: ubuntu-latest
+    needs: [test, changes]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      (needs.changes.outputs.ai-service == 'true' ||
+       needs.changes.outputs.db-migrator == 'true' ||
+       needs.changes.outputs.tokenization == 'true')
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push AI service
+        if: needs.changes.outputs.ai-service == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./backend/ai-service
@@ -169,11 +263,11 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-ai-service:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-ai-service:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=ai-service
+          cache-to: type=gha,mode=max,scope=ai-service
 
-      # ── db-migrator: MUST be built last (depends on migrations/*.sql)
-      - name: Build & Push db-migrator
+      - name: Build & Push DB migrator
+        if: needs.changes.outputs.db-migrator == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./init_database.sql
@@ -182,10 +276,11 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-db-migrator:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-db-migrator:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=db-migrator
+          cache-to: type=gha,mode=max,scope=db-migrator
 
-      - name: Build & Push tokenization-service
+      - name: Build & Push tokenization
+        if: needs.changes.outputs.tokenization == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./backend/tokenization-service
@@ -194,17 +289,26 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-tokenization:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/marketplace-tokenization:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=tokenization
+          cache-to: type=gha,mode=max,scope=tokenization
 
   # ============================================================
-  # JOB 3 — Deploy to VPS with automatic DB migration
+  # JOB 3 — Deploy to VPS (runs after all builds complete)
   # ============================================================
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [changes, build-frontend, build-main-api, build-payment-api, build-infra]
+    # Run deploy if ANY build ran, even if some were skipped
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      (needs.build-frontend.result == 'success' ||
+       needs.build-main-api.result == 'success' ||
+       needs.build-payment-api.result == 'success' ||
+       needs.build-infra.result == 'success') &&
+      !contains(needs.*.result, 'failure')
     timeout-minutes: 15
 
     steps:
@@ -228,12 +332,19 @@ jobs:
         env:
           GIT_SHA: ${{ github.sha }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Pass change flags to only pull changed images
+          CHANGED_FRONTEND: ${{ needs.changes.outputs.frontend }}
+          CHANGED_MAIN_API: ${{ needs.changes.outputs.main-api }}
+          CHANGED_PAYMENT_API: ${{ needs.changes.outputs.payment-api }}
+          CHANGED_AI: ${{ needs.changes.outputs.ai-service }}
+          CHANGED_DB: ${{ needs.changes.outputs.db-migrator }}
+          CHANGED_TOKEN: ${{ needs.changes.outputs.tokenization }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          envs: GIT_SHA,DOCKERHUB_USERNAME
+          envs: GIT_SHA,DOCKERHUB_USERNAME,CHANGED_FRONTEND,CHANGED_MAIN_API,CHANGED_PAYMENT_API,CHANGED_AI,CHANGED_DB,CHANGED_TOKEN
           command_timeout: 12m
           script: |
             set -e
@@ -244,61 +355,72 @@ jobs:
 
             cd /root/services/FinalYear/docker
 
-            # ── Step 1: Pull new images in parallel ─────────────────────
+            # ── Step 1: Pull ONLY changed images ─────────────────────
             echo ""
-            echo "[1/3] Pulling Docker images..."
-            docker pull ${DOCKERHUB_USERNAME}/marketplace-db-migrator:latest &
-            docker pull ${DOCKERHUB_USERNAME}/marketplace-main-api:latest &
-            docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest &
-            docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:latest &
-            docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest &
-            docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest &
+            echo "[1/3] Pulling changed Docker images..."
+            [ "$CHANGED_FRONTEND" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:latest &
+            [ "$CHANGED_MAIN_API" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-main-api:latest &
+            [ "$CHANGED_PAYMENT_API" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest &
+            [ "$CHANGED_AI" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest &
+            [ "$CHANGED_DB" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-db-migrator:latest &
+            [ "$CHANGED_TOKEN" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest &
             wait
-            echo "✓ All images pulled"
+            echo "✓ Images pulled"
 
-            # ── Step 2: Run DB migrations ────────────────────────────────
+            # ── Step 2: Run DB migrations (if schema changed) ────────
+            if [ "$CHANGED_DB" = "true" ]; then
+              echo ""
+              echo "[2/3] Running DB migrations..."
+              docker rm -f marketplace-db-migrator 2>/dev/null || true
+
+              docker compose -f docker-compose.prod.yml --env-file .env \
+                up -d --no-deps db-migrator
+
+              echo "  Waiting for migrator to finish (max 90s)..."
+              WAITED=0
+              while docker ps --filter "name=marketplace-db-migrator" --filter "status=running" \
+                    | grep -q "db-migrator" 2>/dev/null; do
+                sleep 3; WAITED=$((WAITED+3))
+                echo -n "."
+                [ $WAITED -ge 90 ] && { echo ""; echo "⚠ Migrator timeout"; break; }
+              done
+              echo ""
+
+              echo "=== Migration logs ==="
+              docker logs marketplace-db-migrator 2>&1 | tail -25
+              echo "====================="
+            else
+              echo "[2/3] No DB changes — skipping migrations"
+            fi
+
+            # ── Step 3: Restart ONLY changed services ────────────────
             echo ""
-            echo "[2/3] Running DB migrations..."
-            docker rm -f marketplace-db-migrator 2>/dev/null || true
+            echo "[3/3] Restarting changed services..."
 
-            docker compose -f docker-compose.prod.yml --env-file .env \
-              up -d --no-deps db-migrator
+            RESTART_SERVICES=""
+            [ "$CHANGED_FRONTEND" = "true" ] && RESTART_SERVICES="$RESTART_SERVICES frontend"
+            [ "$CHANGED_MAIN_API" = "true" ] && RESTART_SERVICES="$RESTART_SERVICES main-api"
+            [ "$CHANGED_PAYMENT_API" = "true" ] && RESTART_SERVICES="$RESTART_SERVICES payment-api"
+            [ "$CHANGED_AI" = "true" ] && RESTART_SERVICES="$RESTART_SERVICES ai-service"
+            [ "$CHANGED_TOKEN" = "true" ] && RESTART_SERVICES="$RESTART_SERVICES tokenization-service"
 
-            echo "  Waiting for migrator to finish (max 90s)..."
-            WAITED=0
-            while docker ps --filter "name=marketplace-db-migrator" --filter "status=running" \
-                  | grep -q "db-migrator" 2>/dev/null; do
-              sleep 3; WAITED=$((WAITED+3))
-              echo -n "."
-              [ $WAITED -ge 90 ] && { echo ""; echo "⚠ Migrator timeout"; break; }
-            done
-            echo ""
+            if [ -n "$RESTART_SERVICES" ]; then
+              # Stop specific containers first
+              for svc in $RESTART_SERVICES; do
+                docker compose -f docker-compose.prod.yml --env-file .env \
+                  up -d --no-deps --force-recreate $svc || true
+              done
+              echo "✓ Restarted: $RESTART_SERVICES"
+            else
+              echo "No services to restart"
+            fi
 
-            echo "=== Migration logs ==="
-            docker logs marketplace-db-migrator 2>&1 | tail -25
-            echo "====================="
-
-            # ── Step 3: Restart all services ────────────────────────────
-            echo ""
-            echo "[3/3] Restarting all services..."
-
-            # CRITICAL: Stop+remove orphaned containers before compose up.
-            # Prevents "container name already in use" conflict when containers
-            # were started manually (outside docker compose) on the VPS.
-            for svc in marketplace-main-api marketplace-payment-api marketplace-frontend marketplace-ai marketplace-tokenization; do
-              docker stop "$svc" 2>/dev/null || true
-              docker rm   "$svc" 2>/dev/null || true
-            done
-
-            # Remove manual override file — CI always uses proper db-migrator image
+            # Remove manual override file
             rm -f /root/services/FinalYear/docker/docker-compose.override.yml
 
-            docker compose -f docker-compose.prod.yml --env-file .env \
-              up -d --remove-orphans
+            sleep 15
 
-            sleep 20
-
-            # ── Health checks ─────────────────────────────────────────────
+            # ── Health checks ─────────────────────────────────────────
             echo ""
             echo "=== Health checks ==="
             curl -sf http://127.0.0.1:3001/health > /dev/null \

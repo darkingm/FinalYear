@@ -6,9 +6,13 @@ import httpx
 import os
 import json
 import asyncio
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ai-service")
 
 app = FastAPI(title="CryptoMarket AI Service")
 
@@ -23,16 +27,28 @@ app.add_middleware(
 GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL        = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL      = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL      = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GROK_API_KEY      = os.getenv("GROK_API_KEY", "")
+GROK_MODEL        = os.getenv("GROK_MODEL", "grok-3-mini-fast")
+# OpenRouter: free models, no credit card needed (sign up at openrouter.ai)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
 MAIN_SERVICE_URL  = os.getenv("MAIN_SERVICE_URL", "http://main-service:3001")
 
-# Determine active provider
-# Priority: GROQ first (faster), Gemini second
-PROVIDER = "none"
+# Determine active provider chain
+# Priority: GROQ (fastest) → Gemini → OpenRouter (free) → Grok
+PROVIDERS: list[str] = []
 if GROQ_API_KEY:
-    PROVIDER = "groq"
-elif GEMINI_API_KEY:
-    PROVIDER = "gemini"
+    PROVIDERS.append("groq")
+if GEMINI_API_KEY:
+    PROVIDERS.append("gemini")
+if OPENROUTER_API_KEY:
+    PROVIDERS.append("openrouter")
+if GROK_API_KEY:
+    PROVIDERS.append("grok")
+
+PRIMARY = PROVIDERS[0] if PROVIDERS else "none"
+logger.info(f"AI providers available: {PROVIDERS}, primary: {PRIMARY}")
 
 SYSTEM_PROMPT = """Bạn là AI Assistant của CryptoMarket - sàn thương mại điện tử Web3.
 
@@ -93,8 +109,10 @@ def build_context(prices: dict, products: list) -> str:
     return "\n".join(ctx)
 
 
-# ── GROQ chat ────────────────────────────────────────────────────────────────
+# ── Provider implementations ─────────────────────────────────────────────────
+
 async def call_groq(messages: list, system: str) -> str:
+    """Groq — OpenAI-compatible API, fastest inference"""
     payload = [{"role": "system", "content": system}] + messages
     async with httpx.AsyncClient() as client:
         res = await client.post(
@@ -108,18 +126,15 @@ async def call_groq(messages: list, system: str) -> str:
         return res.json()["choices"][0]["message"]["content"]
 
 
-# ── Gemini chat ───────────────────────────────────────────────────────────────
 async def call_gemini(messages: list, system: str) -> str:
-    """Call Google Gemini via REST API (no SDK needed)"""
+    """Google Gemini via REST API (no SDK needed)"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
-    # Build Gemini content format
     contents = []
     for m in messages:
         role = "user" if m["role"] == "user" else "model"
         contents.append({"role": role, "parts": [{"text": m["content"]}]})
 
-    # Gemini uses systemInstruction separately
     payload = {
         "system_instruction": {"parts": [{"text": system}]},
         "contents": contents,
@@ -134,10 +149,54 @@ async def call_gemini(messages: list, system: str) -> str:
         return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
+async def call_grok(messages: list, system: str) -> str:
+    """xAI Grok — OpenAI-compatible API"""
+    payload = [{"role": "system", "content": system}] + messages
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROK_API_KEY}", "Content-Type": "application/json"},
+            json={"model": GROK_MODEL, "messages": payload, "max_tokens": 512, "temperature": 0.7},
+            timeout=25,
+        )
+        if res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Grok API error: {res.text}")
+        return res.json()["choices"][0]["message"]["content"]
+
+
+async def call_openrouter(messages: list, system: str) -> str:
+    """OpenRouter — Free models, OpenAI-compatible API"""
+    payload = [{"role": "system", "content": system}] + messages
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://kienai.id.vn",
+                "X-Title": "Web3Market AI",
+            },
+            json={"model": OPENROUTER_MODEL, "messages": payload, "max_tokens": 512, "temperature": 0.7},
+            timeout=25,
+        )
+        if res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"OpenRouter API error: {res.text}")
+        return res.json()["choices"][0]["message"]["content"]
+
+
+# Provider dispatch map
+CALLERS = {
+    "groq": call_groq,
+    "gemini": call_gemini,
+    "grok": call_grok,
+    "openrouter": call_openrouter,
+}
+
+
 # ── Main chat endpoint ───────────────────────────────────────────────────────
 @app.post("/api/ai/chat")
 async def chat(req: ChatRequest):
-    if PROVIDER == "none":
+    if not PROVIDERS:
         # No API key — simple rule-based fallback
         last = req.messages[-1].content.lower() if req.messages else ""
         if any(w in last for w in ["giá", "price", "btc", "eth", "bnb"]):
@@ -145,7 +204,7 @@ async def chat(req: ChatRequest):
             price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items())
             return {"reply": f"Giá crypto hiện tại:\n{price_info}\n\n(Nguồn: Binance realtime)"}
         return {
-            "reply": "AI chưa có API key. Cấu hình GROQ_API_KEY hoặc GEMINI_API_KEY trong .env để dùng full AI."
+            "reply": "AI chưa có API key. Cấu hình GROQ_API_KEY, GEMINI_API_KEY hoặc GROK_API_KEY trong .env."
         }
 
     # Fetch live context (crypto prices + products)
@@ -158,31 +217,48 @@ async def chat(req: ChatRequest):
 
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
 
-    # Try primary provider, fall back to secondary
-    try:
-        if PROVIDER == "groq":
-            reply = await call_groq(messages, system_msg)
-        else:
-            reply = await call_gemini(messages, system_msg)
-    except HTTPException:
-        # Fallback to Gemini if GROQ fails (and vice versa)
+    # Try all providers in order until one succeeds
+    last_error = None
+    for provider in PROVIDERS:
         try:
-            if PROVIDER == "groq" and GEMINI_API_KEY:
-                reply = await call_gemini(messages, system_msg)
-            elif PROVIDER == "gemini" and GROQ_API_KEY:
-                reply = await call_groq(messages, system_msg)
-            else:
-                raise
-        except:
-            raise HTTPException(status_code=502, detail="All AI providers failed")
-
-    return {"reply": reply}
+            logger.info(f"Trying provider: {provider}")
+            reply = await CALLERS[provider](messages, system_msg)
+            return {
+                "reply": reply,
+                "provider": provider,
+                "model": {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL, "grok": GROK_MODEL}[provider],
+            }
+        except Exception as e:
+            logger.warning(f"Provider {provider} failed: {e}")
+            last_error = e
+            continue
+    # All providers failed — give a helpful fallback instead of 502
+    logger.error(f"All AI providers failed. Last: {last_error}")
+    # Try to give useful info from context
+    if prices:
+        price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items())
+        return {
+            "reply": f"Xin lỗi, AI đang tạm thời quá tải. Đây là thông tin giá crypto hiện tại:\n\n{price_info}\n\n📌 Bạn có thể hỏi lại sau ít phút.",
+            "provider": "fallback",
+            "model": "rule-based",
+        }
+    return {
+        "reply": "Xin lỗi, hệ thống AI đang bảo trì. Vui lòng thử lại sau ít phút hoặc liên hệ hỗ trợ. 🙏",
+        "provider": "fallback",
+        "model": "rule-based",
+    }
 
 
 @app.get("/health")
 def health():
     return {
         "status": "ok",
-        "provider": PROVIDER,
-        "model": GROQ_MODEL if PROVIDER == "groq" else GEMINI_MODEL,
+        "providers": PROVIDERS,
+        "primary": PRIMARY,
+        "models": {
+            "groq": GROQ_MODEL if GROQ_API_KEY else None,
+            "gemini": GEMINI_MODEL if GEMINI_API_KEY else None,
+            "grok": GROK_MODEL if GROK_API_KEY else None,
+            "openrouter": OPENROUTER_MODEL if OPENROUTER_API_KEY else None,
+        },
     }

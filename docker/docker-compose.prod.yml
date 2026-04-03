@@ -137,6 +137,12 @@ services:
       FRONTEND_URL: https://kienai.id.vn
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
       PAYMENT_SERVICE_URL: http://payment-api:3002
+      # ── Smart contract integration (CreditScoreSBT on VPS Hardhat) ──
+      CREDIT_SBT_ADDRESS: ${CREDIT_SBT_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
+      MINTER_PRIVATE_KEY: ${PRIVATE_KEY:-${BLOCKCHAIN_PRIVATE_KEY}}
+      PRIVATE_KEY: ${PRIVATE_KEY:-${BLOCKCHAIN_PRIVATE_KEY}}
+      LOCALHOST_RPC_URL: http://hardhat-node:8545
+      POLYGON_RPC_URL: https://polygon.drpc.org
     ports:
       - "127.0.0.1:3001:3001" # Chỉ localhost — nginx proxy vào
     depends_on:
@@ -294,7 +300,11 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      GROK_API_KEY: ${GROK_API_KEY:-}
+      GROK_MODEL: ${GROK_MODEL:-grok-3-mini-fast}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
       MAIN_SERVICE_URL: http://main-api:3001
     ports:
       - "127.0.0.1:8000:8000"

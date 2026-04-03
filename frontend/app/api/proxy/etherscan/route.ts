@@ -2,21 +2,20 @@
  * /api/proxy/etherscan/route.ts
  *
  * Routes blockchain explorer API calls server-side (no CORS).
- * Per-chain endpoints (same query format for all):
- *   BSC     → api.bscscan.com/api         (free, register at bscscan.com/myapikey)
- *   ETH     → api.etherscan.io/v2/api?chainid=1  (Etherscan V2 free covers ETH only)
- *   Polygon → api.polygonscan.com/api     (free, register at polygonscan.com/myapikey)
+ * Uses Etherscan V2 unified API for supported chains only.
  *
- * NOTE: Etherscan V2 free tier does NOT cover BSC/Polygon — separate keys needed.
+ * IMPORTANT: Free tier only supports ETH mainnet (chainid=1).
+ * BSC (56) and Polygon (137) require paid plan — we skip them
+ * and let the frontend fall back to direct RPC (eth_getLogs).
+ *
+ * See: https://docs.etherscan.io/v2-migration
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-// Per-chain base URLs — SAME query format (module/action/apikey), different host
-const CHAIN_ENDPOINTS: Record<string, string> = {
-    '56': 'https://api.bscscan.com/api',                        // BSC  → BSCScan (free)
-    '1': 'https://api.etherscan.io/v2/api',                    // ETH  → Etherscan V2
-    '137': 'https://api.polygonscan.com/api',                    // POLY → Polygonscan (free)
-};
+const ETHERSCAN_V2_BASE = 'https://api.etherscan.io/v2/api';
+
+// Chains supported by Etherscan V2 FREE tier
+const FREE_TIER_CHAINS = new Set(['1']); // Only ETH mainnet
 
 function pickKey(envVar: string | undefined): string {
     if (!envVar) return '';
@@ -24,53 +23,60 @@ function pickKey(envVar: string | undefined): string {
     return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : '';
 }
 
-function getApiKey(chainid: string): string {
-    if (chainid === '56') {
-        return pickKey(process.env.BSCSCAN_API_KEY)
-            || pickKey(process.env.ETHERSCAN_API_KEY);
-    }
-    if (chainid === '137') {
-        return pickKey(process.env.POLYGONSCAN_API_KEY)
-            || pickKey(process.env.ETHERSCAN_API_KEY);
-    }
-    return pickKey(process.env.ETHERSCAN_API_KEY);
+function getApiKey(): string {
+    return pickKey(process.env.ETHERSCAN_API_KEY)
+        || pickKey(process.env.BSCSCAN_API_KEY);
 }
 
 export async function GET(req: NextRequest) {
     const params = req.nextUrl.searchParams;
     const chainid = params.get('chainid') ?? '56';
 
-    const baseUrl = CHAIN_ENDPOINTS[chainid] ?? CHAIN_ENDPOINTS['56'];
-    const apiKey = getApiKey(chainid);
-
-    // Build query
-    const query = new URLSearchParams();
-    params.forEach((v, k) => { if (k !== 'apikey') query.set(k, v); });
-    // For Etherscan V2 (ETH), keep chainid; for BSCScan/Polygonscan, remove it
-    if (chainid !== '1') query.delete('chainid');
-    if (apiKey) query.set('apikey', apiKey);
-
-    if (!apiKey) {
-        console.warn(`[explorer-proxy] ⚠️  No API key for chainid=${chainid}. Set NEXT_PUBLIC_BSCSCAN_API_KEY for BSC. Will try without key (rate limited).`);
+    // ── Skip unsupported chains silently ──────────────────────────────
+    // BSC (56), Polygon (137) etc. are NOT free on Etherscan V2.
+    // Frontend should use direct RPC (eth_getLogs) or subgraph for these.
+    if (!FREE_TIER_CHAINS.has(chainid)) {
+        return NextResponse.json({
+            status: '0',
+            message: 'NOTOK',
+            result: [],
+            _note: `Chain ${chainid} not supported on free Etherscan tier. Use RPC fallback.`,
+        });
     }
 
-    const url = `${baseUrl}?${query.toString()}`;
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        return NextResponse.json({
+            status: '0',
+            message: 'NOTOK',
+            result: [],
+            _note: 'No ETHERSCAN_API_KEY configured.',
+        });
+    }
+
+    // Build query for supported chain
+    const query = new URLSearchParams();
+    params.forEach((v, k) => { if (k !== 'apikey') query.set(k, v); });
+    query.set('chainid', chainid);
+    query.set('apikey', apiKey);
+
+    const url = `${ETHERSCAN_V2_BASE}?${query.toString()}`;
     try {
         const upstream = await fetch(url, { signal: AbortSignal.timeout(12_000) });
         const data = await upstream.json();
 
         if (data.status === '1' && Array.isArray(data.result)) {
-            console.info(`[explorer-proxy] ✅ chainid=${chainid} → ${baseUrl.split('/')[2]} returned ${data.result.length} results`);
             return NextResponse.json(data);
         }
 
-        console.warn('[explorer-proxy] ❌ Error:', {
-            host: baseUrl.split('/')[2],
-            chainid,
-            message: data.message,
-            result: typeof data.result === 'string' ? data.result.slice(0, 200) : '(non-string)',
-            keyPrefix: apiKey ? apiKey.slice(0, 6) + '...' : 'MISSING',
-        });
+        // Log only real errors, not "chain not supported" noise
+        if (data.message !== 'NOTOK') {
+            console.warn('[explorer-proxy] ❌ Unexpected:', {
+                chainid,
+                message: data.message,
+                result: typeof data.result === 'string' ? data.result.slice(0, 120) : '(non-string)',
+            });
+        }
         return NextResponse.json(data);
     } catch (e: any) {
         console.error('[explorer-proxy] Fetch error:', e?.message);
