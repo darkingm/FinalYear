@@ -193,22 +193,165 @@ CALLERS = {
 }
 
 
+# ── Vietnamese diacritics removal for fuzzy matching ──────────────────────────
+_VN_MAP = str.maketrans(
+    "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ"
+    "ÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ",
+    "aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd"
+    "AAAAAAAAAAAAAAAAAEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYYD"
+)
+def _norm(s: str) -> str:
+    """Remove Vietnamese diacritics for fuzzy keyword matching."""
+    return s.translate(_VN_MAP).lower().strip()
+
+
+# ── Smart rule-based fallback (no API key needed) ────────────────────────────
+async def rule_based_reply(req, prices: dict, products: list):
+    """Comprehensive keyword-based responses using live Binance data."""
+    raw = req.messages[-1].content.strip() if req.messages else ""
+    last = raw.lower()
+    norm = _norm(raw)  # diacritics-free version for matching
+    result = {"provider": "rule-based", "model": "builtin-v2"}
+
+    def _match(*keywords):
+        """Match keywords against both original and diacritics-stripped text."""
+        return any(w in last or w in norm for w in keywords)
+
+    # ── Greeting ──
+    if _match("xin chao", "hello", "hi", "hey", "chao", "xin chào", "chào"):
+        price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items()) if prices else ""
+        result["reply"] = (
+            f"Chào bạn! 👋 Tôi là AI trợ lý của Web3Market.\n\n"
+            f"📊 Giá crypto realtime: {price_info}\n\n"
+            f"Bạn có thể hỏi tôi về:\n"
+            f"• Giá BTC, ETH, BNB, MATIC\n"
+            f"• Cách mua hàng & thanh toán crypto\n"
+            f"• Cách kết nối ví MetaMask\n"
+            f"• Phí giao dịch & escrow\n"
+            f"• Trạng thái đơn hàng"
+        )
+        return result
+
+    # ── Price queries ──
+    if _match("gia", "giá", "price", "bao nhieu", "bao nhiêu", "how much"):
+        coins_mentioned = [k for k in ["BTC", "ETH", "BNB", "MATIC"] if k.lower() in last]
+        if not coins_mentioned:
+            coins_mentioned = list(prices.keys()) if prices else []
+
+        if prices and coins_mentioned:
+            lines = []
+            for c in coins_mentioned:
+                if c in prices:
+                    lines.append(f"💰 {c}: **${prices[c]:,.2f}**")
+            result["reply"] = "\n".join(lines) + "\n\n📡 Nguồn: Binance realtime\n🔄 Xem biểu đồ: kienai.id.vn/trading/BTCUSDT"
+        else:
+            result["reply"] = "Không lấy được giá. Vui lòng thử lại sau."
+        return result
+
+    # ── Products ──
+    if _match("san pham", "sản phẩm", "product", "mua gi", "mua gì", "hang", "hàng", "shop", "cua hang"):
+        if products:
+            items = "\n".join(f"• {p.get('name', 'N/A')} — ${p.get('price', 0):,.2f}" for p in products[:5])
+            result["reply"] = f"🛍️ Sản phẩm nổi bật:\n{items}\n\n👉 Xem thêm tại kienai.id.vn/products"
+        else:
+            result["reply"] = "🛍️ Xem sản phẩm tại kienai.id.vn/products"
+        return result
+
+    # ── Payment / checkout ──
+    if _match("thanh toan", "thanh toán", "payment", "pay", "checkout", "mua hang", "dat hang", "đặt hàng"):
+        result["reply"] = (
+            "💳 **Hướng dẫn thanh toán crypto:**\n\n"
+            "1. Chọn sản phẩm → Thêm vào giỏ hàng\n"
+            "2. Nhấn Thanh toán → Chọn mạng (Polygon, BSC)\n"
+            "3. Kết nối ví MetaMask\n"
+            "4. Xác nhận giao dịch trên ví\n"
+            "5. Tiền vào Escrow → Nhận hàng → Xác nhận → Seller nhận tiền\n\n"
+            "🔒 An toàn: Smart Contract Escrow giữ tiền cho đến khi bạn xác nhận nhận hàng."
+        )
+        return result
+
+    # ── Wallet / MetaMask ──
+    if _match("vi", "ví", "wallet", "metamask", "ket noi", "kết nối", "connect"):
+        result["reply"] = (
+            "🦊 **Kết nối ví MetaMask:**\n\n"
+            "1. Cài MetaMask extension (Chrome/Firefox)\n"
+            "2. Tạo ví hoặc import seed phrase\n"
+            "3. Vào kienai.id.vn → Nhấn nút 'Login' → Chọn MetaMask\n"
+            "4. Duyệt kết nối trên MetaMask popup\n\n"
+            "⚠️ Không chia sẻ seed phrase với bất kỳ ai!"
+        )
+        return result
+
+    # ── Fees / escrow ──
+    if _match("phi", "phí", "fee", "escrow", "hoa hong", "commission"):
+        result["reply"] = (
+            "💡 **Phí giao dịch Web3Market:**\n\n"
+            "• Phí sàn: 1% mỗi giao dịch\n"
+            "• Gas fee: tùy mạng (Polygon ~$0.01, BSC ~$0.1)\n"
+            "• Escrow: Miễn phí (Smart Contract tự động)\n\n"
+            "🔒 Escrow giữ tiền an toàn cho đến khi buyer xác nhận nhận hàng."
+        )
+        return result
+
+    # ── Trading ──
+    if _match("trade", "trading", "giao dich", "giao dịch", "exchange", "swap"):
+        result["reply"] = (
+            "📈 **Giao dịch trên Web3Market:**\n\n"
+            "• Spot Trading: Mua/Bán crypto theo giá thị trường\n"
+            "• Swap: Đổi token nhanh (USDT ↔ BTC, ETH...)\n"
+            "• Chart: Biểu đồ TradingView realtime\n\n"
+            "👉 Truy cập: kienai.id.vn/trading/BTCUSDT"
+        )
+        return result
+
+    # ── Order status ──
+    if _match("don hang", "đơn hàng", "order", "trang thai", "trạng thái", "status", "theo doi"):
+        result["reply"] = (
+            "📦 **Theo dõi đơn hàng:**\n\n"
+            "1. Đăng nhập vào tài khoản\n"
+            "2. Vào Profile → Đơn hàng của tôi\n"
+            "3. Xem trạng thái: Pending → Paid → Shipped → Delivered\n\n"
+            "Hoặc truy cập: kienai.id.vn/orders"
+        )
+        return result
+
+    # ── Security ──
+    if _match("bao mat", "bảo mật", "security", "an toan", "an toàn", "lua dao", "scam"):
+        result["reply"] = (
+            "🔐 **Bảo mật trên Web3Market:**\n\n"
+            "• Smart Contract Escrow: Tiền được giữ an toàn\n"
+            "• NFT Receipt: Mỗi giao dịch có NFT chứng nhận\n"
+            "• AI Credit Score (SBT): Đánh giá uy tín user\n"
+            "• Không lưu private key của bạn\n\n"
+            "⚠️ Tips: Luôn kiểm tra address trước khi giao dịch!"
+        )
+        return result
+
+    # ── Default: show prices + help ──
+    price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items()) if prices else "đang tải..."
+    result["reply"] = (
+        f"📊 Giá crypto realtime: {price_info}\n\n"
+        f"Tôi có thể giúp bạn:\n"
+        f"• Xem giá crypto (hỏi 'giá BTC')\n"
+        f"• Hướng dẫn mua hàng & thanh toán\n"
+        f"• Kết nối ví MetaMask\n"
+        f"• Thông tin phí & escrow\n"
+        f"• Theo dõi đơn hàng\n\n"
+        f"💬 Hãy hỏi tôi bất cứ điều gì!"
+    )
+    return result
+
+
 # ── Main chat endpoint ───────────────────────────────────────────────────────
 @app.post("/api/ai/chat")
 async def chat(req: ChatRequest):
-    if not PROVIDERS:
-        # No API key — simple rule-based fallback
-        last = req.messages[-1].content.lower() if req.messages else ""
-        if any(w in last for w in ["giá", "price", "btc", "eth", "bnb"]):
-            prices = await get_crypto_prices()
-            price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items())
-            return {"reply": f"Giá crypto hiện tại:\n{price_info}\n\n(Nguồn: Binance realtime)"}
-        return {
-            "reply": "AI chưa có API key. Cấu hình GROQ_API_KEY, GEMINI_API_KEY hoặc GROK_API_KEY trong .env."
-        }
-
-    # Fetch live context (crypto prices + products)
+    # Fetch live context regardless of provider availability
     prices, products = await asyncio.gather(get_crypto_prices(), get_featured_products())
+
+    if not PROVIDERS:
+        # No API key — smart rule-based fallback with live data
+        return await rule_based_reply(req, prices, products)
+
     context = build_context(prices, products)
 
     system_msg = SYSTEM_PROMPT
@@ -223,30 +366,19 @@ async def chat(req: ChatRequest):
         try:
             logger.info(f"Trying provider: {provider}")
             reply = await CALLERS[provider](messages, system_msg)
+            model_map = {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL, "grok": GROK_MODEL, "openrouter": OPENROUTER_MODEL}
             return {
                 "reply": reply,
                 "provider": provider,
-                "model": {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL, "grok": GROK_MODEL}[provider],
+                "model": model_map.get(provider, "unknown"),
             }
         except Exception as e:
             logger.warning(f"Provider {provider} failed: {e}")
             last_error = e
             continue
-    # All providers failed — give a helpful fallback instead of 502
+    # All providers failed — use smart rule-based fallback
     logger.error(f"All AI providers failed. Last: {last_error}")
-    # Try to give useful info from context
-    if prices:
-        price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items())
-        return {
-            "reply": f"Xin lỗi, AI đang tạm thời quá tải. Đây là thông tin giá crypto hiện tại:\n\n{price_info}\n\n📌 Bạn có thể hỏi lại sau ít phút.",
-            "provider": "fallback",
-            "model": "rule-based",
-        }
-    return {
-        "reply": "Xin lỗi, hệ thống AI đang bảo trì. Vui lòng thử lại sau ít phút hoặc liên hệ hỗ trợ. 🙏",
-        "provider": "fallback",
-        "model": "rule-based",
-    }
+    return await rule_based_reply(req, prices, products)
 
 
 @app.get("/health")
