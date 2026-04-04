@@ -32,7 +32,7 @@ GROK_API_KEY      = os.getenv("GROK_API_KEY", "")
 GROK_MODEL        = os.getenv("GROK_MODEL", "grok-3-mini-fast")
 # OpenRouter: free models, no credit card needed (sign up at openrouter.ai)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "google/gemma-3-12b-it:free")
 MAIN_SERVICE_URL  = os.getenv("MAIN_SERVICE_URL", "http://main-service:3001")
 
 # Determine active provider chain
@@ -165,23 +165,56 @@ async def call_grok(messages: list, system: str) -> str:
 
 
 async def call_openrouter(messages: list, system: str) -> str:
-    """OpenRouter — Free models, OpenAI-compatible API"""
-    payload = [{"role": "system", "content": system}] + messages
+    """OpenRouter — Free models with fallback rotation"""
+    # Models to try in order (all free)
+    models_to_try = [
+        OPENROUTER_MODEL,
+        "nvidia/nemotron-nano-9b-v2:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+    ]
+    # Inject system prompt as first user message for broader model compatibility
+    payload_messages = [{"role": "user", "content": f"[System Instructions]: {system}"}] + messages
+
+    last_err = None
     async with httpx.AsyncClient() as client:
-        res = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://kienai.id.vn",
-                "X-Title": "Web3Market AI",
-            },
-            json={"model": OPENROUTER_MODEL, "messages": payload, "max_tokens": 512, "temperature": 0.7},
-            timeout=25,
-        )
-        if res.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"OpenRouter API error: {res.text}")
-        return res.json()["choices"][0]["message"]["content"]
+        for model in models_to_try:
+            try:
+                res = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://kienai.id.vn",
+                        "X-Title": "Web3Market AI",
+                    },
+                    json={
+                        "model": model,
+                        "messages": payload_messages,
+                        "max_tokens": 512,
+                        "temperature": 0.7,
+                    },
+                    timeout=25,
+                )
+                if res.status_code == 429:
+                    logger.warning(f"OpenRouter {model} rate-limited, trying next...")
+                    continue
+                if res.status_code != 200:
+                    logger.warning(f"OpenRouter {model} error {res.status_code}: {res.text[:200]}")
+                    last_err = f"OpenRouter {model}: {res.status_code}"
+                    continue
+                data = res.json()
+                if "error" in data:
+                    logger.warning(f"OpenRouter {model} data error: {data['error']}")
+                    last_err = f"OpenRouter {model}: {data['error']}"
+                    continue
+                content = data["choices"][0]["message"]["content"]
+                logger.info(f"OpenRouter success with model: {model}")
+                return content
+            except Exception as e:
+                logger.warning(f"OpenRouter {model} exception: {e}")
+                last_err = str(e)
+                continue
+    raise HTTPException(status_code=502, detail=f"All OpenRouter models failed: {last_err}")
 
 
 # Provider dispatch map
@@ -214,11 +247,22 @@ async def rule_based_reply(req, prices: dict, products: list):
     result = {"provider": "rule-based", "model": "builtin-v2"}
 
     def _match(*keywords):
-        """Match keywords against both original and diacritics-stripped text."""
-        return any(w in last or w in norm for w in keywords)
+        """Match keywords against both original and diacritics-stripped text.
+        Uses word boundary check for short keywords (<=3 chars) to avoid false positives."""
+        for w in keywords:
+            if len(w) <= 3:
+                # Short keywords: check as whole word
+                for text in [last, norm]:
+                    words = text.split()
+                    if w in words:
+                        return True
+            else:
+                if w in last or w in norm:
+                    return True
+        return False
 
     # ── Greeting ──
-    if _match("xin chao", "hello", "hi", "hey", "chao", "xin chào", "chào"):
+    if _match("xin chao", "hello", "hey", "chao", "xin chào", "chào"):
         price_info = ", ".join(f"{k}: ${v:,.2f}" for k, v in prices.items()) if prices else ""
         result["reply"] = (
             f"Chào bạn! 👋 Tôi là AI trợ lý của Web3Market.\n\n"
@@ -271,7 +315,7 @@ async def rule_based_reply(req, prices: dict, products: list):
         return result
 
     # ── Wallet / MetaMask ──
-    if _match("vi", "ví", "wallet", "metamask", "ket noi", "kết nối", "connect"):
+    if _match("wallet", "metamask", "ket noi", "kết nối", "connect", "ket noi vi", "kết nối ví"):
         result["reply"] = (
             "🦊 **Kết nối ví MetaMask:**\n\n"
             "1. Cài MetaMask extension (Chrome/Firefox)\n"
@@ -283,7 +327,7 @@ async def rule_based_reply(req, prices: dict, products: list):
         return result
 
     # ── Fees / escrow ──
-    if _match("phi", "phí", "fee", "escrow", "hoa hong", "commission"):
+    if _match("phi giao dich", "phí", "fee", "escrow", "hoa hong", "commission", "gas fee"):
         result["reply"] = (
             "💡 **Phí giao dịch Web3Market:**\n\n"
             "• Phí sàn: 1% mỗi giao dịch\n"
