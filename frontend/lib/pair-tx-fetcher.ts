@@ -585,7 +585,7 @@ export function mergeTxs(existing: PairTx[], incoming: PairTx[], maxLen = 500): 
 }
 
 export const CHAIN_EXPLORERS: Record<SupportedChain, string> = {
-    BSC: 'https://bscscan.com/tx/', ETH: 'https://etherscan.io/tx/', POLYGON: 'https://polygonscan.com/tx/',
+    BSC: 'https://bscscan.com/', ETH: 'https://etherscan.io/', POLYGON: 'https://polygonscan.com/',
 };
 
 export function fmtTxAge(ts: number): string {

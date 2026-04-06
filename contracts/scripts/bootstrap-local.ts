@@ -1,14 +1,15 @@
 /**
  * scripts/bootstrap-local.ts
  *
- * Script Hardhat để deploy hoặc verify EscrowCore trên localhost.
- * Sử dụng: npx hardhat run scripts/bootstrap-local.ts --network localhost
+ * Script Hardhat deploy EscrowCore + CreditScoreSBT lên localhost/VPS.
+ * Sử dụng: npx hardhat run scripts/bootstrap-local.ts --network vps
  *
  * Thực hiện:
  *   1. Deploy EscrowCore (nếu chưa có hoặc bị reset sau node restart)
- *   2. Grant OPERATOR_ROLE cho Account #0 (deployer = backend service wallet)
- *   3. Ghi địa chỉ contract vào deployed-local.json để setup script đọc
- *   4. Print hướng dẫn update .env
+ *   2. Deploy CreditScoreSBT (nếu chưa có)
+ *   3. Grant OPERATOR_ROLE + UPDATER_ROLE cho deployer
+ *   4. Ghi địa chỉ contracts vào deployed-local.json
+ *   5. Print hướng dẫn update .env
  */
 
 import { ethers } from 'hardhat';
@@ -16,90 +17,110 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const DEPLOYED_FILE = path.join(__dirname, '..', 'deployed-local.json');
-const KNOWN_ADDRESS = process.env.ESCROW_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const KNOWN_ESCROW   = process.env.ESCROW_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const KNOWN_SBT      = process.env.CREDIT_SBT_ADDRESS || '';
+
+async function deployOrReuse(name: string, knownAddress: string, deployer: any, ...deployArgs: any[]) {
+    if (knownAddress) {
+        const code = await ethers.provider.getCode(knownAddress);
+        if (code && code !== '0x') {
+            console.log(`  ✅ ${name} already deployed at: ${knownAddress}`);
+            return ethers.getContractAt(name, knownAddress);
+        }
+        console.log(`  ⚠️  ${name} not found at ${knownAddress}, deploying fresh...`);
+    } else {
+        console.log(`  📦 Deploying ${name}...`);
+    }
+
+    const Factory = await ethers.getContractFactory(name);
+    const contract = await Factory.deploy(...deployArgs);
+    await contract.waitForDeployment();
+    const addr = await contract.getAddress();
+    console.log(`  ✅ ${name} deployed at: ${addr}`);
+    return contract;
+}
 
 async function main() {
-    const [deployer, seller] = await ethers.getSigners();
+    const signers = await ethers.getSigners();
+    const deployer = signers[0];
+    const network = await ethers.provider.getNetwork();
 
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('     Hardhat Local Bootstrap — EscrowCore');
+    console.log('     Web3Market — Full Contract Bootstrap');
     console.log('═══════════════════════════════════════════════════════');
-    console.log(`Deployer (Account #0): ${deployer.address}`);
-    console.log(`Seller   (Account #1): ${seller.address}`);
-    console.log(`Network: ${(await ethers.provider.getNetwork()).name} (chainId: ${(await ethers.provider.getNetwork()).chainId})`);
+    console.log(`  Deployer: ${deployer.address}`);
+    console.log(`  Network:  ${network.name} (chainId: ${network.chainId})`);
+    console.log(`  Balance:  ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
+    console.log('───────────────────────────────────────────────────────\n');
 
-    const deployerBalance = await ethers.provider.getBalance(deployer.address);
-    console.log(`Deployer balance: ${ethers.formatEther(deployerBalance)} ETH`);
+    // ═══ 1. Deploy EscrowCore ═══════════════════════════════════════════════
+    console.log('▶ EscrowCore:');
+    const escrow = await deployOrReuse('EscrowCore', KNOWN_ESCROW, deployer, deployer.address);
+    const escrowAddress = await escrow.getAddress();
 
-    // ─── Check nếu contract đã deploy tại địa chỉ đã biết ──────────────────
-    let escrowAddress = KNOWN_ADDRESS;
-    let escrow: any;
-
-    const existingCode = await ethers.provider.getCode(KNOWN_ADDRESS);
-    if (existingCode && existingCode !== '0x') {
-        console.log(`\n✅ EscrowCore đã tồn tại tại: ${KNOWN_ADDRESS}`);
-        escrow = await ethers.getContractAt('EscrowCore', KNOWN_ADDRESS);
-    } else {
-        // ─── Deploy mới ─────────────────────────────────────────────────────
-        console.log(`\n⚠️  Không tìm thấy contract tại ${KNOWN_ADDRESS}. Đang deploy mới...`);
-
-        const feeVault = deployer.address; // Account #0 nhận fee
-        const EscrowCore = await ethers.getContractFactory('EscrowCore');
-        escrow = await EscrowCore.deploy(feeVault);
-        await escrow.waitForDeployment();
-
-        escrowAddress = await escrow.getAddress();
-        console.log(`✅ EscrowCore deployed tại: ${escrowAddress}`);
-        console.log(`   Fee Vault: ${feeVault}`);
-    }
-
-    // ─── Grant OPERATOR_ROLE cho deployer (Account #0) ──────────────────
+    // Grant OPERATOR_ROLE
     const OPERATOR_ROLE = await escrow.OPERATOR_ROLE();
-    const hasRole = await escrow.hasRole(OPERATOR_ROLE, deployer.address);
-
-    if (!hasRole) {
-        console.log('\n⚙️  Grant OPERATOR_ROLE cho Account #0...');
+    if (!(await escrow.hasRole(OPERATOR_ROLE, deployer.address))) {
         const tx = await escrow.connect(deployer).grantRole(OPERATOR_ROLE, deployer.address);
         await tx.wait();
-        console.log(`✅ OPERATOR_ROLE granted: ${tx.hash}`);
+        console.log(`  ✅ OPERATOR_ROLE granted to deployer`);
     } else {
-        console.log(`\n✅ Account #0 đã có OPERATOR_ROLE`);
+        console.log(`  ✅ Deployer already has OPERATOR_ROLE`);
     }
 
-    // ─── Verify seller (Account #1) có ETH để nhận payment ───────────────
-    const sellerBalance = await ethers.provider.getBalance(seller.address);
-    console.log(`\n✅ Seller Account #1: ${ethers.formatEther(sellerBalance)} ETH (có thể nhận payment)`);
+    // ═══ 2. Deploy CreditScoreSBT ═══════════════════════════════════════════
+    console.log('\n▶ CreditScoreSBT:');
+    const sbt = await deployOrReuse('CreditScoreSBT', KNOWN_SBT, deployer);
+    const sbtAddress = await sbt.getAddress();
 
-    // ─── Ghi deployed addresses ra file ─────────────────────────────────
+    // Grant UPDATER_ROLE
+    const UPDATER_ROLE = await sbt.UPDATER_ROLE();
+    if (!(await sbt.hasRole(UPDATER_ROLE, deployer.address))) {
+        const tx = await sbt.connect(deployer).grantRole(UPDATER_ROLE, deployer.address);
+        await tx.wait();
+        console.log(`  ✅ UPDATER_ROLE granted to deployer`);
+    } else {
+        console.log(`  ✅ Deployer already has UPDATER_ROLE`);
+    }
+
+    // Quick verification — call getScore for deployer (should return 0)
+    try {
+        const score = await sbt.getScore(deployer.address);
+        console.log(`  ✅ SBT verification: getScore(deployer) = ${score} (expected 0)`);
+    } catch (e: any) {
+        console.log(`  ⚠️ SBT verification failed: ${e.message}`);
+    }
+
+    // ═══ 3. Save deployment info ═══════════════════════════════════════════
     const deployedInfo = {
         timestamp: new Date().toISOString(),
-        network: 'localhost',
-        chainId: Number((await ethers.provider.getNetwork()).chainId),
+        network: network.name,
+        chainId: Number(network.chainId),
         contracts: {
             EscrowCore: escrowAddress,
+            CreditScoreSBT: sbtAddress,
             FeeVault: deployer.address,
         },
         accounts: {
             deployer: deployer.address,
-            seller: seller.address,
             operatorRole: deployer.address,
+            updaterRole: deployer.address,
         },
     };
 
     fs.writeFileSync(DEPLOYED_FILE, JSON.stringify(deployedInfo, null, 2));
-    console.log(`\n📄 Đã ghi deployment info → ${DEPLOYED_FILE}`);
+    console.log(`\n📄 Deployment info saved → ${DEPLOYED_FILE}`);
 
-    // ─── Print update instructions ────────────────────────────────────────
+    // ═══ 4. Print env update instructions ═══════════════════════════════════
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('  📝 Nếu địa chỉ mới, update các file .env này:');
+    console.log('  📝 Update your .env files:');
     console.log('═══════════════════════════════════════════════════════');
-    console.log(`  backend/payment-service/.env:`);
-    console.log(`    ESCROW_CONTRACT_LOCALHOST=${escrowAddress}`);
-    console.log(`  backend/main-service/.env:`);
-    console.log(`    ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
-    console.log(`  contracts/.env:`);
-    console.log(`    ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
-    console.log('\n  Sau đó restart payment-service.\n');
+    console.log(`  ESCROW_CONTRACT_LOCALHOST=${escrowAddress}`);
+    console.log(`  ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
+    console.log(`  CREDIT_SBT_ADDRESS=${sbtAddress}`);
+    console.log(`  MINTER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`);
+    console.log(`  LOCALHOST_RPC_URL=http://hardhat-node:8545`);
+    console.log('\n  Then restart main-service + payment-service.\n');
 }
 
 main()

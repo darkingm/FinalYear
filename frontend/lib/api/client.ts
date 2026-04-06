@@ -69,18 +69,27 @@ async function handle401(error: any, client: any) {
     if (!original._retried) {
       original._retried = true;
       try {
+        // Clear potentially stale token from localStorage FIRST
+        localStorage.removeItem('auth_token');
+
         // Small delay to let the JWT callback finish if it's in-flight
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 500));
         const session = await getSession() as any;
-        if (session?.accessToken) {
+
+        // Check if session has a valid, non-error state
+        if (session?.accessToken && !session?.error) {
           localStorage.setItem('auth_token', session.accessToken);
           original.headers.Authorization = `Bearer ${session.accessToken}`;
           return client(original);
         }
       } catch { /* ignore */ }
-      // No valid session — clear stale token and redirect to login
+
+      // No valid session — clear everything and redirect to login
       localStorage.removeItem('auth_token');
-      window.location.href = '/login';
+      // Don't redirect if already on login page (prevents redirect loop)
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
   }
   return Promise.reject(error);

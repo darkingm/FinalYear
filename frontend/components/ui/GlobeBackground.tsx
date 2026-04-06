@@ -12,8 +12,10 @@
 import { useEffect, useRef } from 'react';
 import type * as THREE from 'three';
 
-const TEX_DAY = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
+const TEX_DAY   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
+const TEX_CLOUDS = 'https://unpkg.com/three-globe@2.24.0/example/img/earth-clouds.png';
+const TEX_TOPO   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-topology.png';
 
 /* ── GLSL — opacity is a uniform so we can toggle in light/dark ────────────── */
 const VERT = /* glsl */`
@@ -55,11 +57,11 @@ const PRESETS = {
         nightOpacity: 0.7,
     },
     light: {
-        clearColor: 0xbddff5,
-        ambientColor: 0xe8f4ff, ambientIntens: 2.5,
-        sunColor: 0xffffff, sunIntens: 4.5,
-        sunPos: [3, 2, 2] as [number, number, number],
-        starOpacity: 0.35,   // visible rainbow sparkles
+        clearColor: 0xdce8f4,   // soft light blue-gray
+        ambientColor: 0xffffff, ambientIntens: 2.5,
+        sunColor: 0xfff8e7, sunIntens: 6.0,
+        sunPos: [3, 2, 3] as [number, number, number],
+        starOpacity: 1.0,       // particles visible — size=0 hides them, swarm logic controls
         nightOpacity: 0.0,
     },
 } as const;
@@ -125,19 +127,47 @@ export function GlobeBackground() {
                 (earth as any).__ns = nightMesh;
             });
 
-            /* Atmosphere glow */
-            scene.add(new THREE.Mesh(
-                new THREE.SphereGeometry(er * 1.07, 64, 64),
-                new THREE.ShaderMaterial({
-                    vertexShader: `varying float v; void main() {
+            /* Atmosphere glow (dark mode — blue) */
+            const atmosMat = new THREE.ShaderMaterial({
+                vertexShader: `varying float v; void main() {
             vec3 n=normalize(normalMatrix*normal);
             vec3 e=normalize(-vec3(modelViewMatrix*vec4(position,1)));
             v=pow(0.72-dot(n,e),4.0);
             gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1);}`,
-                    fragmentShader: `varying float v; void main(){gl_FragColor=vec4(0.2,0.55,1.0,1.0)*v*0.85;}`,
-                    side: THREE.FrontSide, blending: THREE.AdditiveBlending, transparent: true,
-                })
-            ));
+                fragmentShader: `uniform vec3 uGlowColor; varying float v; void main(){gl_FragColor=vec4(uGlowColor,1.0)*v*0.85;}`,
+                uniforms: { uGlowColor: { value: new THREE.Vector3(0.2, 0.55, 1.0) } },
+                side: THREE.FrontSide, blending: THREE.AdditiveBlending, transparent: true,
+            });
+            scene.add(new THREE.Mesh(new THREE.SphereGeometry(er * 1.07, 64, 64), atmosMat));
+
+            /* ═══════════════════════════════════════════════════════════════
+               CLOUD LAYER (light mode — realistic daytime Earth)
+               ═══════════════════════════════════════════════════════════════ */
+            const cloudMat = new THREE.MeshPhongMaterial({
+                transparent: true, opacity: 0.55, depthWrite: false,
+                side: THREE.DoubleSide,
+                color: 0xffffff,
+            });
+            const cloudMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(er * 1.025, 72, 72), cloudMat,
+            );
+            cloudMesh.rotation.z = TILT;
+            cloudMesh.visible = false;
+            scene.add(cloudMesh);
+
+            // Load cloud + bump textures (non-blocking)
+            loader.load(TEX_CLOUDS, t => {
+                if (dead) return;
+                cloudMat.map = t;
+                cloudMat.alphaMap = t;
+                cloudMat.needsUpdate = true;
+            });
+            loader.load(TEX_TOPO, t => {
+                if (dead) return;
+                earthMat.bumpMap = t;
+                earthMat.bumpScale = 8;
+                earthMat.needsUpdate = true;
+            });
 
             /* ── Stars: SCREEN-SPACE placement (fills entire viewport) ──── */
             // Each star placed at a random NDC position and pushed to a random depth.
@@ -216,25 +246,36 @@ export function GlobeBackground() {
             colA.setUsage(THREE.DynamicDrawUsage);
             geo.setAttribute('aColor', colA);
 
-            // Pre-bake rainbow colors for light mode
-            const rainbowCol = new Float32Array(STAR_N * 3);
+            // Pre-bake natural white/silver star colors for light mode particles
+            const lightStarCol = new Float32Array(STAR_N * 3);
             for (let i = 0; i < STAR_N; i++) {
-                const hue = (i / STAR_N) * 360; // full rainbow spread
-                // HSL → RGB
-                const h = hue / 60, c2 = 1, x2 = c2 * (1 - Math.abs(h % 2 - 1));
-                let r = 0, g = 0, b2 = 0;
-                if (h < 1) { r = c2; g = x2; }
-                else if (h < 2) { r = x2; g = c2; }
-                else if (h < 3) { g = c2; b2 = x2; }
-                else if (h < 4) { g = x2; b2 = c2; }
-                else if (h < 5) { r = x2; b2 = c2; }
-                else { r = c2; b2 = x2; }
-                rainbowCol[i * 3] = r * 0.9 + 0.1;
-                rainbowCol[i * 3 + 1] = g * 0.9 + 0.1;
-                rainbowCol[i * 3 + 2] = b2 * 0.9 + 0.1;
+                const r2 = Math.random();
+                if (r2 < 0.60) {
+                    // Pure bright white (majority)
+                    const v = 0.92 + Math.random() * 0.08;
+                    lightStarCol[i * 3] = v;
+                    lightStarCol[i * 3 + 1] = v;
+                    lightStarCol[i * 3 + 2] = v;
+                } else if (r2 < 0.85) {
+                    // Cool silver-blue
+                    lightStarCol[i * 3]     = 0.82 + Math.random() * 0.10;
+                    lightStarCol[i * 3 + 1] = 0.88 + Math.random() * 0.08;
+                    lightStarCol[i * 3 + 2] = 0.95 + Math.random() * 0.05;
+                } else {
+                    // Warm pale gold
+                    lightStarCol[i * 3]     = 0.95 + Math.random() * 0.05;
+                    lightStarCol[i * 3 + 1] = 0.90 + Math.random() * 0.06;
+                    lightStarCol[i * 3 + 2] = 0.78 + Math.random() * 0.10;
+                }
             }
 
+            let currentTheme: 'dark' | 'light' = getTheme();
+            let tickTime = 0;
+            const SWARM_R = 220;   // radius around mouse for particle visibility
+            const SWARM_LG = 14 * dpr; // max particle glow size in swarm
+
             const applyTheme = (t: 'dark' | 'light') => {
+                currentTheme = t;
                 const p = PRESETS[t];
                 R.setClearColor(p.clearColor, 1);
                 ambientLight.color.setHex(p.ambientColor);
@@ -245,10 +286,45 @@ export function GlobeBackground() {
                 starMat.uniforms.uOpacity.value = p.starOpacity;
                 earthMat.needsUpdate = true;
                 if (nightMesh) (nightMesh.material as THREE.MeshLambertMaterial).opacity = p.nightOpacity;
-                // Swap star colors: rainbow in light, cool white in dark
-                const src = t === 'light' ? rainbowCol : col;
+                // Star colors: natural white/silver in both modes
+                const src = t === 'light' ? lightStarCol : col;
                 for (let i = 0; i < STAR_N * 3; i++) colA.array[i] = src[i];
                 colA.needsUpdate = true;
+                // Light mode: start with all particles hidden (swarm logic in tick reveals near cursor)
+                if (t === 'light') {
+                    for (let i = 0; i < STAR_N; i++) { sz[i] = 0; tgt[i] = 0; }
+                    szA.needsUpdate = true;
+                }
+
+                // ── Light mode: bright earth + clouds ──
+                const isLight = t === 'light';
+                cloudMesh.visible = isLight;
+
+                // Atmosphere glow: warmer for daytime, cool blue for dark
+                atmosMat.uniforms.uGlowColor.value.set(
+                    isLight ? 0.3  : 0.2,
+                    isLight ? 0.6  : 0.55,
+                    1.0,
+                );
+
+                if (isLight) {
+                    // Vivid bright earth — daytime satellite view
+                    earthMat.transparent = false;
+                    earthMat.opacity = 1.0;
+                    earthMat.color.setHex(0xffffff);  // let texture colors shine through
+                    earthMat.shininess = 40;           // specular highlights on oceans
+                    earthMat.specular = new THREE.Color(0x555555);
+                    if (nightMesh) nightMesh.visible = false;
+                } else {
+                    // Normal dark mode earth
+                    earthMat.transparent = false;
+                    earthMat.opacity = 1.0;
+                    earthMat.color.setHex(0x1a4477);
+                    earthMat.shininess = 25;
+                    earthMat.specular = new THREE.Color(0x111111);
+                    if (nightMesh) nightMesh.visible = true;
+                }
+                earthMat.needsUpdate = true;
             };
             applyTheme(getTheme());
 
@@ -323,13 +399,41 @@ export function GlobeBackground() {
                     const ns = (earth as any).__ns;
                     if (ns) ns.rotation.y = earth.rotation.y;
                 }
-                // Star hover glow — check pre-baked screen positions
-                for (let i = 0; i < STAR_N; i++) {
-                    const dist = Math.hypot(scrX[i] - mouseX, scrY[i] - mouseY);
-                    tgt[i] = dist < HOVER_R
-                        ? base[i] + (1 - dist / HOVER_R) ** 2 * (MAX_GLOW - base[i])
-                        : base[i];
-                    sz[i] += (tgt[i] - sz[i]) * LERP;
+
+                // ── Cloud layer rotation (light mode) ──
+                if (cloudMesh.visible) {
+                    cloudMesh.rotation.y = earth.rotation.y * 0.4 + 0.0003;
+                    cloudMesh.rotation.x = earth.rotation.x;
+                }
+
+                // ── Star / Particle rendering ──
+                tickTime += 0.016;
+                if (currentTheme === 'light') {
+                    // LIGHT MODE: vibrant particles only near mouse cursor
+                    // Particles appear within SWARM_R radius, wobble like water droplets
+                    for (let i = 0; i < STAR_N; i++) {
+                        const dist = Math.hypot(scrX[i] - mouseX, scrY[i] - mouseY);
+                        if (dist < SWARM_R) {
+                            // Fade factor: 1.0 at center → 0.0 at edge
+                            const fade = (1 - dist / SWARM_R);
+                            // Wobble: each particle oscillates at unique phase/freq
+                            const wobble = 0.7 + 0.3 * Math.sin(tickTime * (2.5 + (i % 7) * 0.4) + i * 1.37);
+                            // Size: bigger near center, wobbling, smooth fade at edge
+                            tgt[i] = fade * fade * SWARM_LG * wobble;
+                        } else {
+                            tgt[i] = 0; // invisible outside radius
+                        }
+                        sz[i] += (tgt[i] - sz[i]) * 0.14; // smooth in/out
+                    }
+                } else {
+                    // DARK MODE: standard star hover glow
+                    for (let i = 0; i < STAR_N; i++) {
+                        const dist = Math.hypot(scrX[i] - mouseX, scrY[i] - mouseY);
+                        tgt[i] = dist < HOVER_R
+                            ? base[i] + (1 - dist / HOVER_R) ** 2 * (MAX_GLOW - base[i])
+                            : base[i];
+                        sz[i] += (tgt[i] - sz[i]) * LERP;
+                    }
                 }
                 szA.needsUpdate = true;
                 R.render(scene, camera);

@@ -1,4 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { metaMaskWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets';
 import type { Config } from 'wagmi';
 import {
   polygon,
@@ -89,6 +90,11 @@ const wagmiConfig: Config = getDefaultConfig({
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'cea17a07a0cb8c74b022c41e21294643',
   chains: allChains as unknown as readonly [typeof polygonAmoy, ...typeof allChains],
   ssr: true,
+  // Only MetaMask + WalletConnect — disable Coinbase popup
+  wallets: [{
+    groupName: 'Ví',
+    wallets: [metaMaskWallet, walletConnectWallet],
+  }],
 }) as unknown as Config;
 
 export function getWagmiConfig(): Config {

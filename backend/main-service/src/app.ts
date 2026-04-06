@@ -22,6 +22,7 @@ import onchainRoutes from './modules/onchain/onchain.routes';
 
 
 const app = express();
+app.set('trust proxy', 1); // Behind nginx reverse proxy
 
 app.use(helmet());
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000').split(',');

@@ -21,6 +21,7 @@ import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/or
 import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseAbi, keccak256, toBytes } from 'viem';
+import { CHAIN_META } from '@/lib/web3/config';
 
 interface Order {
   order_id: number;
@@ -472,21 +473,115 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* ── ESCROW INFO BANNER (PAID) ─── */}
-          {order.status === 'PAID' && order.payment_method === 'crypto' && (
-            <div className="p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-start gap-3 mb-6">
-              <Shield className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-emerald-300 text-sm">Tiền đang được giữ trong Escrow Contract</p>
-                <p className="text-xs text-emerald-400/70 mt-1">Tiền của bạn đã được khóa an toàn trong hợp đồng thông minh. Người bán sẽ nhận được tiền sau khi bạn xác nhận nhận hàng.</p>
-                {order.tx_hash && (
-                  <a href={`https://etherscan.io/tx/${order.tx_hash}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:underline mt-1">
-                    TX: {order.tx_hash.slice(0, 12)}...{order.tx_hash.slice(-8)}
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+          {/* ── ESCROW CONTRACT TRACKING PANEL ─── */}
+          {order.payment_method === 'crypto' && order.escrow_contract && (
+            <div className="p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl mb-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                  <p className="font-semibold text-emerald-300 text-sm">Smart Contract Escrow</p>
+                </div>
+                {order.chain_id && CHAIN_META[order.chain_id] && (
+                  <span className="text-[10px] px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full font-bold text-emerald-400">
+                    {CHAIN_META[order.chain_id].name}
+                  </span>
                 )}
               </div>
+
+              {/* Status explanation */}
+              <p className="text-xs text-emerald-400/70">
+                {order.status === 'TX_SUBMITTED' && 'Giao dịch đang chờ xác nhận từ blockchain...'}
+                {order.status === 'ONCHAIN_CONFIRMED' && 'Thanh toán đã xác nhận. Tiền đang khóa trong escrow.'}
+                {order.status === 'PAID' && 'Tiền đã khóa an toàn. Người bán nhận tiền khi bạn xác nhận nhận hàng.'}
+                {(order.status === 'SHIPPED' || order.status === 'DELIVERED') && 'Tiền vẫn khóa. Xác nhận nhận hàng để giải ngân cho người bán.'}
+                {order.status === 'COMPLETED' && 'Escrow đã giải ngân thành công cho người bán.'}
+                {order.status === 'DISPUTED' && 'Tiền đóng băng. Admin đang xem xét khiếu nại.'}
+              </p>
+
+              {/* ── Blockchain Timeline ── */}
+              <div className="flex items-center gap-0 text-[9px] font-bold select-none">
+                {[
+                  { label: 'Deposit', done: ['TX_SUBMITTED','ONCHAIN_CONFIRMED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
+                  { label: 'Confirmed', done: ['ONCHAIN_CONFIRMED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
+                  { label: 'Locked', done: ['PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
+                  { label: 'Released', done: order.status === 'COMPLETED' },
+                ].map((step, i, arr) => (
+                  <div key={step.label} className="flex items-center flex-1">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                      step.done ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/30'
+                    }`}>
+                      {step.done ? <Check className="w-3 h-3" /> : <span>{i + 1}</span>}
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div className={`flex-1 h-0.5 mx-1 transition-all ${step.done ? 'bg-emerald-500/60' : 'bg-white/10'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex text-[8px] text-white/30 font-semibold">
+                <span className="flex-1 text-center">Deposit</span>
+                <span className="flex-1 text-center">Confirmed</span>
+                <span className="flex-1 text-center">Locked</span>
+                <span className="flex-1 text-center">Released</span>
+              </div>
+
+              {/* Contract address */}
+              <div className="space-y-1">
+                <p className="text-[10px] text-gray-500">Escrow Contract</p>
+                <div className="flex items-center gap-2 p-2.5 bg-black/20 rounded-lg">
+                  <p className="font-mono text-[11px] text-emerald-300/80 flex-1 break-all">{order.escrow_contract}</p>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(order.escrow_contract!); toast.success('Đã copy địa chỉ contract'); }}
+                    className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-emerald-400/60 hover:text-emerald-400 transition-colors"
+                    title="Copy address"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </button>
+                  {order.chain_id && CHAIN_META[order.chain_id]?.explorer && CHAIN_META[order.chain_id].explorer !== 'http://localhost:8545' && (
+                    <a
+                      href={`${CHAIN_META[order.chain_id].explorer}/address/${order.escrow_contract}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex-shrink-0 px-2 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded text-[10px] font-bold text-emerald-400 flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Explorer
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* TX Hash */}
+              {order.tx_hash && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500">Transaction Hash</p>
+                  <div className="flex items-center gap-2 p-2.5 bg-black/20 rounded-lg">
+                    <p className="font-mono text-[11px] text-blue-300/80 flex-1 truncate">{order.tx_hash}</p>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(order.tx_hash!); toast.success('Đã copy TX hash'); }}
+                      className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-blue-400/60 hover:text-blue-400 transition-colors"
+                      title="Copy TX hash"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                    </button>
+                    {order.chain_id && CHAIN_META[order.chain_id]?.explorer && CHAIN_META[order.chain_id].explorer !== 'http://localhost:8545' && (
+                      <a
+                        href={`${CHAIN_META[order.chain_id].explorer}/tx/${order.tx_hash}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex-shrink-0 px-2 py-1 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 rounded text-[10px] font-bold text-blue-400 flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" /> TX
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Amount locked */}
+              {order.amount_token && order.amount_token > 0 && (
+                <div className="flex items-center justify-between text-xs p-2.5 bg-black/20 rounded-lg">
+                  <span className="text-gray-500">Số tiền khóa trong escrow</span>
+                  <span className="font-mono font-bold text-emerald-400">{order.amount_token.toFixed(6)} Token</span>
+                </div>
+              )}
             </div>
           )}
 

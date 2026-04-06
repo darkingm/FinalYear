@@ -68,7 +68,7 @@ export function CoinPriceStrip() {
                             {price > 0 ? (
                                 <>
                                     <span className="text-xs font-mono text-foreground">
-                                        ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: price > 100 ? 2 : 4 })}
+                                        ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: price > 100 ? 2 : 4 })}
                                     </span>
                                     <span className={`text-[10px] font-bold ${isPos ? 'text-emerald-500' : 'text-red-500'}`}>
                                         {isPos ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%

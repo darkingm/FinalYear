@@ -113,7 +113,7 @@ export function MarketOverview() {
                                             </td>
                                             <td className="px-6 py-4 text-right whitespace-nowrap">
                                                 <Link href={`/trading/chart/${ticker.symbol}`}>
-                                                    <span className="font-medium dark:text-gray-200">${parseFloat(ticker.lastPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                                                    <span className="font-medium dark:text-gray-200">${parseFloat(ticker.lastPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                                                 </Link>
                                             </td>
                                             <td className="px-6 py-4 text-right whitespace-nowrap">
@@ -125,7 +125,7 @@ export function MarketOverview() {
                                             </td>
                                             <td className="px-6 py-4 text-right whitespace-nowrap hidden sm:table-cell text-gray-500 dark:text-gray-400">
                                                 <Link href={`/trading/chart/${ticker.symbol}`}>
-                                                    {parseFloat(ticker.volume).toLocaleString(undefined, { maximumFractionDigits: 0 })} {displaySymbol}
+                                                    {parseFloat(ticker.volume).toLocaleString('en-US', { maximumFractionDigits: 0 })} {displaySymbol}
                                                 </Link>
                                             </td>
                                         </motion.tr>

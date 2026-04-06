@@ -20,9 +20,9 @@ interface Props {
 type FilterType = 'ALL' | 'BUY' | 'SELL' | 'TRANSFER';
 
 const CHAIN_EXPLORERS: Record<string, string> = {
-    BSC: 'https://bscscan.com/tx/',
-    ETH: 'https://etherscan.io/tx/',
-    POLYGON: 'https://polygonscan.com/tx/',
+    BSC: 'https://bscscan.com/',
+    ETH: 'https://etherscan.io/',
+    POLYGON: 'https://polygonscan.com/',
 };
 
 function fmtUsd(n: number) {
@@ -254,7 +254,7 @@ export function WalletDetailModal({ wallet, onClose }: Props) {
 
                                         {/* TXN link */}
                                         <div className="flex justify-end">
-                                            <a href={`${explorer}${tx.hash}`} target="_blank" rel="noopener noreferrer"
+                                            <a href={`${explorer}tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
                                                 className="text-white/20 hover:text-violet-400 transition-colors">
                                                 <ExternalLink className="w-3 h-3" />
                                             </a>
@@ -270,7 +270,7 @@ export function WalletDetailModal({ wallet, onClose }: Props) {
                         <p className="text-[10px] text-white/20">
                             {displayRows.length} giao dịch · {source === 'live' ? '⚡ Từ blockchain' : '🗃️ Từ DB'}
                         </p>
-                        <a href={`${explorer.replace('/tx/', '/address/')}${wallet.address}`}
+                        <a href={`${explorer}address/${wallet.address}`}
                             target="_blank" rel="noopener noreferrer"
                             className="text-[10px] text-violet-400 hover:text-violet-300 flex items-center gap-1">
                             <ExternalLink className="w-3 h-3" />Xem trên Explorer

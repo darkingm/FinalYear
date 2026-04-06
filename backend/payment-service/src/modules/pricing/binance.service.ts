@@ -17,6 +17,7 @@ export class BinanceService {
     // Check cache first (1 second TTL)
     const cached = await this.getCachedPrice(symbol);
     if (cached) {
+      if (cached === -1) throw new Error(`Cả Binance và CoinGecko đều đang rớt mạng cho ${symbol} (Đã chặn bởi Circuit Breaker)`);
       return cached;
     }
 
@@ -24,6 +25,7 @@ export class BinanceService {
     try {
       const response = await axios.get(`${this.baseUrl}/ticker/price`, {
         params: { symbol },
+        timeout: 3000, // Thêm timeout tránh bị treo
       });
 
       const price = parseFloat(response.data.price);
@@ -33,7 +35,36 @@ export class BinanceService {
 
       return price;
     } catch (error) {
-      logger.error('Error fetching price from Binance:', error);
+      logger.error(`Error fetching price from Binance for ${symbol}, attempting fallback...`, error);
+
+      // CoinGecko Fallback Map
+      const cgMap: Record<string, string> = {
+        'ETHUSDT': 'ethereum',
+        'MATICUSDT': 'matic-network',
+        'BNBUSDT': 'binancecoin',
+        'BTCUSDT': 'bitcoin',
+        'ARBUSDT': 'arbitrum'
+      };
+      
+      const cgId = cgMap[symbol];
+      if (cgId) {
+        try {
+          const cgResp = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=usd`, {
+            timeout: 3000
+          });
+          if (cgResp.data[cgId]?.usd) {
+            const price = parseFloat(cgResp.data[cgId].usd);
+            logger.info(`CoinGecko fallback successful for ${symbol}: $${price}`);
+            await setCache(`price:${symbol}`, price, 1);
+            return price;
+          }
+        } catch(fallbackErr) {
+          logger.error(`CoinGecko fallback also failed for ${symbol}:`, fallbackErr);
+        }
+      }
+
+      // Negative Cache cho Circuit Breaker (10s)
+      await setCache(`price:${symbol}`, -1, 10);
       throw error;
     }
   }

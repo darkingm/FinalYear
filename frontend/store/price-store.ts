@@ -34,10 +34,10 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let jitterTimer: ReturnType<typeof setInterval> | null = null;
 let pollSymbols: string[] = [];
 
-/** Tiny noise: ±0.1% around the real price */
+/** Tiny noise: ±0.005% around the real price — subtle breathing */
 const applyJitter = (real: number): number => {
   const noise = (Math.random() - 0.5) * 2; // [-1, 1]
-  return real * (1 + noise * 0.0001);        // ±0.01%
+  return real * (1 + noise * 0.00005);       // ±0.005% — barely noticeable
 };
 
 export const usePriceStore = create<PriceState>()((set, get) => ({
@@ -103,11 +103,11 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
       }
     };
 
-    // Real Binance fetch every 5s
+    // Real Binance fetch every 5s (same as Binance web ticker)
     fetchAll();
-    pollTimer = setInterval(fetchAll, 2000);
+    pollTimer = setInterval(fetchAll, 5000);
 
-    // Local micro-jitter every 400ms — smooth price breathing between polls
+    // Local micro-jitter every 2s — gentle price breathing between polls
     jitterTimer = setInterval(() => {
       const jittered: Record<string, PriceData> = {};
       let hasAny = false;
@@ -122,7 +122,7 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
       if (hasAny) {
         set((state) => ({ prices: { ...state.prices, ...jittered } }));
       }
-    }, 400);
+    }, 2000);
 
     set({ isConnected: true });
   },

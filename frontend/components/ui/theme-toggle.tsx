@@ -20,7 +20,7 @@ export function ThemeToggle() {
 
   return (
     <button
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setTheme(isDark ? 'light' : 'dark'); }}
       title={isDark ? 'Chuyển sang chế độ sáng' : 'Chuyển sang chế độ tối'}
       className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-200 group border ${isDark
           ? 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'

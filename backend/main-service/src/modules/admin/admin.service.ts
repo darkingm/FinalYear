@@ -2,6 +2,7 @@ import { query } from '../../config/database';
 import { publishEvent } from '../../config/rabbitmq';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
+import { deleteCache } from '../../config/redis';
 
 export class AdminService {
     // ─── Dashboard Stats ──────────────────────────────────────────────
@@ -580,6 +581,7 @@ export class AdminService {
             'UPDATE token_whitelist SET is_active = $1 WHERE token_id = $2',
             [isActive, tokenId]
         );
+        await deleteCache('token_whitelist');
     }
 
     async getAuditLogs(params: { page?: number; limit?: number; entity_type?: string }) {

@@ -3,6 +3,7 @@ import { AuthRequest } from '../../middleware/auth.middleware';
 import { ProductService } from './products.service';
 import { logger } from '../../utils/logger';
 import { query } from '../../config/database';
+import { setCache, getCache } from '../../config/redis';
 
 const productService = new ProductService();
 
@@ -46,7 +47,20 @@ export async function getProducts(req: AuthRequest, res: Response, next: NextFun
       acceptsCrypto: req.query.acceptsCrypto === 'true',
       tokenSymbol: (req.query.token || req.query.token_symbol) as string | undefined,
     };
+
+    // Cache default explore page
+    const isDefault = filters.page === 1 && filters.limit === 20 && !filters.category && !filters.minPrice && !filters.maxPrice && !filters.search && !filters.acceptsCrypto && !filters.tokenSymbol;
+    if (isDefault) {
+      const cached: any = await getCache('explore_default');
+      if (cached) return res.json({ success: true, data: cached.products, pagination: cached.pagination });
+    }
+
     const result = await productService.getProducts(filters);
+
+    if (isDefault) {
+      await setCache('explore_default', result, 30);
+    }
+
     res.json({ success: true, data: result.products, pagination: result.pagination });
   } catch (error: any) {
     next(error);
@@ -55,6 +69,9 @@ export async function getProducts(req: AuthRequest, res: Response, next: NextFun
 
 export async function getTokens(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    const cached = await getCache('token_whitelist');
+    if (cached) return res.json({ success: true, data: cached });
+
     const result = await query(
       `SELECT tw.*, 0::int AS product_count
        FROM token_whitelist tw
@@ -62,6 +79,7 @@ export async function getTokens(req: AuthRequest, res: Response, next: NextFunct
        ORDER BY tw.symbol`
     );
 
+    await setCache('token_whitelist', result.rows, 3600); // Cache 1 giờ
     res.json({ success: true, data: result.rows });
   } catch (error: any) {
     next(error);
@@ -162,9 +180,16 @@ export async function getMyProducts(req: AuthRequest, res: Response, next: NextF
 
 export async function getHomepageProducts(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    const coinsStr = (req.query.coins as string) || 'default';
+    const cacheKey = `homepage_products:${coinsStr}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json({ success: true, data: cached });
+
     const coins = (req.query.coins as string)?.split(',').map(c => c.trim().toUpperCase())
       || ['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'USDC', 'MATIC', 'DOGE'];
     const products = await productService.getHomepageProducts(coins);
+    
+    await setCache(cacheKey, products, 30); // 30s TTL
     res.json({ success: true, data: products });
   } catch (error: any) {
     next(error);

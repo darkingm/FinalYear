@@ -110,7 +110,7 @@ export default function PortfolioPage() {
                                 {/* Summary cards */}
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
                                     {[
-                                        { label: 'Portfolio Value', value: `$${totalValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: <Coins className="w-5 h-5" />, color: 'text-[#f0b90b]' },
+                                        { label: 'Portfolio Value', value: `$${totalValueUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, icon: <Coins className="w-5 h-5" />, color: 'text-[#f0b90b]' },
                                         { label: 'Holdings', value: holdings.length.toString(), icon: <Building className="w-5 h-5" />, color: 'text-blue-400' },
                                         { label: 'Unclaimed Rewards', value: `${totalPendingEth.toFixed(6)} ETH`, icon: <Gift className="w-5 h-5" />, color: 'text-emerald-400' },
                                     ].map(c => (

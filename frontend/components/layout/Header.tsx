@@ -355,13 +355,18 @@ export function Header() {
                                 </DropdownMenu>
                               </>
                             ) : (
-                              <button
-                                onClick={openConnectModal}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#8247e5]/10 border border-[#8247e5]/30 hover:bg-[#8247e5]/20 transition-colors text-xs font-bold text-[#8247e5]"
-                              >
-                                <Wallet className="w-3.5 h-3.5" />
-                                Kết nối ví
-                              </button>
+                              /* Ví chưa kết nối — icon nhỏ dẫn tới /wallet, KHÔNG tự popup */
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Link
+                                    href="/wallet"
+                                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors"
+                                  >
+                                    <Wallet className="w-4 h-4" />
+                                  </Link>
+                                </TooltipTrigger>
+                                <TooltipContent>Kết nối ví Web3</TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                         );

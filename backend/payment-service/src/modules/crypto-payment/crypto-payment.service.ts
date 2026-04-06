@@ -33,23 +33,51 @@ const ESCROW_BY_CHAIN: Record<number, string | undefined> = {
 
 export class CryptoPaymentService {
   private binanceService: BinanceService;
-  private providers: Map<number, ethers.JsonRpcProvider>;
+  private providers: Map<number, ethers.AbstractProvider>;
 
   constructor() {
     this.binanceService = new BinanceService();
     this.providers = new Map();
 
     const localRpc = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
-    const amoyRpc = process.env.POLYGON_AMOY_RPC_URL        // correct env var
-      || process.env.POLYGON_MUMBAI_RPC_URL      // fallback
-      || 'https://polygon-amoy.drpc.org';        // public fallback
+
+    // Create robust FallbackProvider for Polygon Amoy (80002)
+    const amoyRpcs = [
+      process.env.POLYGON_AMOY_RPC_URL,
+      process.env.POLYGON_MUMBAI_RPC_URL,
+      'https://polygon-amoy.drpc.org',
+      'https://rpc-amoy.polygon.technology'
+    ].filter(Boolean) as string[];
+    const amoyFallback = new ethers.FallbackProvider(
+      amoyRpcs.map(url => new ethers.JsonRpcProvider(url))
+    );
+
+    // Create robust FallbackProvider for Polygon Mainnet (137)
+    const polyRpcs = [
+      process.env.POLYGON_RPC_URL,
+      'https://polygon.drpc.org',
+      'https://polygon-rpc.com'
+    ].filter(Boolean) as string[];
+    const polyFallback = new ethers.FallbackProvider(
+      polyRpcs.map(url => new ethers.JsonRpcProvider(url))
+    );
+
+    // Create robust FallbackProvider for BSC Testnet (97)
+    const bscTestRpcs = [
+      process.env.BSC_TESTNET_RPC_URL,
+      'https://data-seed-prebsc-1-s1.binance.org:8545',
+      'https://data-seed-prebsc-2-s1.binance.org:8545'
+    ].filter(Boolean) as string[];
+    const bscTestFallback = new ethers.FallbackProvider(
+      bscTestRpcs.map(url => new ethers.JsonRpcProvider(url))
+    );
 
     this.providers.set(31337, new ethers.JsonRpcProvider(localRpc));
-    this.providers.set(80002, new ethers.JsonRpcProvider(amoyRpc));
+    this.providers.set(80002, amoyFallback);
     this.providers.set(80001, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
-    this.providers.set(137, new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL));
+    this.providers.set(137, polyFallback);
     this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
-    this.providers.set(97, new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'));
+    this.providers.set(97, bscTestFallback);
     this.providers.set(421614, new ethers.JsonRpcProvider(process.env.ARB_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'));
     this.providers.set(84532, new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
   }

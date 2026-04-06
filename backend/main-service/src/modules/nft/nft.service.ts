@@ -38,8 +38,17 @@ async function pinataUpload(data: object, name: string): Promise<string> {
 }
 
 // ─── On-chain interaction ────────────────────────────────────────────────────
+
+/** Provider for ProductNFT (Polygon mainnet / testnet) */
 function getProvider() {
   const rpc = process.env.POLYGON_RPC_URL || 'https://polygon.drpc.org';
+  return new ethers.JsonRpcProvider(rpc);
+}
+
+/** Provider for CreditScoreSBT (VPS Hardhat node or Polygon) */
+function getSBTProvider() {
+  // CreditScoreSBT lives on the same chain as EscrowCore (localhost Hardhat node on VPS)
+  const rpc = process.env.LOCALHOST_RPC_URL || process.env.POLYGON_RPC_URL || 'https://polygon.drpc.org';
   return new ethers.JsonRpcProvider(rpc);
 }
 
@@ -47,6 +56,12 @@ function getWallet() {
   const pk = process.env.MINTER_PRIVATE_KEY || process.env.PRIVATE_KEY;
   if (!pk) throw new AppError('Minter private key not configured', 500);
   return new ethers.Wallet(pk, getProvider());
+}
+
+function getSBTWallet() {
+  const pk = process.env.MINTER_PRIVATE_KEY || process.env.PRIVATE_KEY;
+  if (!pk) throw new AppError('Minter private key not configured', 500);
+  return new ethers.Wallet(pk, getSBTProvider());
 }
 
 const PRODUCT_NFT_ABI = [
@@ -77,7 +92,7 @@ function getProductNFTContract(withSigner = false) {
 function getCreditSBTContract(withSigner = false) {
   const address = process.env.CREDIT_SBT_ADDRESS;
   if (!address) throw new AppError('CreditScoreSBT contract address not configured', 500);
-  const provider = withSigner ? getWallet() : getProvider();
+  const provider = withSigner ? getSBTWallet() : getSBTProvider();
   return new ethers.Contract(address, CREDIT_SBT_ABI, provider);
 }
 

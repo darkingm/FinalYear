@@ -14,7 +14,7 @@ import {
   ShoppingBag, Shield, Zap, ArrowRight, TrendingUp,
   Package, ChevronRight, BarChart3, Wallet, RefreshCw, Activity, Search,
 } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useWallet } from '@/lib/hooks/useWallet';
 import { formatCurrency, formatCrypto } from '@/lib/utils/format';
 import { CoinImage } from '@/components/ui/CoinImage';
@@ -31,6 +31,209 @@ import {
 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
+
+
+/* ─── Build realistic daily chart from low/high/price ── */
+function hashSymbol(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+interface ChartData {
+  path: string; fillPath: string;
+  peakX: number; peakY: number; peakVal: number;
+  valleyX: number; valleyY: number; valleyVal: number;
+}
+
+function buildDailyChart(low: number, high: number, price: number, symbol: string): ChartData {
+  const empty: ChartData = { path: '', fillPath: '', peakX: 0, peakY: 0, peakVal: 0, valleyX: 0, valleyY: 0, valleyVal: 0 };
+  if (low <= 0 || high <= 0 || price <= 0) return empty;
+  const N = 28; // 28 data points ≈ 7 days (4 per day)
+  const range = high - low || 1;
+  const w = 100, h = 36, pad = 4;
+  // Seed based on SYMBOL (stable) not price
+  const seed = hashSymbol(symbol) % 997;
+  const points: number[] = [];
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    const openPrice = low + range * 0.35;
+    const base = openPrice + (price - openPrice) * t;
+    // Multi-frequency noise — realistic market pattern
+    const noise = Math.sin(seed * 0.13 + i * 1.7) * range * 0.18
+      + Math.sin(seed * 0.31 + i * 2.9) * range * 0.10
+      + Math.cos(seed * 0.07 + i * 0.6) * range * 0.14
+      + Math.sin(seed * 0.53 + i * 4.3) * range * 0.05;
+    let v = base + noise;
+    v = Math.max(low, Math.min(high, v));
+    if (i === 0) v = openPrice;
+    if (i === N - 1) v = price;
+    points.push(v);
+  }
+  // Find peak and valley (skip first/last)
+  let peakIdx = 1, valleyIdx = 1;
+  for (let i = 2; i < N - 1; i++) {
+    if (points[i] > points[peakIdx]) peakIdx = i;
+    if (points[i] < points[valleyIdx]) valleyIdx = i;
+  }
+  const toY = (v: number) => h - pad - ((v - low) / range) * (h - pad * 2);
+  const step = w / (N - 1);
+  const pathD = points.map((p, i) => {
+    const x = (i * step).toFixed(1);
+    const y = toY(p).toFixed(1);
+    return `${i === 0 ? 'M' : 'L'}${x},${y}`;
+  }).join(' ');
+  const fillD = `${pathD} L${w},${h} L0,${h} Z`;
+  return {
+    path: pathD, fillPath: fillD,
+    peakX: peakIdx * step, peakY: toY(points[peakIdx]), peakVal: points[peakIdx],
+    valleyX: valleyIdx * step, valleyY: toY(points[valleyIdx]), valleyVal: points[valleyIdx],
+  };
+}
+
+/* ─── Hero Coin Card ─────────────────────────────── */
+function CoinHeroCard({ coinInfo, prices: cardPrices, index }: {
+  coinInfo: { symbol: string; name: string; short: string; color: string };
+  prices: Record<string, any>;
+  index: number;
+}) {
+  const priceData = cardPrices[coinInfo.symbol];
+  const price = priceData?.price ?? 0;
+  const change = priceData?.change24h ?? 0;
+  const isPos = change >= 0;
+  const displaySymbol = coinInfo.symbol.replace('USDT', '');
+  const vol24h = priceData?.volume24h ?? 0;
+  const high = priceData?.high24h ?? 0;
+  const low = priceData?.low24h ?? 0;
+
+  // Flash on price change
+  const prevPriceRef = useRef(0);
+  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+  useEffect(() => {
+    if (price > 0 && prevPriceRef.current > 0 && price !== prevPriceRef.current) {
+      setFlash(price > prevPriceRef.current ? 'up' : 'down');
+      const t = setTimeout(() => setFlash(null), 800);
+      return () => clearTimeout(t);
+    }
+    prevPriceRef.current = price;
+  }, [price]);
+
+  // Generate realistic chart shape — seed from symbol (stable), scale from price data
+  const chart = useMemo(() => buildDailyChart(low, high, price, coinInfo.symbol), [low, high, price, coinInfo.symbol]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.92 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 100, damping: 18, delay: 0.3 + index * 0.12 }}
+      whileHover={{ y: -4, transition: { duration: 0.25 } }}
+    >
+      <Link href={`/trading/${coinInfo.symbol}`}>
+        <div className="group relative bg-card/60 backdrop-blur-xl border border-border/50 rounded-2xl p-5 hover:border-border transition-all duration-300 cursor-pointer overflow-hidden">
+          {/* Glow */}
+          <div
+            className="absolute -inset-1 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl pointer-events-none"
+            style={{ background: `radial-gradient(circle at 50% 50%, ${coinInfo.color}18, transparent 70%)` }}
+          />
+          <div
+            className="absolute top-0 left-6 right-6 h-[1.5px] rounded-full opacity-0 group-hover:opacity-80 transition-opacity"
+            style={{ background: `linear-gradient(90deg, transparent, ${coinInfo.color}, transparent)` }}
+          />
+
+          {/* Header */}
+          <div className="relative flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <motion.div
+                className="w-11 h-11 rounded-xl flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${coinInfo.color}22, ${coinInfo.color}08)`,
+                  border: `1.5px solid ${coinInfo.color}30`,
+                }}
+                whileHover={{ scale: 1.1, rotate: 3 }}
+                transition={{ type: 'spring', stiffness: 300 }}
+              >
+                <CoinImage symbol={displaySymbol} size={26} />
+              </motion.div>
+              <div>
+                <p className="text-sm font-bold text-foreground leading-tight">{displaySymbol}</p>
+                <p className="text-[11px] text-muted-foreground">{coinInfo.name}</p>
+              </div>
+            </div>
+            <motion.span
+              className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg ${isPos
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                : 'bg-red-500/15 text-red-600 dark:text-red-400'
+              }`}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.6 + index * 0.1 }}
+            >
+              <TrendingUp className={`w-3 h-3 ${!isPos ? 'rotate-180' : ''}`} />
+              {Math.abs(change).toFixed(2)}%
+            </motion.span>
+          </div>
+
+          {/* Price — stable display with flash effect */}
+          <div className="relative mb-2">
+            {price > 0 ? (
+              <p className={`text-2xl font-bold font-mono tracking-tight transition-colors duration-500 ${
+                flash === 'up' ? 'text-emerald-400' : flash === 'down' ? 'text-red-400' : 'text-foreground'
+              }`}>
+                ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            ) : (
+              <div className="h-8 w-36 bg-muted/50 rounded-lg animate-pulse" />
+            )}
+          </div>
+
+          {/* Daily Chart — coin-colored with peak/valley labels */}
+          <div className="mb-3 h-12">
+            {chart.path ? (
+              <svg viewBox="0 0 100 36" className="w-full h-full" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id={`sg-${displaySymbol}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={coinInfo.color} stopOpacity="0.25" />
+                    <stop offset="100%" stopColor={coinInfo.color} stopOpacity="0.03" />
+                  </linearGradient>
+                </defs>
+                <path d={chart.fillPath} fill={`url(#sg-${displaySymbol})`} />
+                <path d={chart.path} fill="none" stroke={coinInfo.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                {/* Peak dot + label */}
+                <circle cx={chart.peakX} cy={chart.peakY} r="1.5" fill={coinInfo.color} />
+                <text x={Math.min(chart.peakX, 85)} y={Math.max(chart.peakY - 2, 5)} fontSize="3.2" fill={coinInfo.color} fontFamily="monospace" opacity="0.8">
+                  {chart.peakVal >= 1000 ? `${(chart.peakVal/1000).toFixed(1)}K` : chart.peakVal.toFixed(1)}
+                </text>
+                {/* Valley dot + label */}
+                <circle cx={chart.valleyX} cy={chart.valleyY} r="1.5" fill="#ef4444" />
+                <text x={Math.min(chart.valleyX, 85)} y={Math.min(chart.valleyY + 5, 35)} fontSize="3.2" fill="#ef4444" fontFamily="monospace" opacity="0.8">
+                  {chart.valleyVal >= 1000 ? `${(chart.valleyVal/1000).toFixed(1)}K` : chart.valleyVal.toFixed(1)}
+                </text>
+              </svg>
+            ) : (
+              <div className="w-full h-full bg-muted/30 rounded animate-pulse" />
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-center justify-between text-xs border-t border-border/50 pt-2.5">
+            <div>
+              <p className="text-muted-foreground text-[10px]">Vol 24h</p>
+              <p className="font-mono font-semibold text-foreground text-[11px]">
+                ${vol24h.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-muted-foreground text-[10px]">24h Range</p>
+              <p className="font-mono font-semibold text-foreground text-[11px]">
+                ${low.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })} – ${high.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
 
 /* ─── Types ──────────────────────────────────────── */
 type Product = ProductCardData & {
@@ -205,7 +408,7 @@ function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof
         <Link href={`/trading/${symbol}`}>
           <span className={`font-mono font-semibold text-sm transition-colors duration-500 ${flash === 'up' ? 'text-emerald-400' : flash === 'down' ? 'text-red-400' : 'text-foreground'
             }`}>
-            ${priceData.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+            ${priceData.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
           </span>
         </Link>
       </td>
@@ -216,7 +419,7 @@ function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof
         </span>
       </td>
       <td className="px-5 py-3.5 text-right text-xs text-muted-foreground hidden sm:table-cell font-mono">
-        {priceData.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0, notation: 'compact' })} {displaySymbol}
+        {priceData.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0, notation: 'compact' })} {displaySymbol}
       </td>
       <td className="px-5 py-3.5 text-right hidden md:table-cell">
         <div className="text-xs">
@@ -562,95 +765,11 @@ export default function HomePage() {
                 initial={{ opacity: 0, x: 30 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                className="hidden md:grid grid-cols-2 gap-3"
+                className="hidden md:grid grid-cols-2 gap-4"
               >
-                {TOP_COINS.slice(0, 4).map((coinInfo, i) => {
-                  const priceData = prices[coinInfo.symbol];
-                  const isPos = (priceData?.change24h ?? 0) >= 0;
-                  const displaySymbol = coinInfo.symbol.replace('USDT', '');
-                  const price = priceData?.price ?? 0;
-                  const high = priceData?.high24h ?? 0;
-                  const low = priceData?.low24h ?? 0;
-                  const vol24h = priceData?.volume24h ?? 0;
-                  const priceRange = high - low;
-                  const pricePosition = priceRange > 0 ? ((price - low) / priceRange) * 100 : 50;
-
-                  return (
-                    <motion.div
-                      key={coinInfo.symbol}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4 + i * 0.1 }}
-                      className={`h-full ${i % 2 === 1 ? 'mt-6' : ''}`}
-                    >
-                      <Link href={`/trading/${coinInfo.symbol}`}>
-                        <div
-                          className="group h-full bg-card/80 backdrop-blur-md border border-border rounded-2xl p-4 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden"
-                          style={{ ['--coin-color' as string]: coinInfo?.color }}
-                        >
-                          <div
-                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl"
-                            style={{ boxShadow: `inset 0 0 30px ${coinInfo?.color}10, 0 4px 20px ${coinInfo?.color}08` }}
-                          />
-                          <div
-                            className="absolute top-0 left-4 right-4 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{ background: `linear-gradient(90deg, transparent, ${coinInfo?.color}, transparent)` }}
-                          />
-                          <div className="relative z-10">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2.5">
-                                <div
-                                  className="w-10 h-10 rounded-full flex items-center justify-center shadow-md group-hover:scale-110 transition-transform"
-                                  style={{ backgroundColor: `${coinInfo?.color}20`, border: `2px solid ${coinInfo?.color}35` }}
-                                >
-                                  <CoinImage symbol={displaySymbol} size={24} />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold text-foreground">{displaySymbol}</p>
-                                  <p className="text-[10px] text-muted-foreground">{coinInfo?.name}</p>
-                                </div>
-                              </div>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPos ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'
-                                }`}>
-                                {isPos ? '▲' : '▼'} {Math.abs(priceData?.change24h ?? 0).toFixed(2)}%
-                              </span>
-                            </div>
-                            <p className="text-xl font-bold text-foreground font-mono mb-1">
-                              {price > 0 ? `$${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="text-muted-foreground text-base">Loading...</span>}
-                            </p>
-                            <div className="mb-3">
-                              <div className="flex justify-between text-[9px] text-muted-foreground mb-0.5">
-                                <span>L: ${low.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                                <span>H: ${high.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="h-1 bg-muted rounded-full overflow-hidden relative">
-                                <div className="h-full bg-gradient-to-r from-red-400 via-yellow-400 to-emerald-400 rounded-full" />
-                                <div
-                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-foreground rounded-full border border-background shadow-sm transition-all duration-300"
-                                  style={{ left: `calc(${Math.min(Math.max(pricePosition, 5), 95)}% - 4px)` }}
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="bg-muted/50 rounded-lg px-2 py-1.5">
-                                <p className="text-[9px] text-muted-foreground">KL 24h</p>
-                                <p className="text-[11px] font-bold font-mono text-foreground">
-                                  ${vol24h.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 })}
-                                </p>
-                              </div>
-                              <div className="bg-muted/50 rounded-lg px-2 py-1.5">
-                                <p className="text-[9px] text-muted-foreground">Market Cap</p>
-                                <p className="text-[11px] font-bold font-mono text-foreground">
-                                  ${(vol24h * 12).toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    </motion.div>
-                  );
-                })}
+                {TOP_COINS.slice(0, 4).map((coinInfo, i) => (
+                  <CoinHeroCard key={coinInfo.symbol} coinInfo={coinInfo} prices={prices} index={i} />
+                ))}
               </motion.div>
             </div>
           </div>

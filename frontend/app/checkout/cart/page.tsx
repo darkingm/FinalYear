@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import {
   useAccount, useWalletClient, useSwitchChain,
-  useReadContract, useWriteContract,
+  useReadContract, useWriteContract, useBalance,
 } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion } from 'framer-motion';
@@ -161,6 +161,13 @@ export default function CartCheckoutPage() {
     }
   }, [selectedNet]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* Native Balance Check */
+  const { data: nativeBalance } = useBalance({
+    address: address,
+    chainId: quote?.chain_id,
+    query: { enabled: !!address && !!quote },
+  });
+
   /* ERC-20 allowance */
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: quote?.token_address as Address,
@@ -247,6 +254,10 @@ export default function CartCheckoutPage() {
 
   const handleApprove = async () => {
     if (!quote || !address) return;
+    if (nativeBalance && Number(nativeBalance.formatted) < 0.001) {
+      toast.error('Giao dịch thất bại! Bạn cần tối thiểu 0.001 MATIC/BNB/ETH trong ví để làm phí Gas chuyển mạng.');
+      return;
+    }
     setPayStep('approve');
     try {
       await writeContractAsync({
@@ -273,6 +284,10 @@ export default function CartCheckoutPage() {
     if (!quote || !walletClient || !address) { toast.error('Kết nối ví'); return; }
     if (isWrongChain) { await handleSwitchChain(); return; }
     if (timeLeft === 0) { toast.error('Báo giá đã hết hạn — lấy lại báo giá'); setQuote(null); setStep(2); return; }
+    if (nativeBalance && Number(nativeBalance.formatted) < 0.001) {
+      toast.error('Giao dịch thất bại! Bạn cần tối thiểu 0.001 MATIC/BNB/ETH trong ví để làm phí Gas chuyển mạng.');
+      return;
+    }
 
     setSubmitting(true);
     setPayStep('sending');

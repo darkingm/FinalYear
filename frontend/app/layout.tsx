@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import dynamic from 'next/dynamic';
+import { ChunkErrorBoundary } from '@/components/error/ChunkErrorBoundary';
 
 const GlobeBackground = dynamic(
   () => import('@/components/ui/GlobeBackground').then(m => ({ default: m.GlobeBackground })),
@@ -137,9 +138,11 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <Providers>
-          <GlobeBackground />
-          <AIChatBubble />
-          {children}
+          <ChunkErrorBoundary>
+            <GlobeBackground />
+            <AIChatBubble />
+            {children}
+          </ChunkErrorBoundary>
         </Providers>
       </body>
     </html>

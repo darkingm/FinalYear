@@ -7,7 +7,7 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 });
 
 pool.on('error', (err: Error) => {
@@ -17,9 +17,9 @@ pool.on('error', (err: Error) => {
 // Secondary DB for reading/updating orders (marketplace_db)
 export const mainPool = new Pool({
   connectionString: process.env.MAIN_DATABASE_URL || process.env.DATABASE_URL?.replace('payment_db', 'marketplace_db')?.replace('postgres-payment', 'postgres'),
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: 5,
+  idleTimeoutMillis: 60000,
+  connectionTimeoutMillis: 10000,
 });
 
 mainPool.on('error', (err: Error) => {
@@ -32,9 +32,14 @@ export async function connectDatabase() {
     logger.info('Payment service database connected (payment_db)');
     client.release();
 
-    const mainClient = await mainPool.connect();
-    logger.info('Main marketplace database connected (marketplace_db)');
-    mainClient.release();
+    // marketplace_db is secondary — don't block startup if it's slow
+    try {
+      const mainClient = await mainPool.connect();
+      logger.info('Main marketplace database connected (marketplace_db)');
+      mainClient.release();
+    } catch (mainErr) {
+      logger.warn('marketplace_db connection slow/unavailable on startup — will retry on first query', mainErr);
+    }
 
     return pool;
   } catch (error) {

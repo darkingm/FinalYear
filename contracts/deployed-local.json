@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-02T02:47:41.783Z",
+  "network": "vps",
+  "chainId": 31337,
+  "contracts": {
+    "EscrowCore": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "CreditScoreSBT": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "FeeVault": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  },
+  "accounts": {
+    "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "operatorRole": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "updaterRole": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  }
+}
