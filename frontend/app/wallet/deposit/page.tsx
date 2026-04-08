@@ -11,6 +11,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface Chain {
     chain_id: number; name: string; type: string; symbol: string;
@@ -202,11 +203,10 @@ export default function WalletDepositPage() {
                                             </div>
                                         </div>
 
-                                        {/* QR Placeholder */}
+                                        {/* QR Code */}
                                         <div className="flex justify-center">
                                             <div className="w-36 h-36 rounded-xl bg-white p-3 flex items-center justify-center">
-                                                <QrCode className="w-full h-full text-black/80" />
-                                                {/* In production, render actual QR via qrcode library */}
+                                                <QRCodeSVG value={selectedChain.deposit_address} size={120} bgColor="#ffffff" fgColor="#000000" level="M" />
                                             </div>
                                         </div>
 

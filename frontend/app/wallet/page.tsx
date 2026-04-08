@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
@@ -9,7 +9,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount, useSignMessage, useBalance } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -91,6 +91,20 @@ function shortAddr(addr: string) {
   return `${addr.slice(0, 10)}...${addr.slice(-6)}`;
 }
 
+/* ─── Balance display per wallet (each uses its own useBalance hook) ────── */
+function WalletBalanceDisplay({ address }: { address: string }) {
+  const { data, isLoading } = useBalance({ address: address as `0x${string}` });
+  if (isLoading) return <span className="text-[10px] text-muted-foreground animate-pulse">Loading...</span>;
+  if (!data) return <span className="text-[10px] text-muted-foreground">—</span>;
+  const val = parseFloat(data.formatted);
+  const display = val >= 1000 ? val.toLocaleString('en-US', { maximumFractionDigits: 2 }) : val >= 0.01 ? val.toFixed(4) : val.toFixed(6);
+  return (
+    <span className="text-xs font-bold text-emerald-400">
+      {display} <span className="text-muted-foreground font-normal">{data.symbol}</span>
+    </span>
+  );
+}
+
 /* ─── Main component ─────────────────────────────────────────────────────── */
 export default function WalletPage() {
   const router = useRouter();
@@ -141,6 +155,20 @@ export default function WalletPage() {
   }, [isAuthenticated]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  /* ─── Detect MetaMask account switch ───────────────────────────────── */
+  const prevAddrRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!address || address === prevAddrRef.current) { prevAddrRef.current = address; return; }
+    prevAddrRef.current = address;
+    const already = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
+    if (already) {
+      toast.info(`Đã chuyển sang ví đã liên kết: ${shortAddr(address)}`);
+      setSelectedQRWallet(already);
+    } else {
+      toast(`Ví mới: ${shortAddr(address)}`, { description: 'Nhấn "Liên kết ví này" để thêm vào danh sách', icon: '🔔' });
+    }
+  }, [address, wallets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ─── Link MetaMask wallet ───────────────────────────────────────────── */
   const handleLinkWallet = async () => {
@@ -318,6 +346,9 @@ export default function WalletPage() {
                               <span className="text-xs text-muted-foreground">{w.chain_info?.name || 'EVM'}</span>
                             </div>
                             <p className="font-mono text-xs text-foreground">{shortAddr(w.address)}</p>
+                            <div className="mt-1">
+                              <WalletBalanceDisplay address={w.address} />
+                            </div>
                           </div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
                             {!w.is_primary && (

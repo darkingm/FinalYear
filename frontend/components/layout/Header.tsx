@@ -9,7 +9,7 @@ import { signOut } from 'next-auth/react';
 import { useDisconnect, useAccount } from 'wagmi';
 import {
   Menu, X, ShoppingBag, Wallet, Package,
-  LogOut, User, Shield, Bell,
+  LogOut, User, Shield, Bell, Home,
   TrendingUp, Zap, BarChart3, ChevronDown, Copy, Check,
   Building, Brain, Fish, Activity,
 } from 'lucide-react';
@@ -148,12 +148,12 @@ export function Header() {
   };
 
   const navLinks = [
-    { href: '/', label: 'Trang chủ', authRequired: false },
-    { href: '/products', label: 'Sản phẩm', authRequired: false },
+    { href: '/', label: 'Trang chủ', icon: Home, authRequired: false },
+    { href: '/products', label: 'Sản phẩm', icon: Package, authRequired: false },
     { href: '/trading/BTCUSDT', label: 'Giao dịch', icon: TrendingUp, authRequired: false },
     { href: '/whale-tracker', label: 'On-Chain', icon: Activity, authRequired: false },
     { href: '/orders', label: 'Đơn hàng', icon: ShoppingBag, authRequired: true },
-    { href: '/wallet', label: 'Ví', authRequired: true },
+    { href: '/wallet', label: 'Ví', icon: Wallet, authRequired: true },
   ];
 
   const specialNavLinks = [
