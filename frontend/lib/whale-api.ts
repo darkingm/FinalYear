@@ -186,6 +186,10 @@ export async function searchTokenPairs(query: string, chainFilter?: SupportedCha
                 chainId: p.chainId,
                 chain: DEXSCREENER_CHAIN_MAP[p.chainId] || 'BSC',
                 priceChange24h: p.priceChange?.h24 || 0,
+                priceChange1h: p.priceChange?.h1 || 0,
+                marketCap: p.marketCap || 0,
+                fdv: p.fdv || 0,
+                pairCreatedAt: p.pairCreatedAt || undefined,
                 imageUrl: p.info?.imageUrl ?? p.info?.header ?? undefined,
             }))
 
@@ -193,6 +197,129 @@ export async function searchTokenPairs(query: string, chainFilter?: SupportedCha
     } catch (e) {
         console.error('[whale-api] searchTokenPairs:', e);
         return [];
+    }
+}
+
+/* ── fetchTrendingPairs ─ top pairs by volume from DexScreener ── */
+const trendingCache: { data: TokenPair[]; at: number } = { data: [], at: 0 };
+
+export async function fetchTrendingPairs(chain?: SupportedChain): Promise<TokenPair[]> {
+    if (Date.now() - trendingCache.at < 120_000 && trendingCache.data.length > 0) {
+        const filtered = chain ? trendingCache.data.filter(p => p.chain === chain) : trendingCache.data;
+        return filtered;
+    }
+    try {
+        // Search for popular tokens across chains
+        const queries = ['WBNB', 'ETH', 'CAKE', 'PEPE', 'DOGE', 'SHIB'];
+        const allPairs: TokenPair[] = [];
+        for (const q of queries.slice(0, 3)) {
+            const pairs = await searchTokenPairs(q);
+            allPairs.push(...pairs);
+        }
+        // Dedupe by pairAddress and sort by volume
+        const seen = new Set<string>();
+        const deduped = allPairs.filter(p => {
+            if (seen.has(p.pairAddress)) return false;
+            seen.add(p.pairAddress);
+            return true;
+        }).sort((a, b) => b.volume24h - a.volume24h).slice(0, 30);
+        trendingCache.data = deduped;
+        trendingCache.at = Date.now();
+        return chain ? deduped.filter(p => p.chain === chain) : deduped;
+    } catch (e) {
+        console.error('[whale-api] fetchTrendingPairs:', e);
+        return trendingCache.data;
+    }
+}
+
+/* ── GoPlus Security API (free, no key) ── */
+export interface GoPlusSecurityInfo {
+    isOpenSource: boolean;
+    isProxy: boolean;
+    isMintable: boolean;
+    canTakeBackOwnership: boolean;
+    ownerChangeBalance: boolean;
+    hiddenOwner: boolean;
+    selfDestruct: boolean;
+    externalCall: boolean;
+    buyTax: number;
+    sellTax: number;
+    isHoneypot: boolean;
+    isAntiWhale: boolean;
+    isBlacklisted: boolean;
+    totalScore: number;         // 0-100, calculated
+    riskLevel: 'safe' | 'low' | 'medium' | 'high' | 'danger';
+    holderCount?: number;
+    lpHolderCount?: number;
+    lpTotalSupplyPercent?: number;
+}
+
+const GOPLUS_CHAIN_MAP: Record<SupportedChain, string> = {
+    BSC: '56', ETH: '1', POLYGON: '137',
+};
+
+const securityCache: Record<string, { data: GoPlusSecurityInfo; at: number }> = {};
+
+export async function fetchGoPlusSecurity(tokenAddress: string, chain: SupportedChain): Promise<GoPlusSecurityInfo | null> {
+    const key = `${chain}:${tokenAddress}`;
+    const cached = securityCache[key];
+    if (cached && Date.now() - cached.at < 300_000) return cached.data;
+
+    try {
+        const chainId = GOPLUS_CHAIN_MAP[chain];
+        const url = `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${tokenAddress}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const data = await res.json();
+        const tokenData = data?.result?.[tokenAddress.toLowerCase()];
+        if (!tokenData) return null;
+
+        const isOpenSource = tokenData.is_open_source === '1';
+        const isProxy = tokenData.is_proxy === '1';
+        const isMintable = tokenData.is_mintable === '1';
+        const canTakeBackOwnership = tokenData.can_take_back_ownership === '1';
+        const ownerChangeBalance = tokenData.owner_change_balance === '1';
+        const hiddenOwner = tokenData.hidden_owner === '1';
+        const selfDestruct = tokenData.selfdestruct === '1';
+        const externalCall = tokenData.external_call === '1';
+        const buyTax = parseFloat(tokenData.buy_tax || '0') * 100;
+        const sellTax = parseFloat(tokenData.sell_tax || '0') * 100;
+        const isHoneypot = tokenData.is_honeypot === '1';
+        const isAntiWhale = tokenData.is_anti_whale === '1';
+        const isBlacklisted = tokenData.is_blacklisted === '1';
+
+        // Calculate safety score (0-100, higher = safer)
+        let score = 100;
+        if (isHoneypot) score -= 50;
+        if (!isOpenSource) score -= 15;
+        if (isMintable) score -= 10;
+        if (isProxy) score -= 5;
+        if (canTakeBackOwnership) score -= 10;
+        if (ownerChangeBalance) score -= 10;
+        if (hiddenOwner) score -= 10;
+        if (selfDestruct) score -= 15;
+        if (externalCall) score -= 5;
+        if (buyTax > 5) score -= Math.min(10, buyTax);
+        if (sellTax > 5) score -= Math.min(10, sellTax);
+        if (isBlacklisted) score -= 5;
+        score = Math.max(0, Math.min(100, score));
+
+        const riskLevel: GoPlusSecurityInfo['riskLevel'] =
+            score >= 80 ? 'safe' : score >= 60 ? 'low' : score >= 40 ? 'medium' : score >= 20 ? 'high' : 'danger';
+
+        const info: GoPlusSecurityInfo = {
+            isOpenSource, isProxy, isMintable, canTakeBackOwnership,
+            ownerChangeBalance, hiddenOwner, selfDestruct, externalCall,
+            buyTax, sellTax, isHoneypot, isAntiWhale, isBlacklisted,
+            totalScore: score, riskLevel,
+            holderCount: parseInt(tokenData.holder_count || '0') || undefined,
+            lpHolderCount: parseInt(tokenData.lp_holder_count || '0') || undefined,
+            lpTotalSupplyPercent: parseFloat(tokenData.lp_total_supply || '0') * 100 || undefined,
+        };
+        securityCache[key] = { data: info, at: Date.now() };
+        return info;
+    } catch (e) {
+        console.error('[whale-api] GoPlus security:', e);
+        return null;
     }
 }
 

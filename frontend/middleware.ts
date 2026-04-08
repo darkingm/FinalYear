@@ -38,11 +38,17 @@ export async function middleware(request: NextRequest) {
   // Check protected routes
   const isProtected = PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
   const isSeller = SELLER_ROUTES.some((route) => pathname.startsWith(route));
+  const isAdmin = pathname.startsWith('/admin');
 
   if ((isProtected || isSeller) && !token) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Admin routes require admin role — block non-admin users even if authenticated
+  if (isAdmin && token && (token as any).role !== 'admin') {
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   return NextResponse.next();

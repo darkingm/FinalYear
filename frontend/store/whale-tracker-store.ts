@@ -34,6 +34,10 @@ export interface TokenPair {
     chainId: string;         // dexscreener chain id (e.g. "bsc", "ethereum")
     chain: SupportedChain;
     priceChange24h: number;
+    priceChange1h: number;
+    marketCap: number;
+    fdv: number;
+    pairCreatedAt?: string;  // ISO date string
     imageUrl?: string;       // token logo from DexScreener info.imageUrl
 }
 
@@ -105,6 +109,7 @@ export interface WhaleTrackerState {
     isLoading: Record<string, boolean>;
     lastFetched: Record<string, number>;
     poolCache: Record<string, PoolInfo[]>;
+    watchlistPairs: TokenPair[];            // saved pairs for watchlist
 
     addWallet: (w: Omit<WatchedWallet, 'id' | 'addedAt'>) => string;
     removeWallet: (id: string) => void;
@@ -118,6 +123,9 @@ export interface WhaleTrackerState {
     markAlertRead: (id: string) => void;
     clearAlerts: () => void;
     unreadCount: () => number;
+    addToWatchlist: (pair: TokenPair) => void;
+    removeFromWatchlist: (pairAddress: string) => void;
+    isInWatchlist: (pairAddress: string) => boolean;
 }
 
 export const useWhaleTrackerStore = create<WhaleTrackerState>()(
@@ -129,6 +137,7 @@ export const useWhaleTrackerStore = create<WhaleTrackerState>()(
             isLoading: {},
             lastFetched: {},
             poolCache: {},
+            watchlistPairs: [],
 
             addWallet: (w) => {
                 const id = crypto.randomUUID();
@@ -177,12 +186,22 @@ export const useWhaleTrackerStore = create<WhaleTrackerState>()(
             markAlertRead: (id) => set((s) => ({ alerts: s.alerts.map((a) => (a.id === id ? { ...a, read: true } : a)) })),
             clearAlerts: () => set({ alerts: [] }),
             unreadCount: () => get().alerts.filter((a) => !a.read).length,
+            addToWatchlist: (pair) =>
+                set((s) => {
+                    if (s.watchlistPairs.find(p => p.pairAddress === pair.pairAddress)) return s;
+                    return { watchlistPairs: [...s.watchlistPairs, pair] };
+                }),
+            removeFromWatchlist: (pairAddress) =>
+                set((s) => ({ watchlistPairs: s.watchlistPairs.filter(p => p.pairAddress !== pairAddress) })),
+            isInWatchlist: (pairAddress) =>
+                get().watchlistPairs.some(p => p.pairAddress === pairAddress),
         }),
         {
             name: 'whale-tracker-store-v2',
             partialize: (state) => ({
                 wallets: state.wallets,
                 alerts: state.alerts.slice(0, 50),
+                watchlistPairs: state.watchlistPairs,
             }),
         }
     )

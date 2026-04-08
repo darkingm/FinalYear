@@ -1,15 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Menu, Info } from 'lucide-react';
 import { CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { SupportedChain, TokenPair } from '@/store/whale-tracker-store';
-import { TokenSearchPanel } from '@/components/whale-tracker/TokenSearchPanel';
-import { TokenInfoPanel } from '@/components/whale-tracker/TokenInfoPanel';
+import { DexLeftSidebar } from '@/components/whale-tracker/DexLeftSidebar';
+import { DexRightSidebar } from '@/components/whale-tracker/DexRightSidebar';
+import { DexChart } from '@/components/whale-tracker/DexChart';
+import { TrendingTicker } from '@/components/whale-tracker/TrendingTicker';
 import { LiveTxFeed } from '@/components/whale-tracker/LiveTxFeed';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
 
 export default function WhaleTrackerPage() {
     const [selectedPair, setSelectedPair] = useState<{
@@ -18,13 +18,13 @@ export default function WhaleTrackerPage() {
         pairAddress: string;
         tokenSymbol: string;
         quoteSymbol: string;
-    } | null>({
-        chain: 'BSC',
-        tokenAddress: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', // BTCB
-        pairAddress: '0xF45cd219aEF8618A92BAa7aD848364a158a24F33',   // PancakeSwap V2 BTCB/WBNB
-        tokenSymbol: 'BTCB',
-        quoteSymbol: 'WBNB',
-    });
+        chainId: string;
+        pair: TokenPair;
+    } | null>(null);
+
+    // Mobile sidebar states
+    const [leftOpen, setLeftOpen] = useState(false);
+    const [rightOpen, setRightOpen] = useState(false);
 
     const handleSelectPair = (pair: TokenPair) => {
         setSelectedPair({
@@ -33,122 +33,143 @@ export default function WhaleTrackerPage() {
             pairAddress: pair.pairAddress,
             tokenSymbol: pair.baseToken.symbol,
             quoteSymbol: pair.quoteToken.symbol,
+            chainId: pair.chainId,
+            pair,
         });
+        setLeftOpen(false); // Close mobile sidebar after selection
     };
 
     return (
         <>
             <Header />
-            <div className="min-h-screen bg-background text-foreground flex flex-col">
+            <div className="h-[calc(100vh-64px)] flex flex-col bg-[#0b0b12] text-white overflow-hidden">
 
-                {/* ── Top bar ─────────────────────────────── */}
-                <div className="border-b border-white/8 bg-black/20 backdrop-blur-sm sticky top-0 z-20">
-                    <div className="max-w-[1800px] mx-auto px-4 py-2.5 flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
-                            <Activity className="w-3.5 h-3.5 text-white" />
+                {/* ── Trending Ticker ── */}
+                <TrendingTicker onSelectPair={handleSelectPair} />
+
+                {/* ── Mobile Top Bar ── */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06] lg:hidden flex-shrink-0">
+                    <button onClick={() => setLeftOpen(true)} className="flex items-center gap-1.5 text-white/50 text-xs">
+                        <Menu className="w-4 h-4" /> Search
+                    </button>
+                    {selectedPair && (
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-white">{selectedPair.tokenSymbol}</span>
+                            <span className="text-[9px] text-white/25">/{selectedPair.quoteSymbol}</span>
+                            <span className="text-[8px] font-bold px-1 py-0.5 rounded"
+                                style={{ color: CHAIN_LABELS[selectedPair.chain].color, backgroundColor: CHAIN_LABELS[selectedPair.chain].color + '20' }}>
+                                {selectedPair.chain}
+                            </span>
                         </div>
-                        <div>
-                            <h1 className="text-sm font-black text-white leading-none">On-Chain Tracker</h1>
-                            <p className="text-[9px] text-white/30 mt-0.5">Live · BSC · ETH · Polygon</p>
-                        </div>
-                        {selectedPair && (
-                            <div className="ml-4 flex items-center gap-2">
-                                <span className="text-sm font-black text-white">
-                                    {selectedPair.tokenSymbol}
-                                    <span className="text-white/30 font-normal">/{selectedPair.quoteSymbol}</span>
-                                </span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                                    style={{
-                                        color: CHAIN_LABELS[selectedPair.chain].color,
-                                        background: `${CHAIN_LABELS[selectedPair.chain].color}20`,
-                                        border: `1px solid ${CHAIN_LABELS[selectedPair.chain].color}40`,
-                                    }}>
-                                    {selectedPair.chain}
-                                </span>
-                                <span className="flex items-center gap-1 text-[9px] text-emerald-400/80">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                    LIVE
-                                </span>
-                                <span className="text-[8px] font-mono text-white/15">
-                                    {selectedPair.pairAddress.slice(0, 8)}…{selectedPair.pairAddress.slice(-6)}
-                                </span>
-                            </div>
-                        )}
-                    </div>
+                    )}
+                    <button onClick={() => setRightOpen(true)} className="flex items-center gap-1 text-white/50 text-xs">
+                        <Info className="w-4 h-4" /> Info
+                    </button>
                 </div>
 
-                {/* ── Main layout: 2-col ───────────────────── */}
-                <div className="flex-1 flex overflow-hidden max-w-[1800px] mx-auto w-full">
+                {/* ── Main 3-Column Layout ── */}
+                <div className="flex-1 flex overflow-hidden">
 
-                    {/* LEFT: Token search + info (fixed width) */}
-                    <div className="w-72 xl:w-80 flex-shrink-0 border-r border-white/8 flex flex-col overflow-hidden">
-                        <ScrollArea className="flex-1">
-                            <div className="p-3 space-y-3">
+                    {/* LEFT SIDEBAR — Desktop: always visible, Mobile: overlay */}
+                    <div className={`
+                        w-60 xl:w-64 flex-shrink-0 
+                        hidden lg:flex lg:flex-col
+                    `}>
+                        <DexLeftSidebar
+                            onSelectPair={handleSelectPair}
+                            selectedPairAddress={selectedPair?.pairAddress}
+                        />
+                    </div>
 
-                                <div>
-                                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-2">
-                                        🔍 Tìm Token / Pool
-                                    </p>
-                                    <TokenSearchPanel
-                                        compact
-                                        onSelectForWallet={handleSelectPair}
-                                        onSelectRow={handleSelectPair}
-                                        selectedPairAddress={selectedPair?.pairAddress}
+                    {/* Mobile Left Sidebar Overlay */}
+                    {leftOpen && (
+                        <div className="fixed inset-0 z-50 lg:hidden flex">
+                            <div className="w-72 max-w-[85vw] h-full">
+                                <DexLeftSidebar
+                                    onSelectPair={handleSelectPair}
+                                    selectedPairAddress={selectedPair?.pairAddress}
+                                    isOpen={true}
+                                    onClose={() => setLeftOpen(false)}
+                                />
+                            </div>
+                            <div onClick={() => setLeftOpen(false)} className="flex-1 bg-black/60 backdrop-blur-sm" />
+                        </div>
+                    )}
+
+                    {/* CENTER — Chart + TX Feed */}
+                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                        {selectedPair ? (
+                            <>
+                                {/* Chart area */}
+                                <div className="h-[300px] lg:h-[380px] xl:h-[420px] flex-shrink-0 border-b border-white/[0.06]">
+                                    <DexChart
+                                        chainId={selectedPair.chainId}
+                                        pairAddress={selectedPair.pairAddress}
+                                        tokenSymbol={selectedPair.tokenSymbol}
                                     />
                                 </div>
 
-                                {selectedPair && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-2">
-                                            📋 Token Info
-                                        </p>
-                                        <TokenInfoPanel
-                                            tokenAddress={selectedPair.tokenAddress}
-                                            tokenSymbol={selectedPair.tokenSymbol}
-                                            chain={selectedPair.chain}
-                                        />
-                                    </div>
-                                )}
-
-                                {!selectedPair && (
-                                    <div className="rounded-xl border border-dashed border-white/10 p-5 text-center space-y-2">
-                                        <Activity className="w-7 h-7 text-white/15 mx-auto" />
-                                        <p className="text-[10px] text-white/25">
-                                            Tìm và chọn token để xem giao dịch live
-                                        </p>
-                                        <p className="text-[9px] text-white/15">Ví dụ: SIREN, CAKE, BNB…</p>
-                                    </div>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-
-                    {/* RIGHT: Full-width TX Feed */}
-                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                        {selectedPair ? (
-                            <LiveTxFeed
-                                chain={selectedPair.chain}
-                                tokenAddress={selectedPair.tokenAddress}
-                                pairAddress={selectedPair.pairAddress}
-                                tokenSymbol={selectedPair.tokenSymbol}
-                                quoteSymbol={selectedPair.quoteSymbol}
-                                pollSeconds={8}
-                            />
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full gap-4 text-white/15">
-                                <Activity className="w-14 h-14 opacity-20" />
-                                <div className="text-center">
-                                    <p className="text-base font-bold">Live Transaction Feed</p>
-                                    <p className="text-sm mt-1 text-white/10">
-                                        Chọn token ở bên trái để xem giao dịch realtime
-                                    </p>
+                                {/* TX Feed (fills remaining space) */}
+                                <div className="flex-1 min-h-0 overflow-hidden">
+                                    <LiveTxFeed
+                                        chain={selectedPair.chain}
+                                        tokenAddress={selectedPair.tokenAddress}
+                                        pairAddress={selectedPair.pairAddress}
+                                        tokenSymbol={selectedPair.tokenSymbol}
+                                        quoteSymbol={selectedPair.quoteSymbol}
+                                        pollSeconds={8}
+                                    />
                                 </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center gap-6 text-white/15 px-4">
+                                <div className="relative">
+                                    <Activity className="w-20 h-20 opacity-10" />
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-violet-500/50 animate-ping" />
+                                </div>
+                                <div className="text-center space-y-2 max-w-md">
+                                    <h2 className="text-xl font-black text-white/20">On-Chain Tracker</h2>
+                                    <p className="text-sm text-white/10">
+                                        Tìm và chọn token từ sidebar bên trái để xem chart, giao dịch real-time, và thông tin chi tiết
+                                    </p>
+                                    <div className="flex items-center justify-center gap-4 mt-4">
+                                        {(['BSC', 'ETH', 'POLYGON'] as SupportedChain[]).map(c => (
+                                            <span key={c} className="text-[10px] font-bold px-2 py-1 rounded-lg"
+                                                style={{ color: CHAIN_LABELS[c].color, backgroundColor: CHAIN_LABELS[c].color + '15' }}>
+                                                {CHAIN_LABELS[c].name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                                {/* Quick start hint for mobile */}
+                                <button onClick={() => setLeftOpen(true)}
+                                    className="lg:hidden text-xs text-violet-400/50 border border-violet-400/20 rounded-lg px-4 py-2 hover:bg-violet-400/5 transition-colors">
+                                    Tap to search tokens
+                                </button>
                             </div>
                         )}
                     </div>
+
+                    {/* RIGHT SIDEBAR — Desktop only, Mobile: overlay */}
+                    <div className="w-64 xl:w-72 flex-shrink-0 hidden xl:flex xl:flex-col">
+                        <DexRightSidebar pair={selectedPair?.pair || null} />
+                    </div>
+
+                    {/* Mobile Right Sidebar Overlay */}
+                    {rightOpen && (
+                        <div className="fixed inset-0 z-50 xl:hidden flex justify-end">
+                            <div onClick={() => setRightOpen(false)} className="flex-1 bg-black/60 backdrop-blur-sm" />
+                            <div className="w-72 max-w-[85vw] h-full">
+                                <DexRightSidebar
+                                    pair={selectedPair?.pair || null}
+                                    isOpen={true}
+                                    onClose={() => setRightOpen(false)}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
-            <Footer />
         </>
     );
 }

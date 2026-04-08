@@ -33,8 +33,10 @@ const router = Router();
  */
 function authenticateOrInternalKey(req: Request, res: Response, next: NextFunction) {
   const internalKey = req.headers['x-internal-service-key'];
-  const expectedKey = process.env.INTERNAL_SERVICE_KEY || 'internal-service-key';
-  if (internalKey && internalKey === expectedKey) {
+  const expectedKey = process.env.INTERNAL_SERVICE_KEY;
+
+  // SECURITY: Never use a hardcoded fallback key — fail closed if env var is missing
+  if (internalKey && expectedKey && internalKey === expectedKey) {
     return next(); // trusted internal microservice call — skip JWT
   }
   // Fall through to standard JWT auth (admin action from browser)

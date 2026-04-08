@@ -330,11 +330,22 @@ export async function cancelOrder(req: AuthRequest, res: Response, next: NextFun
     if (order.status !== 'UNPAID') throw new AppError('Order cannot be cancelled', 400);
 
     await query(`UPDATE orders SET status = 'CANCELLED', updated_at = NOW() WHERE order_id = $1`, [orderId]);
-    await query(`DELETE FROM inventory_locks WHERE order_id = $1`, [orderId]);
-    await query(
-      `UPDATE inventory SET available = available + $1 WHERE product_id = $2`,
-      [order.quantity, order.product_id]
+    // Use UPDATE + status='released' (not DELETE) so the DB trigger release_inventory() fires correctly
+    const lockUpdate = await query(
+      `UPDATE inventory_locks SET status = 'released' WHERE order_id = $1 AND status = 'active' RETURNING inventory_id, quantity`,
+      [orderId]
     );
+
+    // For any locks that were already gone (edge case), restore inventory manually with safe bounds
+    if (lockUpdate.rowCount === 0) {
+      await query(
+        `UPDATE inventory SET available = LEAST(total_stock, available + $1),
+                              reserved  = GREATEST(0, reserved - $1)
+         WHERE product_id = $2`,
+        [order.quantity, order.product_id]
+      );
+    }
+    // Note: if lockUpdate succeeded, the DB trigger handles available/reserved automatically
 
     await publishEvent('order.cancelled', { order_id: orderId, timestamp: Date.now() });
     logger.info('Order cancelled', { order_id: orderId });
@@ -450,31 +461,37 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     await publishEvent('order.status_updated', { order_id: orderId, status, timestamp: Date.now() });
 
     // Auto-release escrow when buyer confirms delivery (COMPLETED) for crypto orders
+    let finalStatus = status;
     if (status === 'COMPLETED' && order.payment_method === 'crypto') {
-      try {
-        const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || process.env.PAYMENT_API_URL || 'http://localhost:5001';
-        // Use internal service key — never forward user tokens to internal services (security risk)
-        await axios.post(`${paymentApiUrl}/api/crypto-payment/release`, {
-          order_id: orderId
-        }, {
-          headers: {
-            'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY || 'internal-service-key',
-          },
-          timeout: 30000, // 30s for blockchain tx
-        });
-        logger.info(`Escrow release triggered for order ${orderId}`);
-      } catch (err: any) {
-        // Don't block status update if release fails — it can be retried by admin
-        logger.error(`Failed to trigger escrow release for order ${orderId}:`, err.message);
-        // Mark as ONCHAIN_CONFIRMED so admin knows to retry release
-        await query(
-          `UPDATE orders SET status = 'ONCHAIN_CONFIRMED', updated_at = NOW() WHERE order_id = $1`,
-          [orderId]
-        );
+      const internalKey = process.env.INTERNAL_SERVICE_KEY;
+      if (!internalKey) {
+        logger.error('INTERNAL_SERVICE_KEY env var is not set — cannot release escrow');
+        finalStatus = 'PAID'; // Stay in PAID, don't touch COMPLETED without release
+        await query(`UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`, [finalStatus, orderId]);
+      } else {
+        try {
+          const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || process.env.PAYMENT_API_URL || 'http://localhost:5001';
+          await axios.post(`${paymentApiUrl}/api/crypto-payment/release`, {
+            order_id: orderId
+          }, {
+            headers: { 'X-Internal-Service-Key': internalKey },
+            timeout: 30000, // 30s for blockchain tx
+          });
+          logger.info(`Escrow release triggered for order ${orderId}`);
+        } catch (err: any) {
+          // Release failed — rollback to honest status and notify
+          logger.error(`Failed to trigger escrow release for order ${orderId}:`, err.message);
+          finalStatus = 'PAID'; // Honest: payment confirmed but release pending
+          await query(
+            `UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`,
+            [finalStatus, orderId]
+          );
+        }
       }
     }
 
-    res.json({ success: true, message: 'Order status updated', status });
+    // Return the ACTUAL final status — never lie to the client
+    res.json({ success: true, message: 'Order status updated', status: finalStatus });
   } catch (error: any) {
     logger.error('Update order status error:', error);
     next(error);

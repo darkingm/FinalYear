@@ -713,10 +713,13 @@ export class CryptoPaymentService {
 
     const order = orderResult.rows[0];
 
-    // Only release if onchain confirmed or higher, or we can just trust the order status
-    // Actually, usually release happens when status is COMPLETED
-    if (order.status !== 'COMPLETED' && order.status !== 'ONCHAIN_CONFIRMED') {
-      // It's ok if main-service already set it to COMPLETED.
+    // Only release if order is in a valid paid state — NEVER release for UNPAID/CANCELLED/etc.
+    const releasableStatuses = ['COMPLETED', 'ONCHAIN_CONFIRMED', 'PAID', 'PAID_PAYPAL'];
+    if (!releasableStatuses.includes(order.status)) {
+      throw new AppError(
+        `Cannot release funds: order ${orderId} is in '${order.status}' status. Expected one of: ${releasableStatuses.join(', ')}`,
+        400
+      );
     }
 
     const provider = this.providers.get(order.chain_id);

@@ -165,7 +165,7 @@ export class AdminService {
     }
 
     async updateOrderStatus(orderId: number, status: string, adminId: number, notes?: string) {
-        const validStatuses = ['UNPAID', 'TX_SUBMITTED', 'TX_FAILED', 'ONCHAIN_CONFIRMED', 'PAID', 'DELIVERING', 'COMPLETED', 'DISPUTED', 'cancelled', 'refunded'];
+        const validStatuses = ['UNPAID', 'TX_SUBMITTED', 'TX_FAILED', 'ONCHAIN_CONFIRMED', 'PAID', 'DELIVERING', 'COMPLETED', 'DISPUTED', 'CANCELLED', 'REFUNDED'];
         if (!validStatuses.includes(status)) {
             throw new AppError(`Invalid status: ${status}`, 400);
         }
@@ -400,7 +400,7 @@ export class AdminService {
         }
 
         const order = orderResult.rows[0];
-        const allowedStatuses = ['PAID', 'ONCHAIN_CONFIRMED', 'DELIVERING', 'COMPLETED', 'DISPUTED', 'completed', 'delivered'];
+        const allowedStatuses = ['PAID', 'ONCHAIN_CONFIRMED', 'DELIVERING', 'COMPLETED', 'DISPUTED'];
         if (!allowedStatuses.includes(order.status)) {
             throw new AppError(`Cannot refund order with status: ${order.status}`, 400);
         }
@@ -415,7 +415,7 @@ export class AdminService {
 
         // Update order status
         await query(
-            `UPDATE orders SET status = 'refunded', updated_at = NOW() WHERE order_id = $1`,
+            `UPDATE orders SET status = 'REFUNDED', updated_at = NOW() WHERE order_id = $1`,
             [orderId]
         );
 
