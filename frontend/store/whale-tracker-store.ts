@@ -110,6 +110,7 @@ export interface WhaleTrackerState {
     lastFetched: Record<string, number>;
     poolCache: Record<string, PoolInfo[]>;
     watchlistPairs: TokenPair[];            // saved pairs for watchlist
+    recentSearchPairs: TokenPair[];         // recently viewed pairs (max 10)
 
     addWallet: (w: Omit<WatchedWallet, 'id' | 'addedAt'>) => string;
     removeWallet: (id: string) => void;
@@ -126,6 +127,8 @@ export interface WhaleTrackerState {
     addToWatchlist: (pair: TokenPair) => void;
     removeFromWatchlist: (pairAddress: string) => void;
     isInWatchlist: (pairAddress: string) => boolean;
+    addRecentSearch: (pair: TokenPair) => void;
+    clearRecentSearches: () => void;
 }
 
 export const useWhaleTrackerStore = create<WhaleTrackerState>()(
@@ -138,6 +141,7 @@ export const useWhaleTrackerStore = create<WhaleTrackerState>()(
             lastFetched: {},
             poolCache: {},
             watchlistPairs: [],
+            recentSearchPairs: [],
 
             addWallet: (w) => {
                 const id = crypto.randomUUID();
@@ -195,6 +199,12 @@ export const useWhaleTrackerStore = create<WhaleTrackerState>()(
                 set((s) => ({ watchlistPairs: s.watchlistPairs.filter(p => p.pairAddress !== pairAddress) })),
             isInWatchlist: (pairAddress) =>
                 get().watchlistPairs.some(p => p.pairAddress === pairAddress),
+            addRecentSearch: (pair) =>
+                set((s) => {
+                    const filtered = s.recentSearchPairs.filter(p => p.pairAddress !== pair.pairAddress);
+                    return { recentSearchPairs: [pair, ...filtered].slice(0, 10) };
+                }),
+            clearRecentSearches: () => set({ recentSearchPairs: [] }),
         }),
         {
             name: 'whale-tracker-store-v2',
@@ -202,6 +212,7 @@ export const useWhaleTrackerStore = create<WhaleTrackerState>()(
                 wallets: state.wallets,
                 alerts: state.alerts.slice(0, 50),
                 watchlistPairs: state.watchlistPairs,
+                recentSearchPairs: state.recentSearchPairs,
             }),
         }
     )

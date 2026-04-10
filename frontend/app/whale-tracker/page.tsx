@@ -7,7 +7,6 @@ import type { SupportedChain, TokenPair } from '@/store/whale-tracker-store';
 import { DexLeftSidebar } from '@/components/whale-tracker/DexLeftSidebar';
 import { DexRightSidebar } from '@/components/whale-tracker/DexRightSidebar';
 import { DexChart } from '@/components/whale-tracker/DexChart';
-import { TrendingTicker } from '@/components/whale-tracker/TrendingTicker';
 import { LiveTxFeed } from '@/components/whale-tracker/LiveTxFeed';
 import { Header } from '@/components/layout/Header';
 
@@ -43,9 +42,6 @@ export default function WhaleTrackerPage() {
         <>
             <Header />
             <div className="h-[calc(100vh-64px)] flex flex-col bg-[#0b0b12] text-white overflow-hidden">
-
-                {/* ── Trending Ticker ── */}
-                <TrendingTicker onSelectPair={handleSelectPair} />
 
                 {/* ── Mobile Top Bar ── */}
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06] lg:hidden flex-shrink-0">

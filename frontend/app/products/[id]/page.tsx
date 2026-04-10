@@ -24,6 +24,8 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { LivePriceEstimate } from '@/components/ui/live-price';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { formatUSD, formatCrypto } from '@/lib/utils/format-price';
 
 const PLACEHOLDER = '/images/placeholder-product.png';
 
@@ -72,6 +74,7 @@ export default function ProductDetailPage() {
   const [liked, setLiked] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [coinPrices, setCoinPrices] = useState<Record<string, number>>({});
+  const { t } = useClientTranslation();
   const addItem = useCartStore((state) => state.addItem);
 
   useEffect(() => {
@@ -115,7 +118,7 @@ export default function ProductDetailPage() {
   const handleCopyLink = async () => {
     await navigator.clipboard.writeText(getShareUrl());
     setLinkCopied(true);
-    toast.success('Đã sao chép link sản phẩm!');
+    toast.success(t('productDetail.productLinkCopied'));
     setTimeout(() => setLinkCopied(false), 2500);
   };
 
@@ -136,7 +139,7 @@ export default function ProductDetailPage() {
   const handleBuyNow = async () => {
     if (!product) return;
     if (!isAuthenticated) {
-      toast.error('Vui lòng đăng nhập để mua hàng');
+      toast.error(t('productDetail.loginRequired'));
       router.push(`/login?redirect=/products/${id}`);
       return;
     }
@@ -168,7 +171,7 @@ export default function ProductDetailPage() {
       seller_id: undefined, // populated via accepted_tokens seller context
       metadata: { images: product.images?.map(i => i.url) || [product.primary_image] },
     });
-    toast.success('Đã thêm vào giỏ hàng 🛒');
+    toast.success(t('productDetail.addedToCart'));
   };
 
   if (loading) return (
@@ -186,8 +189,8 @@ export default function ProductDetailPage() {
       <Header />
       <main className="flex-1 flex flex-col items-center justify-center text-foreground gap-4">
         <AlertCircle className="w-16 h-16 text-red-500" />
-        <h2 className="text-xl font-semibold">Product not found</h2>
-        <Link href="/products" className="text-primary hover:underline">Browse all products →</Link>
+        <h2 className="text-xl font-semibold">{t('productDetail.productNotFound')}</h2>
+        <Link href="/products" className="text-primary hover:underline">{t('productDetail.browseProducts')}</Link>
       </main>
       <Footer />
     </div>
@@ -200,9 +203,9 @@ export default function ProductDetailPage() {
   const isStableToken = selectedToken && STABLE_TOKENS.has(selectedToken.symbol.toUpperCase());
   // Stablecoins: show USD equiv (not raw USDT amount which looks confusing)
   const displayPrice = selectedToken && !isStableToken
-    ? `${parseFloat(selectedToken.price_in_token).toFixed(6)} ${selectedToken.symbol}`
-    : `$${parseFloat(product.base_price_usd).toFixed(2)}`;
-  const displayPayWith = isStableToken ? `Thanh toán bằng ${selectedToken!.symbol}` : null;
+    ? `${formatCrypto(parseFloat(selectedToken.price_in_token), selectedToken.symbol)} ${selectedToken.symbol}`
+    : formatUSD(parseFloat(product.base_price_usd));
+  const displayPayWith = isStableToken ? `${t('productDetail.payWith')} ${selectedToken!.symbol}` : null;
   const usdEquivalent = selectedToken && !isStableToken && coinPrices[selectedToken.symbol]
     ? (parseFloat(selectedToken.price_in_token) * coinPrices[selectedToken.symbol]).toFixed(2)
     : null;
@@ -343,8 +346,8 @@ export default function ProductDetailPage() {
                   </span>
                 )}
                 {product.stock > 0
-                  ? <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 flex items-center gap-1"><Check className="w-3 h-3" />Còn hàng ({product.stock})</span>
-                  : <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">Hết hàng</span>
+                  ? <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 flex items-center gap-1"><Check className="w-3 h-3" />{t('productDetail.inStock')} ({product.stock})</span>
+                  : <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">{t('productDetail.outOfStock')}</span>
                 }
               </div>
 
@@ -377,12 +380,12 @@ export default function ProductDetailPage() {
                     />
                   )}
                 </div>
-                <p className="text-muted-foreground text-sm">Base price: <span className="font-semibold text-foreground">${parseFloat(product.base_price_usd).toFixed(2)} USD</span></p>
+                <p className="text-muted-foreground text-sm">{t('productDetail.basePrice')}: <span className="font-semibold text-foreground">{formatUSD(parseFloat(product.base_price_usd))}</span></p>
 
                 {/* Token Selector */}
                 {product.accepted_tokens?.length > 0 && (
                   <div className="pt-2">
-                    <p className="text-sm font-medium text-foreground mb-3">Pay with:</p>
+                    <p className="text-sm font-medium text-foreground mb-3">{t('productDetail.payWith')}:</p>
                     <div className="flex flex-wrap gap-2">
                       {product.accepted_tokens.map(token => (
                         <button
@@ -416,7 +419,7 @@ export default function ProductDetailPage() {
 
               {/* Quantity */}
               <div className="flex items-center gap-6 py-2">
-                <span className="text-sm font-medium text-foreground">Quantity</span>
+                <span className="text-sm font-medium text-foreground">{t('productDetail.quantity')}</span>
                 <div className="flex items-center gap-2 bg-card rounded-xl border border-border p-1 shadow-sm">
                   <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg hover:bg-muted focus:ring-2 ring-primary/20 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all font-bold text-lg">−</button>
                   <span className="w-12 text-center font-bold">{qty}</span>
@@ -432,23 +435,23 @@ export default function ProductDetailPage() {
                   className="flex-[2] py-4 rounded-xl font-black text-base bg-[#f0b90b] hover:bg-[#e6a800] text-black disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-xl shadow-yellow-500/20 hover:-translate-y-0.5"
                 >
                   <Zap className="w-5 h-5" />
-                  Mua ngay
+                  {t('productDetail.buyNow')}
                 </button>
                 <button
                   onClick={handleAddToCart}
                   className="flex-1 py-4 rounded-xl font-bold text-base bg-card border border-border hover:bg-muted hover:border-primary/50 text-foreground transition-all flex items-center justify-center gap-2 shadow-sm"
                 >
                   <ShoppingCart className="w-5 h-5" />
-                  Giỏ hàng
+                  {t('productDetail.addToCart')}
                 </button>
               </div>
 
               {/* Trust badges */}
               <div className="grid grid-cols-3 gap-3 pt-6 border-t border-border">
                 {[
-                  { icon: Shield, label: 'Escrow bảo vệ' },
-                  { icon: Package, label: 'Giao hàng nhanh' },
-                  { icon: MessageCircle, label: 'Hỗ trợ 24/7' },
+                  { icon: Shield, label: t('productDetail.escrowProtection') },
+                  { icon: Package, label: t('productDetail.fastShipping') },
+                  { icon: MessageCircle, label: t('productDetail.support247') },
                 ].map(({ icon: Icon, label }) => (
                   <div key={label} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-muted/50 border border-border/50 text-muted-foreground text-xs font-medium text-center hover:bg-muted transition-colors">
                     <Icon className="w-5 h-5 text-primary" />
@@ -464,7 +467,7 @@ export default function ProductDetailPage() {
               <div className="p-6 rounded-2xl bg-card border border-border shadow-sm space-y-5 sticky top-24">
                 <h3 className="font-bold text-foreground flex items-center gap-2 text-lg">
                   <Store className="w-5 h-5 text-primary" />
-                  Seller Profile
+                  {t('productDetail.sellerProfile')}
                 </h3>
 
                 <div className="flex items-center gap-4">
@@ -489,18 +492,18 @@ export default function ProductDetailPage() {
                 <div className="space-y-3 text-sm py-4 border-y border-border">
                   {product.seller_total_sales > 0 && (
                     <div className="flex items-center justify-between text-muted-foreground">
-                      <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /> Sales</div>
-                      <span className="font-semibold text-foreground">{product.seller_total_sales} total</span>
+                      <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /> {t('productDetail.sales')}</div>
+                      <span className="font-semibold text-foreground">{product.seller_total_sales} {t('productDetail.total')}</span>
                     </div>
                   )}
                   {product.seller_joined_at && (
                     <div className="flex items-center justify-between text-muted-foreground">
-                      <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Member since</div>
+                      <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> {t('productDetail.memberSince')}</div>
                       <span className="font-medium text-foreground">{new Date(product.seller_joined_at).getFullYear()}</span>
                     </div>
                   )}
                   <div className="flex items-center justify-between text-muted-foreground">
-                    <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> Listed on</div>
+                    <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> {t('productDetail.listedOn')}</div>
                     <span className="font-medium text-foreground">{new Date(product.listed_at).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -516,7 +519,7 @@ export default function ProductDetailPage() {
                   >
                     <button className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-muted text-foreground font-semibold hover:bg-primary hover:text-white transition-all">
                       <ExternalLink className="w-4 h-4" />
-                      Visit Full Store
+                      {t('productDetail.visitFullStore')}
                     </button>
                   </Link>
                 )}
@@ -528,7 +531,7 @@ export default function ProductDetailPage() {
               <div className="p-8 rounded-2xl bg-card border border-border shadow-sm">
                 <h3 className="text-xl font-bold mb-6 text-foreground flex items-center gap-2">
                   <Package className="w-5 h-5 text-primary" />
-                  Product Description
+                  {t('productDetail.productDescription')}
                 </h3>
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <p className="text-muted-foreground leading-relaxed whitespace-pre-line text-base">{product.description}</p>
@@ -538,14 +541,14 @@ export default function ProductDetailPage() {
               {/* Share row - no raw URL exposed */}
               <div className="p-5 rounded-2xl bg-card border border-border flex items-center justify-between gap-4 shadow-sm">
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground mb-1">Chia sẻ sản phẩm này</p>
-                  <p className="text-xs text-muted-foreground">Sao chép liên kết hoặc chia sẻ qua mạng xã hội</p>
+                  <p className="font-semibold text-foreground mb-1">{t('productDetail.shareProduct')}</p>
+                  <p className="text-xs text-muted-foreground">{t('productDetail.copyLinkDesc')}</p>
                 </div>
                 <button
                   onClick={handleCopyLink}
                   className="flex-shrink-0 px-5 py-3 rounded-xl bg-muted border border-border font-medium text-foreground hover:bg-primary hover:text-white hover:border-primary transition-all flex items-center gap-2 shadow-sm"
                 >
-                  {linkCopied ? <><Check className="w-4 h-4" />Đã copy!</> : <><Share2 className="w-4 h-4" />Copy link</>}
+                  {linkCopied ? <><Check className="w-4 h-4" />{t('productDetail.linkCopied')}</> : <><Share2 className="w-4 h-4" />{t('productDetail.copyLink')}</>}
                 </button>
               </div>
 

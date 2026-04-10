@@ -22,6 +22,8 @@ import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseAbi, keccak256, toBytes } from 'viem';
 import { CHAIN_META } from '@/lib/web3/config';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
 
 interface Order {
   order_id: number;
@@ -69,6 +71,7 @@ export default function OrderDetailPage() {
   const [uploadingImg, setUploadingImg] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useClientTranslation();
 
   // Wagmi for on-chain buyerConfirmDelivery
   const { isConnected } = useAccount();
@@ -82,14 +85,14 @@ export default function OrderDetailPage() {
     // Use PATCH /:id/status — state machine now allows PAID/ONCHAIN_CONFIRMED → COMPLETED
     apiClient.patch(`/api/orders/${order.order_id}/status`, { status: 'COMPLETED' })
       .then(() => {
-        toast.success('✅ Xác nhận nhận hàng thành công! Escrow đang giải ngân cho người bán.');
+        toast.success(t('orderDetail.confirmSuccess'));
         fetchOrder();
       })
       .catch((e: any) => {
-        const msg = e.response?.data?.message || 'Lỗi cập nhật backend';
-        toast.error(`Cập nhật thất bại: ${msg}`);
+        const msg = e.response?.data?.message || 'Backend error';
+        toast.error(t('orderDetail.updateFailed', { msg }));
         // Don't panic — on-chain tx succeeded, admin can manually release
-        toast.info('Giao dịch on-chain thành công. Admin sẽ xác nhận thủ công nếu cần.', { duration: 8000 });
+        toast.info(t('orderDetail.onchainSuccessAdmin'), { duration: 8000 });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmSuccess]);
@@ -138,10 +141,10 @@ export default function OrderDetailPage() {
       }
     } catch (e: any) {
       if (e.response?.status === 404) {
-        toast.error('Không tìm thấy đơn hàng');
+        toast.error(t('orderDetail.orderNotFound'));
         router.push('/orders');
       } else {
-        toast.error(e.response?.data?.message || 'Tải đơn hàng thất bại');
+        toast.error(e.response?.data?.message || t('orderDetail.loadOrderFailed'));
       }
     } finally {
       setLoading(false);
@@ -155,13 +158,13 @@ export default function OrderDetailPage() {
       await paymentClient.post('/api/payments/paypal/capture', {
         paypal_order_id: order.paypal_order_id,
       });
-      toast.success('Thanh toán PayPal đã hoàn tất');
+      toast.success(t('orderDetail.paypalComplete'));
       setOrder((prev) => prev ? { ...prev, status: 'PAID' } : null);
       if (typeof window !== 'undefined') {
         window.history.replaceState({}, '', `/orders/${order.order_id}`);
       }
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Xác nhận PayPal thất bại');
+      toast.error(e.response?.data?.message || t('orderDetail.paypalCaptureFailed'));
     } finally {
       setCapturing(false);
     }
@@ -171,10 +174,10 @@ export default function OrderDetailPage() {
     setActionLoading(true);
     try {
       await apiClient.patch(`/api/orders/${order?.order_id}/status`, { status: newStatus, ...extra });
-      toast.success('Cập nhật trạng thái thành công!');
+      toast.success(t('orderDetail.statusSuccess'));
       fetchOrder();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Cập nhật thất bại');
+      toast.error(e.response?.data?.message || t('orderDetail.statusUpdateFailed'));
     } finally {
       setActionLoading(false);
     }
@@ -188,7 +191,7 @@ export default function OrderDetailPage() {
       return;
     }
     if (!isConnected) {
-      toast.error('Kết nối ví MetaMask trước');
+      toast.error(t('orderDetail.connectWalletFirst'));
       return;
     }
     // IMPORTANT: orderId32 must match exactly what the backend/contract uses:
@@ -219,16 +222,16 @@ export default function OrderDetailPage() {
       const data = await res.json();
       if (!data.secure_url) throw new Error(data.error?.message || 'Upload thất bại');
       setDisputeImages(prev => [...prev, data.secure_url]);
-      toast.success('Ảnh đã tải lên thành công');
+      toast.success(t('orderDetail.uploadSuccess'));
     } catch (e: any) {
-      toast.error(e.message || 'Tải ảnh thất bại');
+      toast.error(e.message || t('orderDetail.uploadFailed'));
     } finally {
       setUploadingImg(false);
     }
   };
 
   const handleDispute = async () => {
-    if (!disputeReason.trim()) { toast.error('Vui lòng nhập lý do khiếu nại'); return; }
+    if (!disputeReason.trim()) { toast.error(t('orderDetail.disputeReasonRequired')); return; }
     setActionLoading(true);
     try {
       await apiClient.patch(`/api/orders/${order?.order_id}/status`, {
@@ -236,13 +239,13 @@ export default function OrderDetailPage() {
         reason: disputeReason,
         evidence_urls: disputeImages,   // ← gửi URLs ảnh bằng chứng
       });
-      toast.success('✅ Đã gửi khiếu nại — Admin sẽ xem xét trong 24h. Tiền vẫn giữ trong escrow.');
+      toast.success(t('orderDetail.disputeSubmitted'));
       setShowDisputeForm(false);
       setDisputeReason('');
       setDisputeImages([]);
       fetchOrder();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Gửi khiếu nại thất bại');
+      toast.error(e.response?.data?.message || t('orderDetail.disputeSubmitFailed'));
     } finally {
       setActionLoading(false);
     }
@@ -299,11 +302,11 @@ export default function OrderDetailPage() {
     return (
       <>
         <Header />
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 flex items-center justify-center">
+        <div className="min-h-screen bg-background py-8 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Không tìm thấy đơn hàng</p>
+            <p className="text-muted-foreground mb-4">{t('orderDetail.orderNotFound')}</p>
             <Link href="/orders">
-              <Button>Về danh sách đơn hàng</Button>
+              <Button>{t('orderDetail.backToOrders')}</Button>
             </Link>
           </div>
         </div>
@@ -350,8 +353,8 @@ export default function OrderDetailPage() {
             <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3">
               <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
               <div>
-                <p className="font-semibold text-red-300 text-sm">Giao dịch thất bại trên blockchain</p>
-                <p className="text-xs text-red-400/70 mt-0.5">Tiền chưa bị trừ. Vui lòng thử thanh toán lại.</p>
+                <p className="font-semibold text-red-300 text-sm">{t('orderDetail.txFailedTitle')}</p>
+                <p className="text-xs text-red-400/70 mt-0.5">{t('orderDetail.txFailedDesc')}</p>
               </div>
             </div>
           )}
@@ -361,17 +364,17 @@ export default function OrderDetailPage() {
               {capturing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Đang xác nhận thanh toán PayPal...</span>
+                  <span>{t('orderDetail.paypalConfirming')}</span>
                 </>
               ) : (
-                <span>Bạn đã quay lại từ PayPal. Thanh toán sẽ được xác nhận tự động.</span>
+                <span>{t('orderDetail.paypalReturned')}</span>
               )}
             </div>
           )}
 
           {cancelled && (
-            <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-              Bạn đã hủy thanh toán PayPal. Đơn hàng vẫn chờ thanh toán.
+            <div className="mb-4 p-4 bg-muted rounded-lg">
+              {t('orderDetail.paypalCancelled')}
             </div>
           )}
 
@@ -387,7 +390,7 @@ export default function OrderDetailPage() {
                   </span>
                   <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-                    Cập nhật: {new Date(order.created_at).toLocaleString('vi-VN')}
+                    {t('orderDetail.updated')}: {new Date(order.created_at).toLocaleString(t('locale') === 'vi' ? 'vi-VN' : 'en-US')}
                   </p>
                 </div>
               </div>
@@ -414,22 +417,22 @@ export default function OrderDetailPage() {
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <h2 className="font-bold text-xl text-white mb-2 leading-tight">{order.product_name}</h2>
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 w-fit mb-3">
-                  <span className="text-xs text-gray-400">Số lượng:</span>
+                  <span className="text-xs text-gray-400">{t('orderDetail.quantity')}:</span>
                   <span className="text-sm font-bold text-white">x{order.quantity}</span>
                 </div>
 
                 {order.pricing_mode === 'usd' || !order.pricing_mode ? (
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl font-bold font-mono text-emerald-400">\${Number(order.price_usd).toFixed(2)}</span>
+                    <span className="text-3xl font-bold font-mono text-emerald-400">{formatUSD(Number(order.price_usd))}</span>
                     <span className="text-sm text-gray-500 font-medium tracking-wide">USD</span>
                   </div>
                 ) : (
                   <div className="flex flex-col">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold font-mono text-[#f0b90b]">{Number(order.subtotal_token).toFixed(4)}</span>
+                      <span className="text-3xl font-bold font-mono text-[#f0b90b]">{formatCrypto(Number(order.subtotal_token), 'TOKEN')}</span>
                       <span className="text-sm text-gray-500 font-medium tracking-wide">Token</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">~ \${Number(order.price_usd).toFixed(2)} USD</p>
+                    <p className="text-xs text-gray-500 mt-1">~ {formatUSD(Number(order.price_usd))}</p>
                   </div>
                 )}
               </div>
@@ -442,18 +445,18 @@ export default function OrderDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 bg-white/5 rounded-xl border border-white/5">
                 <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
-                  Người mua {isBuyer && <span className="text-blue-400 normal-case font-medium tracking-normal">(Bạn)</span>}
+                  {t('orderDetail.buyer')} {isBuyer && <span className="text-blue-400 normal-case font-medium tracking-normal">{t('orderDetail.you')}</span>}
                 </dt>
                 <dd className="font-medium text-sm text-gray-200 truncate">{order.buyer_name}</dd>
               </div>
               <div className="p-4 bg-white/5 rounded-xl border border-white/5">
                 <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
-                  Trợ lý / Bán {isSeller && <span className="text-emerald-400 normal-case font-medium tracking-normal">(Bạn)</span>}
+                  {t('orderDetail.seller')} {isSeller && <span className="text-emerald-400 normal-case font-medium tracking-normal">{t('orderDetail.you')}</span>}
                 </dt>
                 <dd className="font-medium text-sm text-gray-200 truncate">{order.seller_name}</dd>
               </div>
               <div className="p-4 bg-white/5 rounded-xl border border-white/5">
-                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">Phương thức</dt>
+                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">{t('orderDetail.paymentMethod')}</dt>
                 <dd className="font-medium text-sm text-gray-200 uppercase flex items-center gap-1.5">
                   {order.payment_method === 'crypto' ? (
                     <><span className="w-2 h-2 rounded-full bg-[#f0b90b]" /> Crypto Web3</>
@@ -465,7 +468,7 @@ export default function OrderDetailPage() {
                 </dd>
               </div>
               <div className="p-4 bg-white/5 rounded-xl border border-white/5">
-                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">Mã Invoice</dt>
+                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">{t('orderDetail.invoiceCode')}</dt>
                 <dd className="font-mono text-xs text-gray-400 bg-black/30 px-2 py-1 rounded inline-block">
                   {order.internal_order_id.split('-')[0].toUpperCase()}
                 </dd>
@@ -479,7 +482,7 @@ export default function OrderDetailPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Shield className="w-5 h-5 text-emerald-400" />
-                  <p className="font-semibold text-emerald-300 text-sm">Smart Contract Escrow</p>
+                  <p className="font-semibold text-emerald-300 text-sm">{t('orderDetail.escrowContract')}</p>
                 </div>
                 {order.chain_id && CHAIN_META[order.chain_id] && (
                   <span className="text-[10px] px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full font-bold text-emerald-400">
@@ -490,12 +493,12 @@ export default function OrderDetailPage() {
 
               {/* Status explanation */}
               <p className="text-xs text-emerald-400/70">
-                {order.status === 'TX_SUBMITTED' && 'Giao dịch đang chờ xác nhận từ blockchain...'}
-                {order.status === 'ONCHAIN_CONFIRMED' && 'Thanh toán đã xác nhận. Tiền đang khóa trong escrow.'}
-                {order.status === 'PAID' && 'Tiền đã khóa an toàn. Người bán nhận tiền khi bạn xác nhận nhận hàng.'}
-                {(order.status === 'SHIPPED' || order.status === 'DELIVERED') && 'Tiền vẫn khóa. Xác nhận nhận hàng để giải ngân cho người bán.'}
-                {order.status === 'COMPLETED' && 'Escrow đã giải ngân thành công cho người bán.'}
-                {order.status === 'DISPUTED' && 'Tiền đóng băng. Admin đang xem xét khiếu nại.'}
+                {order.status === 'TX_SUBMITTED' && t('orderDetail.escrowTxSubmitted')}
+                {order.status === 'ONCHAIN_CONFIRMED' && t('orderDetail.escrowOnchainConfirmed')}
+                {order.status === 'PAID' && t('orderDetail.escrowPaid')}
+                {(order.status === 'SHIPPED' || order.status === 'DELIVERED') && t('orderDetail.escrowShipped')}
+                {order.status === 'COMPLETED' && t('orderDetail.escrowCompleted')}
+                {order.status === 'DISPUTED' && t('orderDetail.escrowDisputed')}
               </p>
 
               {/* ── Blockchain Timeline ── */}
@@ -531,7 +534,7 @@ export default function OrderDetailPage() {
                 <div className="flex items-center gap-2 p-2.5 bg-black/20 rounded-lg">
                   <p className="font-mono text-[11px] text-emerald-300/80 flex-1 break-all">{order.escrow_contract}</p>
                   <button
-                    onClick={() => { navigator.clipboard.writeText(order.escrow_contract!); toast.success('Đã copy địa chỉ contract'); }}
+                    onClick={() => { navigator.clipboard.writeText(order.escrow_contract!); toast.success(t('orderDetail.copiedContract')); }}
                     className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-emerald-400/60 hover:text-emerald-400 transition-colors"
                     title="Copy address"
                   >
@@ -552,11 +555,11 @@ export default function OrderDetailPage() {
               {/* TX Hash */}
               {order.tx_hash && (
                 <div className="space-y-1">
-                  <p className="text-[10px] text-gray-500">Transaction Hash</p>
+                  <p className="text-[10px] text-gray-500">{t('orderDetail.txHash')}</p>
                   <div className="flex items-center gap-2 p-2.5 bg-black/20 rounded-lg">
                     <p className="font-mono text-[11px] text-blue-300/80 flex-1 truncate">{order.tx_hash}</p>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(order.tx_hash!); toast.success('Đã copy TX hash'); }}
+                      onClick={() => { navigator.clipboard.writeText(order.tx_hash!); toast.success(t('orderDetail.copiedTxHash')); }}
                       className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-blue-400/60 hover:text-blue-400 transition-colors"
                       title="Copy TX hash"
                     >
@@ -578,8 +581,8 @@ export default function OrderDetailPage() {
               {/* Amount locked */}
               {order.amount_token && order.amount_token > 0 && (
                 <div className="flex items-center justify-between text-xs p-2.5 bg-black/20 rounded-lg">
-                  <span className="text-gray-500">Số tiền khóa trong escrow</span>
-                  <span className="font-mono font-bold text-emerald-400">{order.amount_token.toFixed(6)} Token</span>
+                  <span className="text-gray-500">{t('orderDetail.amountLocked')}</span>
+                  <span className="font-mono font-bold text-emerald-400">{formatCrypto(order.amount_token, 'TOKEN')} Token</span>
                 </div>
               )}
             </div>
@@ -590,12 +593,12 @@ export default function OrderDetailPage() {
             <div className="p-5 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl mb-6">
               <div className="flex items-center gap-2 mb-2">
                 <Truck className="w-4 h-4 text-indigo-400" />
-                <p className="font-semibold text-indigo-300 text-sm">Hàng đang trên đường giao</p>
+                <p className="font-semibold text-indigo-300 text-sm">{t('orderDetail.shippingInTransit')}</p>
               </div>
               {order.tracking_number ? (
-                <p className="text-xs text-indigo-400/80">Mã vận đơn: <span className="font-mono font-bold text-indigo-300">{order.tracking_number}</span></p>
+                <p className="text-xs text-indigo-400/80">{t('orderDetail.trackingLabel')}: <span className="font-mono font-bold text-indigo-300">{order.tracking_number}</span></p>
               ) : (
-                <p className="text-xs text-indigo-400/70">Người bán chưa cập nhật mã vận đơn.</p>
+                <p className="text-xs text-indigo-400/70">{t('orderDetail.noTrackingYet')}</p>
               )}
             </div>
           )}
@@ -604,7 +607,7 @@ export default function OrderDetailPage() {
             <Link href={`/checkout/${order.order_id}`}>
               <button className="w-full relative overflow-hidden group py-4 bg-gradient-to-r from-[#f0b90b] to-[#f3ba2f] text-black font-bold rounded-2xl text-base transition-all shadow-[0_4px_20px_rgba(240,185,11,0.2)] hover:shadow-[0_4px_30px_rgba(240,185,11,0.35)] hover:-translate-y-0.5 mb-6">
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                <span className="relative z-10 block text-center">Tiếp tục thanh toán an toàn &rarr;</span>
+                <span className="relative z-10 block text-center">{t('orderDetail.continuePay')}</span>
               </button>
             </Link>
           )}
@@ -615,15 +618,15 @@ export default function OrderDetailPage() {
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-3xl rounded-full" />
               <div className="relative z-10">
                 <h3 className="font-bold text-lg mb-2 text-blue-400 flex items-center gap-2">
-                  <Package className="w-5 h-5" /> Thao tác dành cho người bán
+                  <Package className="w-5 h-5" /> {t('orderDetail.sellerActions')}
                 </h3>
-                <p className="text-sm text-blue-200/70 mb-4">Người mua đã thanh toán. Tiền đang khóa trong escrow cho đến khi giao hàng xong.</p>
+                <p className="text-sm text-blue-200/70 mb-4">{t('orderDetail.sellerPaidDesc')}</p>
                 <div className="mb-4">
-                  <label className="text-xs text-blue-300/70 font-semibold mb-1.5 block">Mã vận đơn (tùy chọn)</label>
+                  <label className="text-xs text-blue-300/70 font-semibold mb-1.5 block">{t('orderDetail.trackingNumberLabel')}</label>
                   <input
                     value={trackingInput}
                     onChange={e => setTrackingInput(e.target.value)}
-                    placeholder="VD: VN123456789..."
+                    placeholder={t('orderDetail.trackingPlaceholder')}
                     className="w-full px-3 py-2.5 bg-blue-900/20 border border-blue-500/20 rounded-xl text-sm text-white placeholder-blue-400/40 focus:outline-none focus:border-blue-400/50"
                   />
                 </div>
@@ -633,7 +636,7 @@ export default function OrderDetailPage() {
                   disabled={actionLoading}
                 >
                   {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Truck className="w-5 h-5" />}
-                  Xác nhận Đã Giao Hàng
+                  {t('orderDetail.confirmShipped')}
                 </button>
               </div>
             </div>
@@ -646,21 +649,21 @@ export default function OrderDetailPage() {
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
               <div className="relative z-10">
                 <h3 className="font-bold text-lg mb-2 text-emerald-400 flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5" /> Xác nhận nhận hàng
+                  <CheckCircle className="w-5 h-5" /> {t('orderDetail.confirmDeliveryTitle')}
                 </h3>
                 {order.status === 'PAID' && (
                   <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                    <p className="text-xs text-amber-300">⚠️ Người bán chưa cập nhật trạng thái giao hàng. Nếu bạn đã nhận được hàng, bạn vẫn có thể xác nhận để giải ngân cho người bán.</p>
+                    <p className="text-xs text-amber-300">{t('orderDetail.sellerNotShipped')}</p>
                   </div>
                 )}
                 <p className="text-sm text-emerald-200/70 mb-2 leading-relaxed">
-                  Bạn đã nhận được sản phẩm? Nhấn xác nhận để hợp đồng thông minh tự động giải ngân cho người bán.
+                  {t('orderDetail.confirmDeliveryDesc')}
                 </p>
                 <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                  <p className="text-xs text-red-300 font-semibold">⚠️ Lưu ý quan trọng: Sau khi xác nhận, tiền sẽ chuyển thẳng cho người bán và KHÔNG THỂ hoàn lại. Chỉ nhấn khi bạn đã nhận hàng và hài lòng.</p>
+                  <p className="text-xs text-red-300 font-semibold">{t('orderDetail.warningIrreversible')}</p>
                 </div>
                 {!isConnected && order.payment_method === 'crypto' && (
-                  <p className="text-xs text-yellow-400/80 mb-3">&#9888; Kết nối MetaMask để xác nhận trustlessly on-chain.</p>
+                  <p className="text-xs text-yellow-400/80 mb-3">{t('orderDetail.connectMetamask')}</p>
                 )}
                 <div className="flex flex-col sm:flex-row gap-3">
                   {/* Dispute button */}
@@ -668,7 +671,7 @@ export default function OrderDetailPage() {
                     className="flex-1 py-3.5 px-4 bg-transparent border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
                     onClick={() => setShowDisputeForm(v => !v)}
                   >
-                    <AlertTriangle className="w-4 h-4" /> Khiếu nại / Hoàn tiền
+                    <AlertTriangle className="w-4 h-4" /> {t('orderDetail.dispute')}
                   </button>
                   {/* Confirm delivery button */}
                   <button
@@ -676,9 +679,9 @@ export default function OrderDetailPage() {
                     onClick={handleOnChainConfirm}
                     disabled={confirmPending || confirmWaiting}
                   >
-                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />Chờ MetaMask...</> :
-                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xác nhận on-chain...</> :
-                        <><Check className="w-5 h-5" />Đã Nhận Hàng — Thanh toán cho Người Bán</>}
+                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />{t('orderDetail.waitingMetamask')}</> :
+                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />{t('orderDetail.confirmingOnchain')}</> :
+                        <><Check className="w-5 h-5" />{t('orderDetail.confirmedDelivery')}</>}
                   </button>
                 </div>
 
@@ -690,39 +693,39 @@ export default function OrderDetailPage() {
                         <FileText className="w-4 h-4 text-red-400" />
                       </div>
                       <div>
-                        <p className="font-bold text-red-300 text-sm">Gửi khiếu nại</p>
-                        <p className="text-xs text-red-400/70 mt-0.5">Tiền sẽ tiếp tục đóng băng trong escrow cho đến khi Admin phán quyết.</p>
+                        <p className="font-bold text-red-300 text-sm">{t('orderDetail.submitDispute')}</p>
+                        <p className="text-xs text-red-400/70 mt-0.5">{t('orderDetail.disputeDesc')}</p>
                       </div>
                     </div>
                     <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                       <div className="flex items-start gap-2">
                         <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                          <p className="text-xs font-semibold text-amber-300">Lưu ý về tính minh bạch</p>
+                          <p className="text-xs font-semibold text-amber-300">{t('orderDetail.transparencyNote')}</p>
                           <ul className="text-xs text-amber-400/80 space-y-1 list-disc list-inside">
-                            <li>Mọi khiếu nại đều được ghi lại trên hệ thống vĩnh viễn</li>
-                            <li>Admin có thể xem toàn bộ lịch sử giao dịch blockchain</li>
-                            <li>Khiếu nại gian lận sẽ bị ghi vào Credit Score và có thể bị khóa tài khoản</li>
-                            <li>Nếu đã nhận hàng, Admin phát hiện qua TX on-chain — khiếu nại cố tình sẽ bị từ chối</li>
+                            <li>{t('orderDetail.transparencyRule1')}</li>
+                            <li>{t('orderDetail.transparencyRule2')}</li>
+                            <li>{t('orderDetail.transparencyRule3')}</li>
+                            <li>{t('orderDetail.transparencyRule4')}</li>
                           </ul>
                         </div>
                       </div>
                     </div>
                     <div>
                       <label className="text-xs text-red-300 font-semibold mb-2 flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5" />Mô tả vấn đề <span className="text-red-500">*</span>
+                        <FileText className="w-3.5 h-3.5" />{t('orderDetail.disputeReason')} <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         value={disputeReason}
                         onChange={e => setDisputeReason(e.target.value)}
-                        placeholder="Mô tả chi tiết: hàng không đúng mô tả, hàng hỏng, không nhận được hàng..."
+                        placeholder={t('orderDetail.disputeReasonPlaceholder')}
                         rows={4}
                         className="w-full px-3 py-2.5 bg-red-900/20 border border-red-500/20 rounded-xl text-sm text-white placeholder-red-400/40 focus:outline-none focus:border-red-400/50 resize-none"
                       />
                     </div>
                     <div>
                       <label className="text-xs text-red-300 font-semibold mb-2 flex items-center gap-1.5">
-                        <ImagePlus className="w-3.5 h-3.5" />Ảnh bằng chứng (tối đa 5) — <span className="text-red-400/70 font-normal">Khuyến khích để tăng tính thuyết phục</span>
+                        <ImagePlus className="w-3.5 h-3.5" />{t('orderDetail.evidencePhotos')} — <span className="text-red-400/70 font-normal">{t('orderDetail.evidenceHint')}</span>
                       </label>
                       {disputeImages.length > 0 && (
                         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
@@ -744,24 +747,24 @@ export default function OrderDetailPage() {
                           <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingImg}
                             className="w-full py-3 border border-dashed border-red-500/30 rounded-xl text-sm text-red-400/70 hover:text-red-300 hover:border-red-500/50 hover:bg-red-500/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
                             {uploadingImg
-                              ? <><Loader2 className="w-4 h-4 animate-spin" />Đang tải ảnh...</>
-                              : <><Upload className="w-4 h-4" />Chọn ảnh bằng chứng ({disputeImages.length}/5)</>}
+                              ? <><Loader2 className="w-4 h-4 animate-spin" />{t('orderDetail.uploadingPhoto')}</>
+                              : <><Upload className="w-4 h-4" />{t('orderDetail.selectEvidence', { count: disputeImages.length })}</>}
                           </button>
                         </>
                       )}
                     </div>
                     <div className="p-3 bg-white/3 border border-white/5 rounded-xl">
-                      <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Quy trình xử lý</p>
+                      <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{t('orderDetail.disputeProcess')}</p>
                       <div className="space-y-1.5">
                         {[
-                          { n: '1', t: 'Bạn gửi khiếu nại + ảnh bằng chứng', c: 'text-red-400' },
-                          { n: '2', t: 'Admin xem xét, liên hệ cả hai bên trong 24h', c: 'text-amber-400' },
-                          { n: '3', t: 'Admin phán quyết: hoàn tiền bạn HOẶC giải ngân người bán', c: 'text-blue-400' },
-                          { n: '4', t: 'Bên thua kiện bị trừ Credit Score vĩnh viễn', c: 'text-gray-400' },
-                        ].map(({ n, t, c }) => (
+                          { n: '1', txt: t('orderDetail.disputeStep1'), c: 'text-red-400' },
+                          { n: '2', txt: t('orderDetail.disputeStep2'), c: 'text-amber-400' },
+                          { n: '3', txt: t('orderDetail.disputeStep3'), c: 'text-blue-400' },
+                          { n: '4', txt: t('orderDetail.disputeStep4'), c: 'text-gray-400' },
+                        ].map(({ n, txt, c }) => (
                           <div key={n} className="flex items-start gap-2">
                             <span className={`text-xs font-bold ${c} flex-shrink-0 w-4`}>{n}.</span>
-                            <span className="text-xs text-gray-500">{t}</span>
+                            <span className="text-xs text-gray-500">{txt}</span>
                           </div>
                         ))}
                       </div>
@@ -769,13 +772,13 @@ export default function OrderDetailPage() {
                     <div className="flex gap-2 pt-1">
                       <button onClick={() => { setShowDisputeForm(false); setDisputeReason(''); setDisputeImages([]); }}
                         className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 text-sm hover:bg-white/5 transition-all">
-                        Hủy
+                        {t('orderDetail.cancelDispute')}
                       </button>
                       <button onClick={handleDispute} disabled={actionLoading || !disputeReason.trim()}
                         className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                         {actionLoading
-                          ? <><Loader2 className="w-4 h-4 animate-spin" />Đang gửi...</>
-                          : <><AlertTriangle className="w-4 h-4" />Gửi Khiếu Nại & Đóng Băng Tiền</>}
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />{t('orderDetail.sendingDispute')}</>
+                          : <><AlertTriangle className="w-4 h-4" />{t('orderDetail.submitDisputeBtn')}</>}
                       </button>
                     </div>
                   </div>
@@ -802,8 +805,8 @@ export default function OrderDetailPage() {
                     <Star className="w-5 h-5 text-[#f0b90b]" />
                   </div>
                   <div>
-                    <p className="font-bold text-foreground text-sm">Đánh giá sản phẩm này</p>
-                    <p className="text-xs text-muted-foreground">Chia sẻ trải nghiệm · Nhận +3 Credit Score nếu đánh giá 5★</p>
+                    <p className="font-bold text-foreground text-sm">{t('orderDetail.reviewCta')}</p>
+                    <p className="text-xs text-muted-foreground">{t('orderDetail.reviewCtaDesc')}</p>
                   </div>
                 </div>
                 <ArrowLeft className="w-5 h-5 text-[#f0b90b] rotate-180 group-hover:translate-x-1 transition-transform flex-shrink-0" />

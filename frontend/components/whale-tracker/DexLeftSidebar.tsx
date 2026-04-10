@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Star, TrendingUp, Sparkles, ArrowUpRight, ArrowDownRight, ChevronRight, Loader2, X } from 'lucide-react';
+import { Search, Star, TrendingUp, Sparkles, ArrowUpRight, ArrowDownRight, ChevronRight, Loader2, X, Clock, Trash2 } from 'lucide-react';
 import { fetchTrendingPairs, searchTokenPairs } from '@/lib/whale-api';
 import { useWhaleTrackerStore, CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { TokenPair, SupportedChain } from '@/store/whale-tracker-store';
@@ -102,8 +102,14 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
     const [trendingPairs, setTrendingPairs] = useState<TokenPair[]>([]);
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
-    const { watchlistPairs } = useWhaleTrackerStore();
+    const { watchlistPairs, recentSearchPairs, addRecentSearch, clearRecentSearches } = useWhaleTrackerStore();
     const debounceRef = useState<ReturnType<typeof setTimeout>>(null!);
+
+    // Wrap onSelectPair to also save to recent searches
+    const handleSelectPair = (pair: TokenPair) => {
+        addRecentSearch(pair);
+        onSelectPair(pair);
+    };
 
     // Fetch trending on mount
     useEffect(() => {
@@ -187,16 +193,37 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                                 <p className="text-[9px] text-white/20 px-2 py-1">{searchResults.length} kết quả</p>
                                 {searchResults.map(p => (
                                     <MiniPairRow key={p.pairAddress} pair={p}
-                                        onClick={() => onSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                        onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
                                 ))}
                             </div>
                         ) : searched && !loading ? (
                             <div className="text-center py-8 text-[11px] text-white/20">Không tìm thấy pool nào</div>
                         ) : !searched ? (
-                            <div className="text-center py-6 space-y-1.5">
-                                <Search className="w-6 h-6 text-white/10 mx-auto" />
-                                <p className="text-[10px] text-white/20">Tìm token trên BSC, ETH, Polygon</p>
-                            </div>
+                            <>
+                                {/* Recent Searches */}
+                                {recentSearchPairs.length > 0 ? (
+                                    <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between px-2 py-1">
+                                            <p className="text-[9px] text-white/25 flex items-center gap-1">
+                                                <Clock className="w-2.5 h-2.5" /> Đã xem gần đây
+                                            </p>
+                                            <button onClick={clearRecentSearches}
+                                                className="text-[8px] text-white/15 hover:text-red-400 transition-colors flex items-center gap-0.5">
+                                                <Trash2 className="w-2.5 h-2.5" /> Xóa
+                                            </button>
+                                        </div>
+                                        {recentSearchPairs.map(p => (
+                                            <MiniPairRow key={p.pairAddress} pair={p}
+                                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-6 space-y-1.5">
+                                        <Search className="w-6 h-6 text-white/10 mx-auto" />
+                                        <p className="text-[10px] text-white/20">Tìm token trên BSC, ETH, Polygon</p>
+                                    </div>
+                                )}
+                            </>
                         ) : null}
                     </>
                 )}
@@ -211,7 +238,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                                 </p>
                                 {watchlistPairs.map(p => (
                                     <MiniPairRow key={p.pairAddress} pair={p}
-                                        onClick={() => onSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                        onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
                                 ))}
                             </>
                         ) : (
@@ -232,7 +259,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                         </p>
                         {trendingPairs.length > 0 ? trendingPairs.slice(0, 20).map(p => (
                             <MiniPairRow key={p.pairAddress} pair={p}
-                                onClick={() => onSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
                         )) : (
                             <div className="text-center py-8 text-[10px] text-white/20">
                                 <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 text-violet-400/50" />
@@ -250,7 +277,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                         </p>
                         {newPairs.length > 0 ? newPairs.map(p => (
                             <MiniPairRow key={p.pairAddress} pair={p}
-                                onClick={() => onSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
                         )) : (
                             <div className="text-center py-8 text-[10px] text-white/20">Không có pair mới trong trending</div>
                         )}
@@ -265,7 +292,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                                 <ArrowUpRight className="w-2.5 h-2.5" /> Top Gainers 24h
                             </p>
                             {gainers.slice(0, 8).map(p => (
-                                <MiniPairRow key={p.pairAddress} pair={p} onClick={() => onSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} />
+                                <MiniPairRow key={p.pairAddress} pair={p} onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} />
                             ))}
                         </div>
                         <div className="border-t border-white/[0.06] pt-1">
@@ -273,7 +300,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                                 <ArrowDownRight className="w-2.5 h-2.5" /> Top Losers 24h
                             </p>
                             {losers.slice(0, 8).map(p => (
-                                <MiniPairRow key={p.pairAddress} pair={p} onClick={() => onSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} />
+                                <MiniPairRow key={p.pairAddress} pair={p} onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} />
                             ))}
                         </div>
                     </div>

@@ -19,6 +19,8 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { CoinImage } from '@/components/ui/CoinImage';
+import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { formatUSD, formatCrypto } from '@/lib/utils/format-price';
 
 /* ─── Types ───────────────────────────────────────────────────── */
 interface Order {
@@ -40,56 +42,57 @@ interface Order {
 
 /* ─── Config ──────────────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, {
-  label: string;
+  labelKey: string;
   textColor: string;
   bgColor: string;
   borderColor: string;
   icon: any;
   step: number;
 }> = {
-  UNPAID: { label: 'Chờ thanh toán', textColor: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', icon: Clock, step: 0 },
-  TX_SUBMITTED: { label: 'Đang xác nhận', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: Clock, step: 1 },
-  ONCHAIN_CONFIRMED: { label: 'Đã xác nhận', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
-  PAYMENT_VALIDATED: { label: 'Đã xác nhận', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
-  PAID: { label: 'Đã thanh toán', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 2 },
-  PROCESSING: { label: 'Đang xử lý', textColor: 'text-violet-400', bgColor: 'bg-violet-500/10', borderColor: 'border-violet-500/30', icon: Package, step: 2 },
-  DELIVERING: { label: 'Đang giao', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
-  SHIPPED: { label: 'Đang giao', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
-  DELIVERED: { label: 'Đã giao', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 4 },
-  COMPLETED: { label: 'Hoàn thành', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: Star, step: 4 },
-  DISPUTED: { label: 'Tranh chấp', textColor: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/30', icon: AlertTriangle, step: -1 },
-  CANCELLED: { label: 'Đã hủy', textColor: 'text-gray-500', bgColor: 'bg-gray-500/10', borderColor: 'border-gray-500/30', icon: XCircle, step: -1 },
-  REFUNDED: { label: 'Hoàn tiền', textColor: 'text-purple-400', bgColor: 'bg-purple-500/10', borderColor: 'border-purple-500/30', icon: XCircle, step: -1 },
+  UNPAID: { labelKey: 'orders.statusUnpaid', textColor: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', icon: Clock, step: 0 },
+  TX_SUBMITTED: { labelKey: 'orders.statusTxSubmitted', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: Clock, step: 1 },
+  ONCHAIN_CONFIRMED: { labelKey: 'orders.statusOnchainConfirmed', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
+  PAYMENT_VALIDATED: { labelKey: 'orders.statusPaymentValidated', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
+  PAID: { labelKey: 'orders.statusPaid', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 2 },
+  PROCESSING: { labelKey: 'orders.statusProcessing', textColor: 'text-violet-400', bgColor: 'bg-violet-500/10', borderColor: 'border-violet-500/30', icon: Package, step: 2 },
+  DELIVERING: { labelKey: 'orders.statusDelivering', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
+  SHIPPED: { labelKey: 'orders.statusShipped', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
+  DELIVERED: { labelKey: 'orders.statusDelivered', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 4 },
+  COMPLETED: { labelKey: 'orders.statusCompleted', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: Star, step: 4 },
+  DISPUTED: { labelKey: 'orders.statusDisputed', textColor: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/30', icon: AlertTriangle, step: -1 },
+  CANCELLED: { labelKey: 'orders.statusCancelled', textColor: 'text-gray-500', bgColor: 'bg-gray-500/10', borderColor: 'border-gray-500/30', icon: XCircle, step: -1 },
+  REFUNDED: { labelKey: 'orders.statusRefunded', textColor: 'text-purple-400', bgColor: 'bg-purple-500/10', borderColor: 'border-purple-500/30', icon: XCircle, step: -1 },
 };
 
 const FILTERS = [
-  { value: 'all', label: 'Tất cả', statuses: [] as string[] },
-  { value: 'pending', label: 'Chờ TT', statuses: ['UNPAID', 'TX_SUBMITTED'] },
-  { value: 'active', label: 'Đang xử lý', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PROCESSING'] },
-  { value: 'shipping', label: 'Đang giao', statuses: ['DELIVERING', 'SHIPPED'] },
-  { value: 'done', label: 'Hoàn thành', statuses: ['DELIVERED', 'COMPLETED'] },
-  { value: 'issue', label: 'Sự cố', statuses: ['CANCELLED', 'REFUNDED', 'DISPUTED'] },
+  { value: 'all', labelKey: 'orders.filterAll', statuses: [] as string[] },
+  { value: 'pending', labelKey: 'orders.filterPending', statuses: ['UNPAID', 'TX_SUBMITTED'] },
+  { value: 'active', labelKey: 'orders.filterActive', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PROCESSING'] },
+  { value: 'shipping', labelKey: 'orders.filterShipping', statuses: ['DELIVERING', 'SHIPPED'] },
+  { value: 'done', labelKey: 'orders.filterDone', statuses: ['DELIVERED', 'COMPLETED'] },
+  { value: 'issue', labelKey: 'orders.filterIssue', statuses: ['CANCELLED', 'REFUNDED', 'DISPUTED'] },
 ];
 
-const JOURNEY_STEPS = ['Đặt hàng', 'Thanh toán', 'Xác nhận', 'Giao hàng', 'Hoàn thành'];
+const JOURNEY_KEYS = ['orders.journeyOrder', 'orders.journeyPayment', 'orders.journeyConfirm', 'orders.journeyShipping', 'orders.journeyComplete'];
 
 /* ─── Journey Progress Bar ────────────────────────────────────── */
 function JourneyBar({ status }: { status: string }) {
+  const { t } = useClientTranslation();
   const cfg = STATUS_CONFIG[status];
   const currentStep = cfg?.step ?? 0;
   if (currentStep < 0) return null;
   return (
     <div className="mt-4 pt-4 border-t border-border">
       <div className="flex items-center gap-1">
-        {JOURNEY_STEPS.map((label, i) => {
+        {JOURNEY_KEYS.map((key, i) => {
           const done = i < currentStep;
           const active = i === currentStep;
           return (
-            <div key={label} className="flex flex-col items-center gap-1 flex-1">
+            <div key={key} className="flex flex-col items-center gap-1 flex-1">
               <div className={`w-full h-1.5 rounded-full transition-all ${done ? 'bg-[#8247e5]' : active ? 'bg-[#8247e5]/50' : 'bg-muted'}`} />
               {(done || active) && (
                 <span className={`text-[9px] font-bold whitespace-nowrap hidden sm:block ${active ? 'text-[#8247e5]' : 'text-muted-foreground'}`}>
-                  {label}
+                  {t(key)}
                 </span>
               )}
             </div>
@@ -103,6 +106,7 @@ function JourneyBar({ status }: { status: string }) {
 /* ─── Order Card ──────────────────────────────────────────────── */
 function OrderCard({ order, index }: { order: Order; index: number }) {
   const [imgError, setImgError] = useState(false);
+  const { t } = useClientTranslation();
   const imgSrc = order.primary_image
     || order.product_metadata?.primaryImage
     || order.product_metadata?.images?.[0]
@@ -115,8 +119,8 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
     ?? (order.price_in_token ? Number(order.price_in_token) * order.quantity : null);
   const priceIsToken = !!(tokenAmount && order.token_symbol);
   const priceLabel = priceIsToken
-    ? `${Number(tokenAmount).toFixed(['ETH', 'WBTC', 'BTC'].includes(order.token_symbol!) ? 6 : 4)} ${order.token_symbol}`
-    : `$${Number(order.price_usd ?? order.total_amount ?? 0).toFixed(2)}`;
+    ? `${formatCrypto(Number(tokenAmount), order.token_symbol!)} ${order.token_symbol}`
+    : formatUSD(Number(order.price_usd ?? order.total_amount ?? 0));
 
   const orderId = order.internal_order_id || order.order_id;
   const showJourney = cfg.step >= 0 && cfg.step <= 4;
@@ -160,7 +164,7 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
                 </h3>
                 <span className={`inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full border flex-shrink-0 ${cfg.textColor} ${cfg.bgColor} ${cfg.borderColor}`}>
                   <StatusIcon className="w-3 h-3" />
-                  {cfg.label}
+                  {t(cfg.labelKey)}
                 </span>
               </div>
 
@@ -181,15 +185,15 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
                 {priceIsToken ? (
                   <span className={`text-xl font-black font-mono text-[#f0b90b] flex items-center gap-1.5`}>
                     <CoinImage symbol={order.token_symbol!} size={20} className="rounded-full" />
-                    {Number(tokenAmount).toFixed(['ETH', 'WBTC', 'BTC'].includes(order.token_symbol!) ? 6 : 4)} {order.token_symbol}
+                    {formatCrypto(Number(tokenAmount), order.token_symbol!)} {order.token_symbol}
                   </span>
                 ) : (
                   <span className="text-xl font-black font-mono text-[#8247e5]">
-                    ${Number(order.price_usd ?? order.total_amount ?? 0).toFixed(2)}
+                    {formatUSD(Number(order.price_usd ?? order.total_amount ?? 0))}
                   </span>
                 )}
                 <span className="text-[#8247e5] opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-bold transition-all -translate-x-2 group-hover:translate-x-0">
-                  Chi tiết <ArrowRight className="w-3.5 h-3.5" />
+                  {t('orders.details')} <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               </div>
             </div>
@@ -222,6 +226,7 @@ function StatCard({ value, label, icon: Icon, color }: { value: string; label: s
 export default function OrdersPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const { t } = useClientTranslation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -239,7 +244,7 @@ export default function OrdersPage() {
       const data = res.data;
       setOrders(data.orders ?? data.data?.orders ?? []);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Không thể tải đơn hàng');
+      toast.error(err?.response?.data?.message || t('orders.loadError'));
     } finally {
       setLoading(false);
     }
@@ -294,9 +299,9 @@ export default function OrdersPage() {
               <ShoppingBag className="w-6 h-6 text-[#8247e5]" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-foreground">Đơn hàng của tôi</h1>
+              <h1 className="text-2xl font-black text-foreground">{t('orders.title')}</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {loading ? 'Đang tải...' : `${orders.length} đơn hàng tổng cộng`}
+                {loading ? t('orders.loading') : t('orders.totalOrders', { count: orders.length })}
               </p>
             </div>
           </div>
@@ -305,7 +310,7 @@ export default function OrdersPage() {
             <Link href="/cart">
               <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card border border-border hover:border-[#8247e5]/30 text-sm font-semibold text-foreground transition-all hover:bg-muted">
                 <ShoppingCart className="w-4 h-4 text-[#8247e5]" />
-                Giỏ hàng
+                {t('orders.cart')}
               </button>
             </Link>
             <button
@@ -314,7 +319,7 @@ export default function OrdersPage() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card border border-border hover:border-[#8247e5]/30 text-sm font-semibold text-foreground transition-all hover:bg-muted disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Làm mới
+              {t('orders.refresh')}
             </button>
           </div>
         </motion.div>
@@ -327,10 +332,10 @@ export default function OrdersPage() {
             transition={{ delay: 0.05 }}
             className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"
           >
-            <StatCard value={orders.length.toString()} label="Tổng đơn hàng" icon={Package} color="#8247e5" />
-            <StatCard value={completedCount.toString()} label="Hoàn thành" icon={CheckCircle} color="#22c55e" />
-            <StatCard value={pendingCount.toString()} label="Chờ thanh toán" icon={Clock} color="#f97316" />
-            <StatCard value={`$${totalSpentUSD.toFixed(0)}`} label="Đã chi tiêu" icon={Coins} color="#f0b90b" />
+            <StatCard value={orders.length.toString()} label={t('orders.totalOrdersStat')} icon={Package} color="#8247e5" />
+            <StatCard value={completedCount.toString()} label={t('orders.completedStat')} icon={CheckCircle} color="#22c55e" />
+            <StatCard value={pendingCount.toString()} label={t('orders.pendingStat')} icon={Clock} color="#f97316" />
+            <StatCard value={formatUSD(totalSpentUSD)} label={t('orders.totalSpentStat')} icon={Coins} color="#f0b90b" />
           </motion.div>
         )}
 
@@ -346,7 +351,7 @@ export default function OrdersPage() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Tìm theo tên sản phẩm hoặc mã đơn hàng..."
+              placeholder={t('orders.searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#8247e5]/20 focus:border-[#8247e5]/40 transition-all"
@@ -364,7 +369,7 @@ export default function OrdersPage() {
                   : 'bg-muted text-muted-foreground hover:text-foreground'
                   }`}
               >
-                {tab.label}
+                {t(tab.labelKey)}
                 {counts[tab.value] > 0 && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${filter === tab.value ? 'bg-white/20' : 'bg-background'
                     }`}>
@@ -396,12 +401,12 @@ export default function OrdersPage() {
                 <Package className="w-10 h-10 text-muted-foreground/40" />
               </div>
               <h3 className="text-lg font-bold mb-2">
-                {filter !== 'all' || searchQuery ? 'Không tìm thấy đơn hàng' : 'Bạn chưa có đơn hàng'}
+                {filter !== 'all' || searchQuery ? t('orders.noOrdersTitle') : t('orders.noOrdersEmpty')}
               </h3>
               <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
                 {filter !== 'all' || searchQuery
-                  ? 'Hãy thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.'
-                  : 'Khám phá sàn và bắt đầu mua sắm ngay hôm nay!'}
+                  ? t('orders.noOrdersDesc')
+                  : t('orders.noOrdersEmptyDesc')}
               </p>
               <div className="flex items-center gap-3 justify-center">
                 {(filter !== 'all' || searchQuery) && (
@@ -409,13 +414,13 @@ export default function OrdersPage() {
                     onClick={() => { setFilter('all'); setSearchQuery(''); }}
                     className="px-4 py-2 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors"
                   >
-                    Xóa bộ lọc
+                    {t('orders.clearFilters')}
                   </button>
                 )}
                 <Link href="/products">
                   <button className="flex items-center gap-2 px-5 py-2.5 bg-[#8247e5] hover:bg-[#723bc9] text-white rounded-xl font-bold text-sm shadow-lg shadow-purple-500/20 transition-all">
                     <ShoppingBag className="w-4 h-4" />
-                    Khám phá sản phẩm
+                    {t('orders.exploreProducts')}
                   </button>
                 </Link>
               </div>

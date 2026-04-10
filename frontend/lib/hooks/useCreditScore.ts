@@ -11,8 +11,8 @@ export interface CreditScoreData {
   tier: CreditTier;
   completedOrders: number;
   disputeCount: number;
-  platformFee: number;          // basis points e.g. 250 = 2.5%
-  platformFeePercent: string;   // "2.50%"
+  platformFee: number;          // basis points e.g. 50 = 0.5%
+  platformFeePercent: string;   // "0.50%"
   canInstallment: boolean;
   canPriorityList: boolean;
   sbtTokenId?: number | null;
@@ -23,10 +23,10 @@ export interface CreditScoreData {
 }
 
 const TIER_CONFIG: Record<CreditTier, { fee: number; color: string; emoji: string; label: string; minScore: number }> = {
-  BRONZE:  { fee: 250, color: '#cd7f32', emoji: '🥉', label: 'Bronze',  minScore: 0   },
-  SILVER:  { fee: 200, color: '#9ca3af', emoji: '🥈', label: 'Silver',  minScore: 100 },
-  GOLD:    { fee: 150, color: '#f0b90b', emoji: '🥇', label: 'Gold',    minScore: 300 },
-  DIAMOND: { fee: 100, color: '#7dd3fc', emoji: '💎', label: 'Diamond', minScore: 600 },
+  BRONZE:  { fee: 50,  color: '#cd7f32', emoji: '🥉', label: 'Bronze',  minScore: 0   },
+  SILVER:  { fee: 40,  color: '#9ca3af', emoji: '🥈', label: 'Silver',  minScore: 100 },
+  GOLD:    { fee: 30,  color: '#f0b90b', emoji: '🥇', label: 'Gold',    minScore: 300 },
+  DIAMOND: { fee: 20,  color: '#7dd3fc', emoji: '💎', label: 'Diamond', minScore: 600 },
 };
 
 export function getTierConfig(tier: CreditTier) {
@@ -47,8 +47,8 @@ export function useCreditScore() {
     tier: 'BRONZE',
     completedOrders: 0,
     disputeCount: 0,
-    platformFee: 250,
-    platformFeePercent: '2.50%',
+    platformFee: 50,
+    platformFeePercent: '0.50%',
     canInstallment: false,
     canPriorityList: false,
     loading: false,

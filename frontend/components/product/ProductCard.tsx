@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
 import { useChainId } from 'wagmi';
 import { CoinImage } from '@/components/ui/CoinImage';
+import { formatUSD } from '@/lib/utils/format-price';
 
 /* ─── Safe Chain Id Hook ─────────────────────────────────────── */
 // useChainId is called unconditionally at the top. If WagmiProvider is unavailable,
@@ -111,6 +112,7 @@ function PriceBadge({ product }: { product: ProductCardData }) {
             />
           ))}
         </div>
+        <span className="text-[11px] text-muted-foreground font-medium">≈ {formatUSD(product.base_price_usd)}</span>
         {isTestnet && <span className="text-[10px] text-muted-foreground">(testnet)</span>}
       </div>
     );
@@ -127,6 +129,7 @@ function PriceBadge({ product }: { product: ProductCardData }) {
             <TokenPill key={sym} symbol={sym} amount={Number(pricing[sym])} />
           ))}
         </div>
+        <span className="text-[11px] text-muted-foreground font-medium">≈ {formatUSD(product.base_price_usd)}</span>
         {isTestnet && <span className="text-[10px] text-muted-foreground">(testnet)</span>}
       </div>
     );
@@ -137,9 +140,12 @@ function PriceBadge({ product }: { product: ProductCardData }) {
     && !STABLECOINS.has((product.token_symbol || '').toUpperCase()));
   if (hasLegacyToken) {
     return (
-      <div className="flex flex-wrap gap-1">
-        <TokenPill symbol={product.token_symbol!} amount={Number(product.price_in_token)} />
-        {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap gap-1">
+          <TokenPill symbol={product.token_symbol!} amount={Number(product.price_in_token)} />
+          {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
+        </div>
+        <span className="text-[11px] text-muted-foreground font-medium">≈ {formatUSD(product.base_price_usd)}</span>
       </div>
     );
   }
@@ -147,9 +153,12 @@ function PriceBadge({ product }: { product: ProductCardData }) {
   // Case 4: no token data — fallback to MATIC computed from USD
   const maticAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
   return (
-    <div className="flex flex-wrap gap-1">
-      <TokenPill symbol="MATIC" amount={maticAmount} />
-      {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap gap-1">
+        <TokenPill symbol="MATIC" amount={maticAmount} />
+        {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
+      </div>
+      <span className="text-[11px] text-muted-foreground font-medium">≈ {formatUSD(product.base_price_usd)}</span>
     </div>
   );
 }

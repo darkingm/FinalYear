@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { parseUnits, formatUnits, erc20Abi, type Address } from 'viem';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
+import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
 
 /* ─── Block Explorers per chain ─────────────────────────────────────────── */
 export const CHAIN_EXPLORERS: Record<number, { name: string; tx: string; address: string }> = {
@@ -380,7 +381,7 @@ export default function CheckoutPage() {
           const gasCostUsd = gasCostNative * nativePrice;
           setGasEstimate({
             gas: `${gasCostNative.toFixed(6)} ${nativeSym}`,
-            usd: `~$${gasCostUsd.toFixed(4)} USD`,
+            usd: `~${formatUSD(gasCostUsd)}`,
           });
         } catch (e) {
           // Gas estimation may fail if wrong chain — silently ignore
@@ -619,7 +620,7 @@ export default function CheckoutPage() {
                   <p className="text-xs text-muted-foreground">Số lượng: {order.quantity}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xl font-black text-[#f0b90b]">${totalUSD.toFixed(4)}</p>
+                  <p className="text-xl font-black text-[#f0b90b]">{formatUSD(totalUSD)}</p>
                   <p className="text-[10px] text-muted-foreground">USD</p>
                 </div>
               </div>
@@ -780,7 +781,7 @@ export default function CheckoutPage() {
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Ước tính cần trả</p>
                       <p className="text-xl font-black font-mono">{estimatedCrypto} <span className="text-sm text-[#f0b90b]">{selectedToken}</span></p>
-                      <p className="text-xs text-muted-foreground mt-0.5">≈ ${totalUSD.toFixed(4)} USD</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">≈ {formatUSD(totalUSD)}</p>
                     </div>
                     <RefreshCw className="w-4 h-4 text-muted-foreground" />
                   </div>
@@ -865,8 +866,8 @@ export default function CheckoutPage() {
                       <p className="text-sm font-bold text-[#f0b90b]">{selectedToken}</p>
                     </div>
                     <div className="text-right text-xs text-muted-foreground">
-                      <p>≈ ${totalUSD.toFixed(4)} USD</p>
-                      {quote.token_price > 0 && <p>1 {selectedToken} = ${quote.token_price.toFixed(4)}</p>}
+                      <p>≈ {formatUSD(totalUSD)}</p>
+                      {quote.token_price > 0 && <p>1 {selectedToken} = {formatUSD(quote.token_price)}</p>}
                     </div>
                   </div>
 
@@ -1146,7 +1147,7 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex justify-between items-center p-4 bg-background border border-border rounded-xl">
                     <span className="text-muted-foreground text-sm">Tổng cộng</span>
-                    <span className="font-black">${Number(order.price_usd).toFixed(2)} USD</span>
+                    <span className="font-black">{formatUSD(Number(order.price_usd))}</span>
                   </div>
                   <button onClick={async () => {
                     try {
@@ -1202,7 +1203,8 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   {[
                     { label: 'Số lượng', val: `× ${order.quantity}` },
-                    { label: 'Giá sản phẩm', val: `$${Number(order.price_usd).toFixed(4)}` },
+                    { label: 'Giá sản phẩm', val: formatUSD(Number(order.price_usd)) },
+                    { label: `Phí nền tảng (${PLATFORM_FEE_LABEL})`, val: formatUSD(calcPlatformFee(totalUSD)) },
                     { label: 'Phí giao dịch', val: 'Miễn phí', green: true },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between text-muted-foreground pb-2 border-b border-border">
@@ -1212,7 +1214,7 @@ export default function CheckoutPage() {
                   ))}
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-bold">Tổng thanh toán</span>
-                    <span className="text-lg font-black text-[#f0b90b]">${totalUSD.toFixed(4)}</span>
+                    <span className="text-lg font-black text-[#f0b90b]">{formatUSD(totalUSD)}</span>
                   </div>
                 </div>
 
