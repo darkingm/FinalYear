@@ -66,7 +66,7 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
     
     mapping(bytes32 => Order) public orders;
     address public feeVault;
-    uint256 public platformFeePercent = 250; // 2.5% default (overridden by SBT tier)
+    uint256 public platformFeePercent = 50; // 0.5% default (overridden by SBT tier)
     uint256 public constant MAX_FEE_PERCENT = 1000; // 10%
     uint256 public constant ORDER_TIMEOUT = 30 days;
     

@@ -437,8 +437,8 @@ export default function CartCheckoutPage() {
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-2xl font-black text-[#8247e5]">{totalUSDFormatted}</p>
-                  <p className="text-[10px] text-muted-foreground">USD</p>
+                  <p className="text-2xl font-black text-[#8247e5]">{estimatedCrypto} <span className="text-sm">{selectedToken}</span></p>
+                  <p className="text-[10px] text-muted-foreground">≈ {totalUSDFormatted}</p>
                 </div>
               </div>
 
@@ -484,7 +484,7 @@ export default function CartCheckoutPage() {
                             <p className="text-xs text-muted-foreground">x{item.quantity}</p>
                           </div>
                           <p className="text-sm font-bold text-[#8247e5] flex-shrink-0">
-                            {formatUSD(item.base_price_usd * item.quantity)}
+                            {coinPrice ? `${((item.base_price_usd * item.quantity) / coinPrice).toFixed(4)} ${selectedToken}` : formatUSD(item.base_price_usd * item.quantity)}
                           </p>
                         </div>
                       ))}

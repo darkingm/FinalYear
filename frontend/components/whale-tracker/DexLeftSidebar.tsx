@@ -1,7 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Star, TrendingUp, Sparkles, ArrowUpRight, ArrowDownRight, ChevronRight, Loader2, X, Clock, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+    Search, Star, TrendingUp, Sparkles, ArrowUpRight, ArrowDownRight,
+    ChevronRight, Loader2, X, Clock, Trash2, Droplets, BarChart3,
+    Zap, ChevronDown,
+} from 'lucide-react';
 import { fetchTrendingPairs, searchTokenPairs } from '@/lib/whale-api';
 import { useWhaleTrackerStore, CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { TokenPair, SupportedChain } from '@/store/whale-tracker-store';
@@ -27,63 +31,171 @@ function formatAge(isoDate?: string) {
     return `${hours}h`;
 }
 
+/* ── Improved TokenLogo with multi-source fallback ── */
+function buildLogoFallbacks(pair: TokenPair): string[] {
+    const list: string[] = [];
+    // 1. DexScreener imageUrl (best quality, from API)
+    if (pair.imageUrl) list.push(pair.imageUrl);
+    // 2. TrustWallet CDN (checksummed)
+    if (pair.baseToken.address) {
+        list.push(getTokenLogoUrl(pair.chain, pair.baseToken.address));
+        // 3. Checksum-alt (lowercase)
+        list.push(getTokenLogoUrl(pair.chain, pair.baseToken.address.toLowerCase()));
+    }
+    return list;
+}
+
 function TokenLogo({ pair, size = 28 }: { pair: TokenPair; size?: number }) {
-    const [err, setErr] = useState(false);
-    const twUrl = pair.baseToken.address ? getTokenLogoUrl(pair.chain, pair.baseToken.address) : null;
-    const src = !err ? (pair.imageUrl || twUrl) : null;
+    const [srcIdx, setSrcIdx] = useState(0);
+    const [allFailed, setAllFailed] = useState(false);
+    const fallbacks = useRef(buildLogoFallbacks(pair));
+
+    // Reset when pair changes
+    useEffect(() => {
+        fallbacks.current = buildLogoFallbacks(pair);
+        setSrcIdx(0);
+        setAllFailed(false);
+    }, [pair.pairAddress]);
+
+    const src = !allFailed && fallbacks.current.length > 0 ? fallbacks.current[srcIdx] : null;
+
     if (!src) {
+        // Colored initials fallback
+        const sym = pair.baseToken.symbol;
+        const color = '#8b5cf6';
         return (
-            <span style={{ width: size, height: size }} className="rounded-full bg-gradient-to-br from-violet-500/30 to-blue-500/20 flex items-center justify-center text-[9px] font-black text-white/60 flex-shrink-0">
-                {pair.baseToken.symbol.slice(0, 2)}
+            <span
+                style={{ width: size, height: size, backgroundColor: `${color}25`, border: `1.5px solid ${color}40`, fontSize: Math.max(7, Math.round(size * 0.38)) }}
+                className="rounded-full flex items-center justify-center font-black text-violet-400 flex-shrink-0 leading-none"
+            >
+                {sym.length <= 2 ? sym : sym.slice(0, 2)}
             </span>
         );
     }
-    return <img src={src} alt={pair.baseToken.symbol} width={size} height={size} className="rounded-full flex-shrink-0 bg-white/5" onError={() => setErr(true)} />;
+
+    return (
+        <img
+            src={src}
+            alt={pair.baseToken.symbol}
+            width={size}
+            height={size}
+            className="rounded-full flex-shrink-0 bg-white/5 object-cover"
+            onError={() => {
+                if (srcIdx + 1 < fallbacks.current.length) {
+                    setSrcIdx(i => i + 1);
+                } else {
+                    setAllFailed(true);
+                }
+            }}
+        />
+    );
 }
 
-/* ── Mini pair row for sidebar lists ── */
-function MiniPairRow({ pair, onClick, isSelected, showWatchlist }: {
-    pair: TokenPair; onClick?: () => void; isSelected?: boolean; showWatchlist?: boolean;
+/* ── Pool Info Badge ── */
+function PoolBadge({ label, value, color }: { label: string; value: string; color: string }) {
+    return (
+        <span className="inline-flex items-center gap-0.5 text-[8px] font-semibold" style={{ color }}>
+            <span className="text-white/20">{label}</span>
+            <span>{value}</span>
+        </span>
+    );
+}
+
+/* ── Mini pair row for sidebar lists — DexScreener style ── */
+function MiniPairRow({ pair, onClick, isSelected, showWatchlist, showPoolInfo }: {
+    pair: TokenPair; onClick?: () => void; isSelected?: boolean; showWatchlist?: boolean; showPoolInfo?: boolean;
 }) {
     const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWhaleTrackerStore();
     const watching = isInWatchlist(pair.pairAddress);
-    const up = pair.priceChange24h >= 0;
+    const up24 = pair.priceChange24h >= 0;
+    const up1h = (pair.priceChange1h ?? 0) >= 0;
     const chain = CHAIN_LABELS[pair.chain];
     const price = parseFloat(pair.priceUsd);
+    const liquidity = pair.liquidity;
+    const fdv = pair.fdv;
+
+    // Buys/Sells approximation based on price change direction (visual only)
+    const buyPct = up24 ? Math.min(75, 50 + pair.priceChange24h * 1.5) : Math.max(25, 50 + pair.priceChange24h * 1.5);
 
     return (
         <div onClick={onClick}
-            className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all group ${isSelected
-                ? 'bg-violet-500/10 border border-violet-500/30'
-                : 'hover:bg-white/[0.04] border border-transparent'
-                }`}>
-            <TokenLogo pair={pair} size={28} />
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-white truncate">{pair.baseToken.symbol}</span>
-                    <span className="text-[9px] text-white/25">/{pair.quoteToken.symbol}</span>
-                    <span className="text-[8px] px-1 py-0 rounded font-semibold"
-                        style={{ color: chain.color, backgroundColor: chain.color + '15' }}>
-                        {pair.chain}
+            className={`flex flex-col px-2.5 py-2 rounded-lg cursor-pointer transition-all group ${
+                isSelected
+                    ? 'bg-violet-500/10 border border-violet-500/30'
+                    : 'hover:bg-white/[0.04] border border-transparent'
+            }`}>
+            {/* Top row: logo + name + price change */}
+            <div className="flex items-center gap-2">
+                <TokenLogo pair={pair} size={28} />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-white truncate">{pair.baseToken.symbol}</span>
+                        <span className="text-[9px] text-white/25">/{pair.quoteToken.symbol}</span>
+                        <span
+                            className="text-[7px] px-1 py-0 rounded font-bold flex-shrink-0"
+                            style={{ color: chain.color, backgroundColor: chain.color + '15' }}
+                        >
+                            {pair.chain}
+                        </span>
+                        {pair.dexId && (
+                            <span className="text-[7px] text-white/20 hidden group-hover:inline truncate">{pair.dexId}</span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[9px]">
+                        <span className="font-mono text-white/60 font-bold">
+                            ${price >= 1 ? price.toLocaleString(undefined, { maximumFractionDigits: 4 }) : price < 0.0001 ? price.toExponential(2) : price.toFixed(6)}
+                        </span>
+                        <span className="text-white/20">·</span>
+                        <span className="text-white/30">Vol {formatK(pair.volume24h)}</span>
+                    </div>
+                </div>
+                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                    <span className={`text-[10px] font-bold flex items-center gap-0.5 ${up24 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {up24 ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}
+                        {up24 ? '+' : ''}{pair.priceChange24h.toFixed(2)}%
                     </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[9px] text-white/30">
-                    <span className="font-mono text-white/50">${price >= 1 ? price.toFixed(2) : price < 0.0001 ? price.toExponential(2) : price.toFixed(5)}</span>
-                    <span>Vol: {formatK(pair.volume24h)}</span>
+                    {showWatchlist && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); watching ? removeFromWatchlist(pair.pairAddress) : addToWatchlist(pair); }}
+                            className={`p-0.5 rounded transition-colors ${watching ? 'text-amber-400' : 'text-white/15 hover:text-white/40'}`}
+                        >
+                            <Star className="w-3 h-3" fill={watching ? 'currentColor' : 'none'} />
+                        </button>
+                    )}
                 </div>
             </div>
-            <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                <span className={`text-[10px] font-bold flex items-center gap-0.5 ${up ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {up ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}
-                    {up ? '+' : ''}{pair.priceChange24h.toFixed(1)}%
-                </span>
-                {showWatchlist && (
-                    <button onClick={(e) => { e.stopPropagation(); watching ? removeFromWatchlist(pair.pairAddress) : addToWatchlist(pair); }}
-                        className={`p-0.5 rounded transition-colors ${watching ? 'text-amber-400' : 'text-white/15 hover:text-white/40'}`}>
-                        <Star className="w-3 h-3" fill={watching ? 'currentColor' : 'none'} />
-                    </button>
-                )}
-            </div>
+
+            {/* Pool info row: liquidity + fdv + buy/sell bar + 1h change */}
+            {showPoolInfo && (
+                <div className="mt-1.5 ml-9 space-y-1">
+                    {/* Metrics grid */}
+                    <div className="flex items-center gap-3">
+                        {liquidity > 0 && (
+                            <PoolBadge label="Liq" value={formatK(liquidity)} color="#60a5fa" />
+                        )}
+                        {fdv > 0 && (
+                            <PoolBadge label="FDV" value={formatK(fdv)} color="#a78bfa" />
+                        )}
+                        {pair.priceChange1h !== undefined && (
+                            <span className={`text-[8px] font-bold flex items-center gap-0.5 ${up1h ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                                1h {up1h ? '+' : ''}{(pair.priceChange1h ?? 0).toFixed(1)}%
+                            </span>
+                        )}
+                    </div>
+                    {/* Buys/Sells visual bar */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[7px] text-emerald-400/60 font-bold w-5">B</span>
+                        <div className="flex-1 h-1 rounded-full overflow-hidden bg-white/[0.04] flex">
+                            <div
+                                className="bg-emerald-500 h-full transition-all duration-500"
+                                style={{ width: `${buyPct}%` }}
+                            />
+                            <div className="bg-red-500 h-full flex-1" />
+                        </div>
+                        <span className="text-[7px] text-red-400/60 font-bold w-5 text-right">S</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -189,11 +301,17 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                 {tab === 'search' && (
                     <>
                         {searchResults.length > 0 ? (
-                            <div className="space-y-0.5">
-                                <p className="text-[9px] text-white/20 px-2 py-1">{searchResults.length} kết quả</p>
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between px-2 py-1">
+                                    <p className="text-[9px] text-white/20 flex items-center gap-1">
+                                        <Search className="w-2.5 h-2.5" />
+                                        {searchResults.length} kết quả cho &quot;{query}&quot;
+                                    </p>
+                                    <span className="text-[8px] text-violet-400/60 font-semibold">Liq · FDV · B/S</span>
+                                </div>
                                 {searchResults.map(p => (
                                     <MiniPairRow key={p.pairAddress} pair={p}
-                                        onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                        onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist showPoolInfo />
                                 ))}
                             </div>
                         ) : searched && !loading ? (
@@ -214,7 +332,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                                         </div>
                                         {recentSearchPairs.map(p => (
                                             <MiniPairRow key={p.pairAddress} pair={p}
-                                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist showPoolInfo />
                                         ))}
                                     </div>
                                 ) : (
@@ -238,7 +356,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                                 </p>
                                 {watchlistPairs.map(p => (
                                     <MiniPairRow key={p.pairAddress} pair={p}
-                                        onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                        onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist showPoolInfo />
                                 ))}
                             </>
                         ) : (
@@ -259,7 +377,7 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                         </p>
                         {trendingPairs.length > 0 ? trendingPairs.slice(0, 20).map(p => (
                             <MiniPairRow key={p.pairAddress} pair={p}
-                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
+                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist showPoolInfo />
                         )) : (
                             <div className="text-center py-8 text-[10px] text-white/20">
                                 <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 text-violet-400/50" />

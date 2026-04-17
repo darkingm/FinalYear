@@ -48,6 +48,7 @@ interface Order {
   chain_id?: number;
   escrow_contract?: string;
   amount_token?: number;
+  token_symbol?: string;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -421,18 +422,26 @@ export default function OrderDetailPage() {
                   <span className="text-sm font-bold text-white">x{order.quantity}</span>
                 </div>
 
-                {order.pricing_mode === 'usd' || !order.pricing_mode ? (
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl font-bold font-mono text-emerald-400">{formatUSD(Number(order.price_usd))}</span>
-                    <span className="text-sm text-gray-500 font-medium tracking-wide">USD</span>
+                {order.amount_token && order.token_symbol ? (
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-bold font-mono text-[#f0b90b]">{formatCrypto(Number(order.amount_token), order.token_symbol)}</span>
+                      <span className="text-sm text-gray-500 font-medium tracking-wide">{order.token_symbol}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">≈ {formatUSD(Number(order.price_usd))}</p>
                   </div>
-                ) : (
+                ) : order.subtotal_token ? (
                   <div className="flex flex-col">
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-3xl font-bold font-mono text-[#f0b90b]">{formatCrypto(Number(order.subtotal_token), 'TOKEN')}</span>
                       <span className="text-sm text-gray-500 font-medium tracking-wide">Token</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">~ {formatUSD(Number(order.price_usd))}</p>
+                    <p className="text-xs text-gray-500 mt-1">≈ {formatUSD(Number(order.price_usd))}</p>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold font-mono text-emerald-400">{formatUSD(Number(order.price_usd))}</span>
+                    <span className="text-sm text-gray-500 font-medium tracking-wide">USD</span>
                   </div>
                 )}
               </div>

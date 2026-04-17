@@ -620,8 +620,8 @@ export default function CheckoutPage() {
                   <p className="text-xs text-muted-foreground">Số lượng: {order.quantity}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xl font-black text-[#f0b90b]">{formatUSD(totalUSD)}</p>
-                  <p className="text-[10px] text-muted-foreground">USD</p>
+                  <p className="text-xl font-black text-[#f0b90b]">{estimatedCrypto} <span className="text-sm">{selectedToken}</span></p>
+                  <p className="text-[10px] text-muted-foreground">≈ {formatUSD(totalUSD)}</p>
                 </div>
               </div>
 
@@ -1203,8 +1203,8 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   {[
                     { label: 'Số lượng', val: `× ${order.quantity}` },
-                    { label: 'Giá sản phẩm', val: formatUSD(Number(order.price_usd)) },
-                    { label: `Phí nền tảng (${PLATFORM_FEE_LABEL})`, val: formatUSD(calcPlatformFee(totalUSD)) },
+                    { label: 'Giá sản phẩm', val: coinPrice ? `${(Number(order.price_usd) / coinPrice).toFixed(6)} ${selectedToken}` : `${estimatedCrypto} ${selectedToken}` },
+                    { label: `Phí nền tảng (${PLATFORM_FEE_LABEL})`, val: coinPrice ? `${(calcPlatformFee(totalUSD) / coinPrice).toFixed(6)} ${selectedToken}` : formatUSD(calcPlatformFee(totalUSD)) },
                     { label: 'Phí giao dịch', val: 'Miễn phí', green: true },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between text-muted-foreground pb-2 border-b border-border">
@@ -1214,7 +1214,7 @@ export default function CheckoutPage() {
                   ))}
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-bold">Tổng thanh toán</span>
-                    <span className="text-lg font-black text-[#f0b90b]">{formatUSD(totalUSD)}</span>
+                    <span className="text-lg font-black text-[#f0b90b]">{estimatedCrypto} {selectedToken}</span>
                   </div>
                 </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
     Copy, ExternalLink, Shield, ShieldAlert, ShieldCheck, ShieldX,
@@ -141,12 +141,46 @@ function SecuritySection({ security }: { security: GoPlusSecurityInfo | null }) 
 }
 
 function TokenLogo({ pair }: { pair: TokenPair }) {
-    const [err, setErr] = useState(false);
-    const src = !err ? (pair.imageUrl || getTokenLogoUrl(pair.chain, pair.baseToken.address)) : null;
+    const [srcIdx, setSrcIdx] = useState(0);
+    const [allFailed, setAllFailed] = useState(false);
+    const buildFallbacks = (p: TokenPair) => {
+        const list: string[] = [];
+        if (p.imageUrl) list.push(p.imageUrl);
+        if (p.baseToken.address) {
+            list.push(getTokenLogoUrl(p.chain, p.baseToken.address));
+            list.push(getTokenLogoUrl(p.chain, p.baseToken.address.toLowerCase()));
+        }
+        return list;
+    };
+    const fallbacks = useRef(buildFallbacks(pair));
+
+    useEffect(() => {
+        fallbacks.current = buildFallbacks(pair);
+        setSrcIdx(0);
+        setAllFailed(false);
+    }, [pair.pairAddress]);
+
+    const src = !allFailed && fallbacks.current.length > 0 ? fallbacks.current[srcIdx] : null;
+
     if (!src) {
         return <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500/30 to-blue-500/30 flex items-center justify-center text-sm font-black text-white/60">{pair.baseToken.symbol.slice(0, 2)}</div>;
     }
-    return <img src={src} alt={pair.baseToken.symbol} width={40} height={40} className="rounded-full bg-white/5" onError={() => setErr(true)} />;
+    return (
+        <img
+            src={src}
+            alt={pair.baseToken.symbol}
+            width={40}
+            height={40}
+            className="rounded-full bg-white/5 object-cover"
+            onError={() => {
+                if (srcIdx + 1 < fallbacks.current.length) {
+                    setSrcIdx(i => i + 1);
+                } else {
+                    setAllFailed(true);
+                }
+            }}
+        />
+    );
 }
 
 /* ─── Holders Section ─── */
