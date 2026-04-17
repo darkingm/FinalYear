@@ -25,12 +25,12 @@ router.post('/hardhat', authenticate, async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Invalid wallet address. Please connect your MetaMask wallet first.' });
         }
 
-        const privateKey = process.env.ADMIN_PRIVATE_KEY || process.env.BLOCKCHAIN_PRIVATE_KEY;
+        const privateKey = process.env.ADMIN_PRIVATE_KEY || process.env.BLOCKCHAIN_PRIVATE_KEY || process.env.PRIVATE_KEY || process.env.MINTER_PRIVATE_KEY;
         if (!privateKey) {
             return res.status(500).json({ success: false, message: 'Faucet not configured on server' });
         }
 
-        const rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
+        const rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://103.20.96.79:8545';
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const faucetWallet = new ethers.Wallet(privateKey, provider);
 
@@ -97,10 +97,10 @@ router.get('/balance', async (_req: Request, res: Response) => {
             return res.json({ success: true, balance: null, available: false });
         }
 
-        const privateKey = process.env.ADMIN_PRIVATE_KEY || process.env.BLOCKCHAIN_PRIVATE_KEY;
+        const privateKey = process.env.ADMIN_PRIVATE_KEY || process.env.BLOCKCHAIN_PRIVATE_KEY || process.env.PRIVATE_KEY || process.env.MINTER_PRIVATE_KEY;
         if (!privateKey) return res.json({ success: true, balance: null, available: false });
 
-        const rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
+        const rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://103.20.96.79:8545';
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const faucetWallet = new ethers.Wallet(privateKey, provider);
         const balance = await provider.getBalance(faucetWallet.address);
