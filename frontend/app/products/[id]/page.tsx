@@ -26,6 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { formatUSD, formatCrypto } from '@/lib/utils/format-price';
+import { CoinImage } from '@/components/ui/CoinImage';
 
 const PLACEHOLDER = '/images/placeholder-product.png';
 
@@ -383,44 +384,63 @@ export default function ProductDetailPage() {
 
               {/* Price Panel */}
               <div className="p-6 rounded-2xl bg-card border border-border shadow-sm space-y-4">
-                <div className="flex items-end gap-3">
-                  <span className="text-4xl font-black bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
-                    {displayPrice}
-                  </span>
+                {/* Primary Price: Token amount big + coin icon */}
+                <div className="space-y-2">
+                  {selectedToken ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-4xl font-black bg-gradient-to-r from-[#f0b90b] to-amber-400 bg-clip-text text-transparent leading-none">
+                        {formatCrypto(parseFloat(selectedToken.price_in_token), selectedToken.symbol)}
+                      </span>
+                      <div className="flex items-center gap-1.5 bg-muted/60 border border-border rounded-xl px-3 py-1.5">
+                        <CoinImage symbol={selectedToken.symbol} size={20} />
+                        <span className="font-bold text-base text-foreground">{selectedToken.symbol}</span>
+                        {selectedToken.chain_id === 31337 && (
+                          <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded-full">testnet</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-4xl font-black text-foreground">
+                      {formatUSD(parseFloat(product.base_price_usd))}
+                    </span>
+                  )}
+
+                  {/* USD equivalent badge */}
                   {selectedToken && (
-                    <LivePriceEstimate
-                      tokenAmount={parseFloat(selectedToken.price_in_token)}
-                      tokenSymbol={selectedToken.symbol}
-                      className="text-muted-foreground text-sm mb-1 font-medium"
-                      showIcon={true}
-                    />
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 bg-emerald-500/8 border border-emerald-500/20 rounded-full px-3 py-1 text-sm">
+                        <span className="text-muted-foreground">≈</span>
+                        <span className="font-semibold text-emerald-400">{formatUSD(parseFloat(product.base_price_usd))}</span>
+                        <span className="text-muted-foreground text-xs">USDT</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">ước tính theo giá hiện tại</span>
+                    </div>
                   )}
                 </div>
-                <p className="text-muted-foreground text-sm">{t('productDetail.basePrice')}: <span className="font-semibold text-foreground">{formatUSD(parseFloat(product.base_price_usd))}</span></p>
 
                 {/* Token Selector */}
                 {product.accepted_tokens?.length > 0 && (
-                  <div className="pt-2">
-                    <p className="text-sm font-medium text-foreground mb-3">{t('productDetail.payWith')}:</p>
+                  <div className="pt-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Thanh toán bằng:</p>
                     <div className="flex flex-wrap gap-2">
                       {product.accepted_tokens.map(token => (
                         <button
                           key={token.token_id}
                           onClick={() => setSelectedToken(token)}
-                          className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all flex items-center gap-1.5
+                          className={`px-3 py-2 rounded-xl text-sm font-bold border transition-all flex items-center gap-1.5
                             ${selectedToken?.token_id === token.token_id
-                              ? 'bg-primary/10 border-primary text-primary shadow-sm shadow-primary/10'
-                              : 'bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'}`}
+                              ? 'bg-[#f0b90b]/10 border-[#f0b90b] text-[#f0b90b] shadow-sm'
+                              : 'bg-background border-border text-muted-foreground hover:border-[#f0b90b]/50 hover:text-foreground'}`}
                         >
-                          <span className="font-bold">{token.symbol}</span>
-                          {token.chain_id && <span className="text-[10px] opacity-60 font-mono">chain:{token.chain_id}</span>}
+                          <CoinImage symbol={token.symbol} size={16} />
+                          <span>{token.symbol}</span>
                         </button>
                       ))}
                       <button
                         onClick={() => setSelectedToken(null)}
-                        className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all flex items-center gap-1.5
+                        className={`px-3 py-2 rounded-xl text-sm font-bold border transition-all flex items-center gap-1.5
                           ${!selectedToken
-                            ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                            ? 'bg-blue-500/10 border-blue-500 text-blue-500 shadow-sm'
                             : 'bg-background border-border text-muted-foreground hover:border-blue-500/50 hover:text-foreground'}`}
                       >
                         <CreditCard className="w-4 h-4" /> PayPal
