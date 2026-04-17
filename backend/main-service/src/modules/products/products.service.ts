@@ -215,21 +215,35 @@ export class ProductService {
     if (cached) return cached;
 
     const acceptedTokensSelect = `
-      CASE WHEN p.token_id IS NOT NULL THEN
-        json_build_array(
-          json_build_object(
-            'token_id', p.token_id,
-            'symbol', tw.symbol,
-            'name', tw.metadata->>'name',
-            'price_in_token', p.price_in_token,
-            'is_primary', true,
-            'chain_id', tw.chain_id,
-            'chain_name', tw.metadata->>'chain',
+      (SELECT CASE
+        WHEN COUNT(pat.token_id) > 0 THEN
+          json_agg(json_build_object(
+            'token_id',      tw_acc.token_id,
+            'symbol',        tw_acc.symbol,
+            'name',          tw_acc.metadata->>'name',
+            'price_in_token',pat.price_in_token,
+            'is_primary',    pat.is_primary,
+            'chain_id',      tw_acc.chain_id,
+            'chain_name',    tw_acc.metadata->>'chain',
+            'token_address', tw_acc.token_address,
+            'decimals',      tw_acc.decimals
+          ) ORDER BY pat.is_primary DESC)
+        WHEN p.token_id IS NOT NULL THEN
+          json_build_array(json_build_object(
+            'token_id',      tw.token_id,
+            'symbol',        tw.symbol,
+            'name',          tw.metadata->>'name',
+            'price_in_token',p.price_in_token,
+            'is_primary',    true,
+            'chain_id',      tw.chain_id,
+            'chain_name',    tw.metadata->>'chain',
             'token_address', tw.token_address,
-            'decimals', tw.decimals
-          )
-        )
-      ELSE NULL END
+            'decimals',      tw.decimals
+          ))
+        ELSE NULL END
+       FROM product_accepted_tokens pat
+       JOIN token_whitelist tw_acc ON tw_acc.token_id = pat.token_id
+       WHERE pat.product_id = p.product_id)
     `;
 
     const result = await query(

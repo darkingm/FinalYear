@@ -286,23 +286,31 @@ export default function WalletPage() {
                         <Wallet className="w-4 h-4" /> Kết nối MetaMask
                       </button>
                     );
+                    const isAlreadyLinked = wallets.some(w => w.address.toLowerCase() === account.address.toLowerCase());
                     return (
                       <div className="space-y-3">
-                        <div className="flex items-center gap-2 p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl">
+                        <div className={`flex items-center gap-2 p-3 rounded-xl ${isAlreadyLinked ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-emerald-500/8 border border-emerald-500/20'}`}>
                           <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-emerald-400 font-semibold">Đã kết nối</p>
                             <p className="font-mono text-xs text-muted-foreground truncate">{account.address}</p>
                           </div>
                         </div>
-                        <button
-                          onClick={handleLinkWallet}
-                          disabled={linking}
-                          className="w-full py-2.5 rounded-xl bg-[#f0b90b] text-black text-sm font-bold hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2 transition-opacity"
-                        >
-                          {linking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                          {linking ? 'Đang liên kết...' : 'Liên kết ví này'}
-                        </button>
+                        {isAlreadyLinked ? (
+                          <div className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm font-bold flex items-center justify-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                            <span className="text-emerald-400">Đã liên kết</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={handleLinkWallet}
+                            disabled={linking}
+                            className="w-full py-2.5 rounded-xl bg-[#f0b90b] text-black text-sm font-bold hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2 transition-opacity"
+                          >
+                            {linking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {linking ? 'Đang liên kết...' : '+ Liên kết ví này'}
+                          </button>
+                        )}
                       </div>
                     );
                   }}

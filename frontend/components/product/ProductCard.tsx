@@ -150,12 +150,12 @@ function PriceBadge({ product }: { product: ProductCardData }) {
     );
   }
 
-  // Case 4: no token data — fallback to MATIC computed from USD
-  const maticAmount = usdToToken(Number(product.base_price_usd), 'MATIC', prices);
+  // Case 4: no token data — fallback to ETH computed from USD (Hardhat VPS testnet)
+  const ethAmount = usdToToken(Number(product.base_price_usd), 'ETH', prices);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap gap-1">
-        <TokenPill symbol="MATIC" amount={maticAmount} />
+        <TokenPill symbol="ETH" amount={ethAmount} />
         {isTestnet && <span className="text-[10px] text-muted-foreground self-center">(testnet)</span>}
       </div>
       <span className="text-[11px] text-muted-foreground font-medium">≈ {formatUSD(product.base_price_usd)}</span>

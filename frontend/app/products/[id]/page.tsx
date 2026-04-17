@@ -201,10 +201,26 @@ export default function ProductDetailPage() {
     : product.primary_image ? [{ url: product.primary_image, is_primary: true, sort_order: 0 }] : [];
   const STABLE_TOKENS = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD']);
   const isStableToken = selectedToken && STABLE_TOKENS.has(selectedToken.symbol.toUpperCase());
-  // Stablecoins: show USD equiv (not raw USDT amount which looks confusing)
-  const displayPrice = selectedToken && !isStableToken
-    ? `${formatCrypto(parseFloat(selectedToken.price_in_token), selectedToken.symbol)} ${selectedToken.symbol}`
-    : formatUSD(parseFloat(product.base_price_usd));
+  // Always show token price as primary — consistent with homepage PriceBadge
+  const getDisplayPrice = () => {
+    // Case 1: Non-stablecoin token selected — show token amount
+    if (selectedToken && !isStableToken) {
+      return `${formatCrypto(parseFloat(selectedToken.price_in_token), selectedToken.symbol)} ${selectedToken.symbol}`;
+    }
+    // Case 2: Stablecoin selected — show USD equiv with stablecoin label
+    if (selectedToken && isStableToken) {
+      return `${formatCrypto(parseFloat(product.base_price_usd), selectedToken.symbol)} ${selectedToken.symbol}`;
+    }
+    // Case 3: No token selected but accepted_tokens exist — use first non-stable
+    const tokens = product.accepted_tokens || [];
+    const nonStable = tokens.find(t => !STABLE_TOKENS.has(t.symbol.toUpperCase()));
+    if (nonStable) {
+      return `${formatCrypto(parseFloat(nonStable.price_in_token), nonStable.symbol)} ${nonStable.symbol}`;
+    }
+    // Case 4: No token info at all — fallback to USD
+    return formatUSD(parseFloat(product.base_price_usd));
+  };
+  const displayPrice = getDisplayPrice();
   const displayPayWith = isStableToken ? `${t('productDetail.payWith')} ${selectedToken!.symbol}` : null;
   const usdEquivalent = selectedToken && !isStableToken && coinPrices[selectedToken.symbol]
     ? (parseFloat(selectedToken.price_in_token) * coinPrices[selectedToken.symbol]).toFixed(2)
@@ -397,10 +413,7 @@ export default function ProductDetailPage() {
                               : 'bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'}`}
                         >
                           <span className="font-bold">{token.symbol}</span>
-                          <span className="text-xs opacity-70">({token.chain_name})</span>
-                          {coinPrices[token.symbol] && (
-                            <span className="ml-1 text-xs text-green-500 font-mono">${coinPrices[token.symbol].toFixed(2)}</span>
-                          )}
+                          {token.chain_id && <span className="text-[10px] opacity-60 font-mono">chain:{token.chain_id}</span>}
                         </button>
                       ))}
                       <button
