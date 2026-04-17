@@ -229,17 +229,18 @@ export class ProductService {
             'decimals',      tw_acc.decimals
           ) ORDER BY pat.is_primary DESC)
         WHEN p.token_id IS NOT NULL THEN
-          json_build_array(json_build_object(
-            'token_id',      tw.token_id,
-            'symbol',        tw.symbol,
-            'name',          tw.metadata->>'name',
+          (SELECT json_build_array(json_build_object(
+            'token_id',      tw_leg.token_id,
+            'symbol',        tw_leg.symbol,
+            'name',          tw_leg.metadata->>'name',
             'price_in_token',p.price_in_token,
             'is_primary',    true,
-            'chain_id',      tw.chain_id,
-            'chain_name',    tw.metadata->>'chain',
-            'token_address', tw.token_address,
-            'decimals',      tw.decimals
+            'chain_id',      tw_leg.chain_id,
+            'chain_name',    tw_leg.metadata->>'chain',
+            'token_address', tw_leg.token_address,
+            'decimals',      tw_leg.decimals
           ))
+          FROM token_whitelist tw_leg WHERE tw_leg.token_id = p.token_id)
         ELSE NULL END
        FROM product_accepted_tokens pat
        JOIN token_whitelist tw_acc ON tw_acc.token_id = pat.token_id
@@ -277,7 +278,7 @@ export class ProductService {
        WHERE p.product_id = $1
        GROUP BY p.product_id, sp.display_name, sp.logo_url, sp.slug, sp.rating_avg,
                 sp.description, sp.payout_wallet, sp.total_sales,
-                u.avatar_url, u.username, u.created_at, tw.symbol, tw.metadata, tw.chain_id, tw.token_address, tw.decimals`,
+                u.avatar_url, u.username, u.created_at`,
       [productId]
     );
 
