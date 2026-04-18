@@ -123,12 +123,14 @@ export function TokenSearchPanel({ onSelectForWallet, onSelectRow, selectedPairA
     const [pairs, setPairs] = useState<TokenPair[]>([]);
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
-    const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Debounced search
     useEffect(() => {
         if (!query.trim()) { setPairs([]); setSearched(false); return; }
-        clearTimeout(debounceRef.current);
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+        }
         debounceRef.current = setTimeout(async () => {
             setLoading(true); setSearched(true);
             try {
@@ -136,7 +138,11 @@ export function TokenSearchPanel({ onSelectForWallet, onSelectRow, selectedPairA
                 setPairs(results);
             } finally { setLoading(false); }
         }, 500);
-        return () => clearTimeout(debounceRef.current);
+        return () => {
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+        };
     }, [query, chainFilter]);
 
     return (

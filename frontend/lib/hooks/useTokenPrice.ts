@@ -46,7 +46,7 @@ const DEFAULT_PRICES: TokenPriceUSD = {
 export function useTokenPrice() {
     const [prices, setPrices] = useState<TokenPriceUSD>(DEFAULT_PRICES);
     const [isLoading, setIsLoading] = useState(true);
-    const intervalRef = useRef<NodeJS.Timeout>();
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetchPrices = async () => {
         try {

@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -30,6 +30,7 @@ import { Footer } from '@/components/layout/Footer';
 import { ProductReviewSection } from '@/components/product/ProductReviewSection';
 import { ProductGalleryViewer } from '@/components/product/ProductGalleryViewer';
 import { ProductTokenPricing } from '@/components/product/ProductTokenPricing';
+import { ProductQuickActions } from '@/components/product/ProductQuickActions';
 import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 import { useCartStore } from '@/store/cart-store';
 import { apiClient } from '@/lib/api/client';
@@ -87,6 +88,7 @@ function formatUsd(value: number) {
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
   const addItem = useCartStore((state) => state.addItem);
 
@@ -98,20 +100,23 @@ export default function ProductDetailPage() {
   const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
+    const requestedTokenId = Number(searchParams.get('token'));
+
     apiClient.get(`/api/products/${id}`)
       .then((response) => {
         const data = response.data;
         if (data.success && data.data) {
           setProduct(data.data);
-          const primaryToken = data.data.accepted_tokens?.find((token: ProductAcceptedTokenView) => token.is_primary)
+          const resolvedToken = data.data.accepted_tokens?.find((token: ProductAcceptedTokenView) => token.token_id === requestedTokenId)
+            || data.data.accepted_tokens?.find((token: ProductAcceptedTokenView) => token.is_primary)
             || data.data.accepted_tokens?.[0]
             || null;
-          setSelectedToken(primaryToken);
+          setSelectedToken(resolvedToken);
         }
       })
       .catch(() => toast.error('Không tìm thấy sản phẩm'))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, searchParams]);
 
   const basePriceUsd = Number(product?.base_price_usd || 0);
   const images = useMemo(
@@ -216,8 +221,6 @@ export default function ProductDetailPage() {
     );
   }
 
-  const selectedAmount = selectedToken ? `${selectedToken.price_in_token} ${selectedToken.symbol}` : 'PayPal / Fiat';
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <Header />
@@ -244,11 +247,6 @@ export default function ProductDetailPage() {
                 {product.category && (
                   <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                     {product.category}
-                  </span>
-                )}
-                {product.accepted_tokens?.length > 0 && (
-                  <span className="flex items-center gap-1 rounded-full border border-[#8247e5]/20 bg-[#8247e5]/10 px-3 py-1 text-xs font-bold text-[#8247e5]">
-                    {product.accepted_tokens.length} token thanh toán
                   </span>
                 )}
                 {product.stock > 0 ? (
@@ -282,33 +280,15 @@ export default function ProductDetailPage() {
               )}
 
               <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex flex-wrap items-end gap-3">
-                  <span className="bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-4xl font-black text-transparent">
-                    {selectedAmount}
-                  </span>
-                  {selectedToken && selectedToken.chain_name && (
-                    <span className="mb-1 flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
-                      <CoinImage symbol={selectedToken.logo_symbol || selectedToken.symbol} size={14} />
-                      {selectedToken.chain_name}
-                    </span>
-                  )}
-                </div>
-
-                <p className="text-sm text-muted-foreground">
-                  Giá quy đổi tham chiếu:
-                  {' '}
-                  <span className="font-semibold text-foreground">{formatUsd(basePriceUsd)} USDT</span>
-                </p>
-
                 {product.accepted_tokens?.length > 0 && (
                   <div className="pt-2">
-                    <p className="mb-3 text-sm font-medium text-foreground">Chọn token thanh toán</p>
                     <ProductTokenPricing
                       acceptedTokens={product.accepted_tokens}
                       basePriceUsd={basePriceUsd}
                       selectedTokenId={selectedToken?.token_id ?? null}
                       onSelect={setSelectedToken}
                       variant="detail"
+                      stock={product.stock}
                     />
                   </div>
                 )}
@@ -333,6 +313,13 @@ export default function ProductDetailPage() {
                     </span>
                   </button>
                 )}
+
+                <ProductQuickActions
+                  onAddToCart={handleAddToCart}
+                  onBuyNow={handleBuyNow}
+                  disabled={product.stock === 0}
+                  size="detail"
+                />
               </div>
 
               <div className="flex items-center gap-6 py-2">
@@ -352,24 +339,6 @@ export default function ProductDetailPage() {
                     +
                   </button>
                 </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleBuyNow}
-                  disabled={product.stock === 0}
-                  className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-[#f0b90b] py-4 text-base font-black text-black shadow-xl shadow-yellow-500/20 transition-all hover:-translate-y-0.5 hover:bg-[#e6a800] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Zap className="h-5 w-5" />
-                  Mua ngay
-                </button>
-                <button
-                  onClick={handleAddToCart}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-card py-4 text-base font-bold text-foreground shadow-sm transition-all hover:border-primary/50 hover:bg-muted"
-                >
-                  <ShoppingCart className="h-5 w-5" />
-                  Giỏ hàng
-                </button>
               </div>
 
               <div className="grid grid-cols-3 gap-3 border-t border-border pt-6">

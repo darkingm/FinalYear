@@ -12,6 +12,7 @@ import { useCartStore } from '@/store/cart-store';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { CoinImage } from '@/components/ui/CoinImage';
+import { formatTokenAmountOnly } from '@/lib/products/pricing';
 
 export default function CartPage() {
     const router = useRouter();
@@ -99,9 +100,9 @@ export default function CartPage() {
                                                     ${item.base_price_usd.toLocaleString()}
                                                 </span>
                                                 {item.price_in_token && item.token_symbol && (
-                                                    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-accent/20 text-muted-foreground border border-border">
-                                                        <CoinImage symbol={item.token_symbol} size={14} className="rounded-full" />
-                                                        {item.price_in_token} {item.token_symbol}
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent/20 px-2.5 py-1 text-xs font-black text-foreground">
+                                                        <span>{formatTokenAmountOnly(item.price_in_token)}</span>
+                                                        <CoinImage symbol={item.token_symbol} size={14} className="rounded-full" alt={item.token_symbol} />
                                                     </span>
                                                 )}
                                             </div>

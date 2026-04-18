@@ -23,7 +23,7 @@ const SELLER_ROUTES = [
   '/coupons',
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
 
@@ -46,8 +46,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Admin routes require admin role — block non-admin users even if authenticated
-  if (isAdmin && token && (token as any).role !== 'admin') {
+  // Admin routes require admin role; block non-admin users even if authenticated
+  if (isAdmin && token && token.role !== 'admin') {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

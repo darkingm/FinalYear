@@ -1,18 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
-import dynamic from 'next/dynamic';
 import { ChunkErrorBoundary } from '@/components/error/ChunkErrorBoundary';
-
-const GlobeBackground = dynamic(
-  () => import('@/components/ui/GlobeBackground').then(m => ({ default: m.GlobeBackground })),
-  { ssr: false }
-);
-
-const AIChatBubble = dynamic(
-  () => import('@/components/ui/AIChatBubble').then(m => ({ default: m.AIChatBubble })),
-  { ssr: false }
-);
+import { ClientChrome } from '@/components/layout/ClientChrome';
 
 export const metadata: Metadata = {
   title: {
@@ -136,8 +126,7 @@ export default function RootLayout({
       <body>
         <Providers>
           <ChunkErrorBoundary>
-            <GlobeBackground />
-            <AIChatBubble />
+            <ClientChrome />
             {children}
           </ChunkErrorBoundary>
         </Providers>

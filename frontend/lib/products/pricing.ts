@@ -1,5 +1,7 @@
 import {
   ProductAcceptedTokenView,
+  ProductTokenChipState,
+  ProductTokenChipView,
   ProductEditorSeedToken,
   ProductEditorTokenRow,
   ProductPricingDisplayRow,
@@ -24,6 +26,20 @@ function formatDisplayAmount(amount: string, symbol: string): string {
   })} ${symbol}`.trim();
 }
 
+export function formatTokenAmountOnly(amount: string | number | null | undefined): string {
+  const normalized = normalizeAmount(amount);
+  const numeric = Number(normalized);
+
+  if (normalized.length === 0 || Number.isNaN(numeric)) {
+    return normalized;
+  }
+
+  return numeric.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: numeric >= 1 ? 4 : 8,
+  });
+}
+
 export function normalizeAcceptedTokensForDisplay(tokens: ProductAcceptedTokenView[]): ProductPricingDisplayRow[] {
   return [...tokens]
     .sort((a, b) => Number(b.is_primary) - Number(a.is_primary))
@@ -36,6 +52,32 @@ export function normalizeAcceptedTokensForDisplay(tokens: ProductAcceptedTokenVi
         display_amount: formatDisplayAmount(amount, token.symbol),
       };
     });
+}
+
+export function buildAcceptedTokenChipState(
+  tokens: ProductAcceptedTokenView[],
+  options: { selectedTokenId?: number | null; maxVisible?: number } = {},
+): ProductTokenChipState {
+  const ordered = normalizeAcceptedTokensForDisplay(tokens);
+  const activeToken =
+    ordered.find((token) => token.token_id === options.selectedTokenId) ??
+    ordered.find((token) => token.is_primary) ??
+    ordered[0] ??
+    null;
+
+  const all: ProductTokenChipView[] = ordered.map((token) => ({
+    ...token,
+    amountLabel: formatTokenAmountOnly(token.price_in_token),
+    isActive: activeToken ? token.token_id === activeToken.token_id : false,
+  }));
+
+  const maxVisible = Math.max(0, options.maxVisible ?? all.length);
+  return {
+    activeToken,
+    visible: all.slice(0, maxVisible),
+    hiddenCount: Math.max(0, all.length - maxVisible),
+    all,
+  };
 }
 
 export function seedAcceptedTokenEditorState(input: {
