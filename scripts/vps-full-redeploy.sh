@@ -6,7 +6,32 @@
 set -e
 
 COMPOSE_DIR=/root/services/FinalYear/docker
+ENV_FILE="$COMPOSE_DIR/.env"
+TAG_ENV_FILE="$COMPOSE_DIR/.image-tags.env"
 PROJ=FinalYear
+DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kiendzpro}"
+
+if [ -f "$ENV_FILE" ]; then
+  DOCKERHUB_USERNAME="$(grep '^DOCKERHUB_USERNAME=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
+  DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kiendzpro}"
+fi
+
+resolve_tag() {
+  local key="$1"
+  local fallback="${DEPLOY_TAG:-latest}"
+  local found=""
+  if [ -f "$TAG_ENV_FILE" ]; then
+    found="$(grep "^${key}=" "$TAG_ENV_FILE" | head -n1 | cut -d= -f2- || true)"
+  fi
+  echo "${found:-$fallback}"
+}
+
+MAIN_API_TAG="$(resolve_tag MAIN_API_IMAGE_TAG)"
+PAYMENT_API_TAG="$(resolve_tag PAYMENT_API_IMAGE_TAG)"
+FRONTEND_TAG="$(resolve_tag FRONTEND_IMAGE_TAG)"
+AI_SERVICE_TAG="$(resolve_tag AI_SERVICE_IMAGE_TAG)"
+TOKENIZATION_TAG="$(resolve_tag TOKENIZATION_IMAGE_TAG)"
+DB_MIGRATOR_TAG="$(resolve_tag DB_MIGRATOR_IMAGE_TAG)"
 
 echo "================================================================"
 echo "  FULL CLEAN REDEPLOY — $(date)"
@@ -29,11 +54,13 @@ echo "[3] Current images:"
 docker images --format 'REPO:{{.Repository}} TAG:{{.Tag}} SIZE:{{.Size}}' 2>&1
 
 echo ""
-echo "[4] Pull LATEST images from Docker Hub..."
-docker pull kiendzpro/marketplace-main-api:latest 2>&1 | tail -3
-docker pull kiendzpro/marketplace-payment-api:latest 2>&1 | tail -3
-docker pull kiendzpro/marketplace-frontend:latest 2>&1 | tail -3
-docker pull kiendzpro/marketplace-ai-service:latest 2>&1 | tail -3
+echo "[4] Pull pinned images from Docker Hub..."
+docker pull ${DOCKERHUB_USERNAME}/marketplace-main-api:${MAIN_API_TAG} 2>&1 | tail -3
+docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:${PAYMENT_API_TAG} 2>&1 | tail -3
+docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:${FRONTEND_TAG} 2>&1 | tail -3
+docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:${AI_SERVICE_TAG} 2>&1 | tail -3
+docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:${TOKENIZATION_TAG} 2>&1 | tail -3
+docker pull ${DOCKERHUB_USERNAME}/marketplace-db-migrator:${DB_MIGRATOR_TAG} 2>&1 | tail -3
 echo "All images pulled."
 
 echo ""
@@ -48,6 +75,10 @@ fi
 echo "Using .env:"
 cat .env | grep -v KEY | grep -v SECRET | grep -v PASS | grep -v PRIVATE 2>&1
 
+set -a
+[ -f "$TAG_ENV_FILE" ] && . "$TAG_ENV_FILE"
+set +a
+
 docker compose -f docker-compose.prod.yml --env-file .env up -d 2>&1
 echo "Docker compose up done."
 
@@ -60,10 +91,14 @@ echo "[7] FINAL container status:"
 docker ps -a --format 'NAME:{{.Names}} STATUS:{{.Status}} IMG:{{.Image}}' 2>&1
 
 echo ""
+echo "[7.1] Active pinned tags:"
+[ -f "$TAG_ENV_FILE" ] && cat "$TAG_ENV_FILE" || echo "No $TAG_ENV_FILE file found"
+
+echo ""
 echo "[8] Health checks:"
 curl -sf http://127.0.0.1:3000 -o /dev/null && echo "OK: Frontend port 3000" || echo "FAIL: Frontend port 3000"
-curl -sf http://127.0.0.1:3001/api/health -o /dev/null && echo "OK: Main-API port 3001" || echo "FAIL: Main-API port 3001"
-curl -sf http://127.0.0.1:3002/api/health -o /dev/null && echo "OK: Payment-API port 3002" || echo "FAIL: Payment-API port 3002"
+curl -sf http://127.0.0.1:3001/health -o /dev/null && echo "OK: Main-API port 3001" || echo "FAIL: Main-API port 3001"
+curl -sf http://127.0.0.1:3002/health -o /dev/null && echo "OK: Payment-API port 3002" || echo "FAIL: Payment-API port 3002"
 
 echo ""
 echo "[9] main-api logs (last 30 lines):"

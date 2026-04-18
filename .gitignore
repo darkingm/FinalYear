@@ -10,6 +10,7 @@ coverage
 *.env
 vps*.env
 vps*.txt
+.image-tags.env
 !*.env.example
 !*.env.example.*
 
@@ -25,6 +26,11 @@ vps*.txt
 *.tar
 
 # ── Temp / scratch files ──────────────────────────────────────
+.scratch/
+.grapuco/status.json
+tmp_*
+*.tmp
+*.tmp.json
 result.txt
 query.sql
 *.sql.tmp

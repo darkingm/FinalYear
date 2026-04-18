@@ -187,6 +187,25 @@ cd contracts
 npx hardhat test
 ```
 
+## 🧭 Grapuco Reindex
+
+The project now uses one canonical reindex command so the local graph state is easier to inspect and recover:
+
+```powershell
+cd frontend
+npm run reindex
+```
+
+What it does:
+- runs `npx grapuco ingest` from the repo root
+- writes the latest run result to `.grapuco/status.json`
+- records the commit SHA that was indexed
+
+Local hook behavior:
+- `.git/hooks/post-commit` should call `scripts/grapuco-reindex.sh`
+- if the hook is active, every local commit triggers a background reindex
+- if indexing fails, check `.grapuco/status.json` for the last error
+
 ## 📚 Documentation
 
 - [API Documentation](docs/API.md)

@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { ProductUpsertPayload } from '@/lib/products/types';
 
 export interface ProductListParams {
   page?: number;
@@ -14,14 +15,10 @@ export const productsApi = {
   list: (params?: ProductListParams) =>
     apiClient.get('/api/products', { params }),
   getById: (id: number) => apiClient.get(`/api/products/${id}`),
-  create: (data: FormData) =>
-    apiClient.post('/api/products', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  update: (id: number, data: FormData) =>
-    apiClient.put(`/api/products/${id}`, data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  create: (data: ProductUpsertPayload) =>
+    apiClient.post('/api/products', data),
+  update: (id: number, data: ProductUpsertPayload) =>
+    apiClient.put(`/api/products/${id}`, data),
   delete: (id: number) => apiClient.delete(`/api/products/${id}`),
 
   /** Homepage: max 5 per coin, up to 20 total */

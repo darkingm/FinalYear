@@ -19,7 +19,7 @@ import {
   Plus, ChevronDown, Sparkles, TrendingUp, Tag, Package,
   Gem, Coins, Zap, ExternalLink, Star, Shield,
 } from 'lucide-react';
-import { useTokenPrice, usdToToken, formatTokenAmount, TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
+import { TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
 import { useChainId } from 'wagmi';
 import { CoinImage } from '@/components/ui/CoinImage';
 
@@ -104,21 +104,10 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
   const primaryToken = nonStableToken;
   const chainKey = (primaryToken?.chain_name || '').toLowerCase().replace(/\s/g, '');
   const chain = CHAIN_CONFIG[chainKey] || CHAIN_CONFIG.polygon;
-  const { prices } = useTokenPrice();
   const chainId = useChainId();
   const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
 
-  // Compute MATIC fallback (always used when stablecoin or no token)
-  const maticAmount = usdToToken(parseFloat(product.base_price_usd), 'MATIC', prices);
-  const maticFormatted = formatTokenAmount(maticAmount, 'MATIC');
-
   const [imgSrc, setImgSrc] = useState(product.primary_image || PLACEHOLDER);
-
-  // Determine what to show as price
-  const isStable = primaryToken ? STABLECOINS_SET.has(primaryToken.symbol.toUpperCase()) : true;
-  const showMatic = !primaryToken || isStable;  // show MATIC when no token or stablecoin
-  const displayAmount = showMatic ? maticFormatted : formatTokenAmount(parseFloat(primaryToken!.price_in_token), primaryToken!.symbol);
-  const displaySymbol = showMatic ? 'MATIC' : primaryToken!.symbol;
 
   return (
     <motion.div
@@ -179,26 +168,25 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
             {/* Price — show all seller-set token prices as pills */}
             <div className="flex items-end justify-between">
               <div className="flex-1 min-w-0">
-                {(product.accepted_tokens?.filter(t => !STABLECOINS_SET.has(t.symbol.toUpperCase())).length ?? 0) > 0 ? (
+                {product.accepted_tokens?.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
-                    {product.accepted_tokens!
-                      .filter(t => !STABLECOINS_SET.has(t.symbol.toUpperCase()))
-                      .map(t => (
+                    {product.accepted_tokens.map(t => (
                         <span
                           key={t.token_id}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black"
                           style={{ background: `${chain.color}22`, color: chain.color }}
                         >
-                          {formatTokenAmount(parseFloat(t.price_in_token), t.symbol)}
+                          {Number(t.price_in_token).toLocaleString('en-US', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: Number(t.price_in_token) >= 1 ? 4 : 8,
+                          })} {t.symbol}
                           <CoinImage symbol={t.symbol} size={14} className="flex-shrink-0" />
                         </span>
                       ))}
                   </div>
                 ) : (
-                  /* fallback: compute MATIC price from USD */
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black" style={{ background: `${chain.color}22`, color: chain.color }}>
-                    {maticFormatted}
-                    <CoinImage symbol="MATIC" size={14} className="flex-shrink-0" />
+                    Chưa cấu hình giá token
                   </span>
                 )}
                 {isTestnet && <p className="text-[10px] text-white/40 mt-0.5">(testnet)</p>}

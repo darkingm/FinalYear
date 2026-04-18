@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import { isBuyerOnchainCompletionSync, shouldTriggerEscrowRelease } from './orders.logic';
 
 // ─── Create Multiple Orders (Cart Checkout) ─────────────────────────────────
 export async function checkoutCart(req: AuthRequest, res: Response, next: NextFunction) {
@@ -361,7 +362,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
   try {
     const userId = req.user!.user_id;
     const orderId = parseInt(req.params.id);
-    const { status, tracking_number, reason, evidence_urls } = req.body;
+    const { status, tracking_number, reason, evidence_urls, completion_source, release_tx_hash } = req.body;
 
     const allowedStatuses = ['SHIPPED', 'DELIVERED', 'COMPLETED', 'DISPUTED'];
     if (!allowedStatuses.includes(status)) throw new AppError('Invalid status update', 400);
@@ -404,6 +405,17 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
       throw new AppError(`Cannot transition order from ${order.status} to ${status}`, 400);
     }
 
+    const buyerOnchainCompletion = isBuyerOnchainCompletionSync(
+      status,
+      order.payment_method ?? null,
+      completion_source
+    );
+    const releaseEscrowAfterCompletion = shouldTriggerEscrowRelease(
+      status,
+      order.payment_method ?? null,
+      completion_source
+    );
+
     // Anti-fraud: detect suspicious dispute patterns
     // If buyer tries to dispute AFTER an on-chain confirm was already recorded, flag it
     if (status === 'DISPUTED' && order.release_tx_hash) {
@@ -417,6 +429,11 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
       await query(
         `UPDATE orders SET status = $1, tracking_number = $2, updated_at = NOW() WHERE order_id = $3`,
         [status, tracking_number, orderId]
+      );
+    } else if (buyerOnchainCompletion && release_tx_hash) {
+      await query(
+        `UPDATE orders SET status = $1, release_tx_hash = $2, updated_at = NOW() WHERE order_id = $3`,
+        [status, release_tx_hash, orderId]
       );
     } else {
       await query(
@@ -458,15 +475,18 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
       ).catch(err => logger.warn('Failed to create/update dispute record:', err.message));
     }
 
-    await publishEvent('order.status_updated', { order_id: orderId, status, timestamp: Date.now() });
-
     // Auto-release escrow when buyer confirms delivery (COMPLETED) for crypto orders
     let finalStatus = status;
-    if (status === 'COMPLETED' && order.payment_method === 'crypto') {
+    if (buyerOnchainCompletion && !release_tx_hash) {
+      logger.warn('Buyer on-chain completion arrived without release_tx_hash', { order_id: orderId });
+    }
+
+    if (releaseEscrowAfterCompletion) {
       const internalKey = process.env.INTERNAL_SERVICE_KEY;
+      const rollbackStatus = order.status;
       if (!internalKey) {
         logger.error('INTERNAL_SERVICE_KEY env var is not set — cannot release escrow');
-        finalStatus = 'PAID'; // Stay in PAID, don't touch COMPLETED without release
+        finalStatus = rollbackStatus;
         await query(`UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`, [finalStatus, orderId]);
       } else {
         try {
@@ -481,7 +501,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
         } catch (err: any) {
           // Release failed — rollback to honest status and notify
           logger.error(`Failed to trigger escrow release for order ${orderId}:`, err.message);
-          finalStatus = 'PAID'; // Honest: payment confirmed but release pending
+          finalStatus = rollbackStatus;
           await query(
             `UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`,
             [finalStatus, orderId]
@@ -489,6 +509,14 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
         }
       }
     }
+
+    await publishEvent('order.status_updated', {
+      order_id: orderId,
+      status: finalStatus,
+      completion_source: completion_source || null,
+      release_tx_hash: buyerOnchainCompletion ? release_tx_hash || null : null,
+      timestamp: Date.now(),
+    });
 
     // Return the ACTUAL final status — never lie to the client
     res.json({ success: true, message: 'Order status updated', status: finalStatus });

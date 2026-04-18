@@ -11,6 +11,8 @@
  */
 import { useEffect, useRef } from 'react';
 import type * as THREE from 'three';
+import { LightWarpBackground } from '@/components/ui/LightWarpBackground';
+import { useDesktopLightMode } from '@/lib/hooks/useDesktopLightMode';
 
 const TEX_DAY   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
@@ -67,8 +69,13 @@ const PRESETS = {
 } as const;
 
 export function GlobeBackground() {
+    const useLightWarp = useDesktopLightMode();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef(0);
+
+    if (useLightWarp) {
+        return <LightWarpBackground />;
+    }
 
     useEffect(() => {
         const canvas = canvasRef.current;
