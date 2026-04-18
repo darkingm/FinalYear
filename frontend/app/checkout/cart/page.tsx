@@ -303,13 +303,19 @@ export default function CartCheckoutPage() {
       toast.loading('Đang chờ xác nhận...', { id: 'tx' });
 
       // Notify payment service for each order (non-blocking)
-      await Promise.allSettled(
+      const submitResults = await Promise.allSettled(
         quote.order_ids.map(id =>
           paymentClient.post('/api/payments/crypto/submit', { order_id: id, tx_hash: hash })
         )
       );
 
-      toast.success('Giao dịch đã gửi thành công! 🎉', { id: 'tx' });
+      const failedSubmissions = submitResults.filter(result => result.status === 'rejected');
+
+      if (failedSubmissions.length > 0) {
+        toast.error('Giao dịch đã lên chain nhưng một số đơn chưa đồng bộ với backend. Kiểm tra trang Orders hoặc báo admin để sync lại.', { id: 'tx' });
+      } else {
+        toast.success('Giao dịch đã gửi thành công! 🎉', { id: 'tx' });
+      }
       setTxHash(hash);
       setPayStep('done');
       setConfirmed(true);
@@ -425,7 +431,7 @@ export default function CartCheckoutPage() {
                     <div className="mt-4 space-y-2 border-t border-border pt-4">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Sản phẩm trong giỏ</p>
                       {displayItems.map(item => (
-                        <div key={item.product_id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
+                        <div key={item.cart_item_id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
                           <div
                             className="w-10 h-10 rounded-lg bg-muted bg-cover bg-center flex-shrink-0"
                             style={{ backgroundImage: `url(${item.image_url || item.metadata?.images?.[0]})` }}

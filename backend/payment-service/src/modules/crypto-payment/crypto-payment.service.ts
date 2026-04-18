@@ -4,6 +4,11 @@ import { publishEvent } from '../../config/rabbitmq';
 import { BinanceService } from '../pricing/binance.service';
 import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
+import {
+  collectAffectedOrderIds,
+  resolveOperatorPrivateKey,
+  resolveSellerWallet,
+} from './crypto-payment.logic';
 
 const ESCROW_ABI = [
   // ERC-20 tokens: requires approve() first, then deposit()
@@ -108,15 +113,7 @@ export class CryptoPaymentService {
       [order.seller_id]
     );
     const rawWallet: string | null = sellerResult.rows[0]?.payout_wallet ?? null;
-
-    const isValidEthAddress = (w: string | null): w is string =>
-      !!w && /^0x[0-9a-fA-F]{40}$/.test(w);
-
-    const sellerWallet = isValidEthAddress(rawWallet)
-      ? rawWallet.toLowerCase()
-      : isValidEthAddress(process.env.ESCROW_CONTRACT_ADDRESS ?? null)
-        ? process.env.ESCROW_CONTRACT_ADDRESS!.toLowerCase()
-        : null;
+    const sellerWallet = resolveSellerWallet(rawWallet);
 
     if (!sellerWallet) {
       throw new AppError(
@@ -305,19 +302,15 @@ export class CryptoPaymentService {
       [sellerIds]
     );
 
-    const sellerWalletsMap = new Map(sellerResult.rows.map(r => [r.seller_id, r.payout_wallet]));
-    const isValidEthAddress = (w: string | null): w is string => !!w && /^0x[0-9a-fA-F]{40}$/.test(w);
-
-    const escrowAddrEnv = process.env.ESCROW_CONTRACT_ADDRESS ?? null;
-    const escrowFallback = isValidEthAddress(escrowAddrEnv) ? escrowAddrEnv.toLowerCase() : null;
+    const sellerWalletsMap = new Map<number, string | null>(
+      sellerResult.rows.map(r => [r.seller_id, r.payout_wallet ?? null])
+    );
 
     const sellersForBatch: string[] = [];
 
     for (const order of orders) {
-      const rawWallet = sellerWalletsMap.get(order.seller_id);
-      const sellerWallet = isValidEthAddress(rawWallet)
-        ? rawWallet.toLowerCase()
-        : escrowFallback;
+      const rawWallet = sellerWalletsMap.get(order.seller_id) ?? null;
+      const sellerWallet = resolveSellerWallet(rawWallet);
 
       if (!sellerWallet) {
         throw new AppError(`Seller of order ${order.order_id} has no valid wallet. Cannot proceed with crypto cart checkout.`, 400);
@@ -443,28 +436,29 @@ export class CryptoPaymentService {
       throw new AppError('Invalid transaction hash format', 400);
     }
 
+    // Get order details for chain_id
+    const orderResult = await mainQuery(
+      'SELECT * FROM orders WHERE order_id = $1',
+      [orderId]
+    );
+    if (orderResult.rows.length === 0) {
+      throw new AppError('Order not found', 404);
+    }
+    const order = orderResult.rows[0];
+
     // Update order status first
     await mainQuery(
       `UPDATE orders SET tx_hash = $1, status = 'TX_SUBMITTED', updated_at = NOW() WHERE order_id = $2`,
       [txHash, orderId]
     );
 
-    // Get order details for chain_id
-    const orderResult = await mainQuery(
-      'SELECT * FROM orders WHERE order_id = $1',
-      [orderId]
-    );
-    const order = orderResult.rows[0];
-
-    // Create payment record — guard against duplicate tx_hash (batch has same hash per order).
-    // Use an explicit existence check instead of ON CONFLICT (payments has no UNIQUE on tx_hash).
+    // Batch checkout shares one tx hash across many orders, but each order needs its own payment row.
     const existing = await query(
-      `SELECT payment_id FROM payments WHERE tx_hash = $1 LIMIT 1`,
-      [txHash]
+      `SELECT payment_id FROM payments WHERE order_id = $1 AND tx_hash = $2 LIMIT 1`,
+      [orderId, txHash]
     );
 
     if (existing.rows.length === 0) {
-      // First order in the batch — create the payment record
       const escrowAddr = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
       const fromAddr = order.buyer_wallet || String(order.buyer_id);
       await query(
@@ -473,7 +467,6 @@ export class CryptoPaymentService {
         [orderId, txHash, order.chain_id, fromAddr, escrowAddr]
       );
     }
-    // (Subsequent batch orders share the same payment row — only the orders table is updated per order)
 
     // Publish event
     await publishEvent('tx.submitted', {
@@ -543,7 +536,9 @@ export class CryptoPaymentService {
       throw new AppError('Payment not found', 404);
     }
 
-    const payment = paymentResult.rows[0];
+    const payments = paymentResult.rows;
+    const payment = payments[0];
+    const affectedOrderIds = collectAffectedOrderIds(payments);
     const provider = this.providers.get(payment.chain_id);
 
     if (!provider) {
@@ -591,16 +586,18 @@ export class CryptoPaymentService {
       );
 
       await mainQuery(
-        `UPDATE orders SET status = 'TX_FAILED', updated_at = NOW() 
-         WHERE order_id = $1`,
-        [payment.order_id]
+        `UPDATE orders SET status = 'TX_FAILED', updated_at = NOW()
+         WHERE order_id = ANY($1::int[])`,
+        [affectedOrderIds]
       );
 
-      await publishEvent('payment.failed', {
-        order_id: payment.order_id,
-        tx_hash: txHash,
-        reason: 'Transaction reverted',
-      });
+      for (const affectedOrderId of affectedOrderIds) {
+        await publishEvent('payment.failed', {
+          order_id: affectedOrderId,
+          tx_hash: txHash,
+          reason: 'Transaction reverted',
+        });
+      }
 
       return {
         verified: false,
@@ -639,9 +636,9 @@ export class CryptoPaymentService {
       // Status → PAID: waiting for seller to ship, then buyer to confirm delivery.
       // Release happens ONLY when buyer calls confirm delivery (COMPLETED → backend calls releasePayment).
       await mainQuery(
-        `UPDATE orders SET status = 'PAID', updated_at = NOW() 
-         WHERE order_id = $1`,
-        [payment.order_id]
+        `UPDATE orders SET status = 'PAID', updated_at = NOW()
+         WHERE order_id = ANY($1::int[])`,
+        [affectedOrderIds]
       );
 
       await query(
@@ -649,13 +646,19 @@ export class CryptoPaymentService {
         [txHash]
       );
 
-      await publishEvent('payment.validated', {
-        order_id: payment.order_id,
-        tx_hash: txHash,
-        confirmations,
-      });
+      for (const affectedOrderId of affectedOrderIds) {
+        await publishEvent('payment.validated', {
+          order_id: affectedOrderId,
+          tx_hash: txHash,
+          confirmations,
+        });
+      }
 
-      logger.info('Transaction verified — funds locked in escrow, awaiting delivery', { txHash, confirmations, order_id: payment.order_id });
+      logger.info('Transaction verified — funds locked in escrow, awaiting delivery', {
+        txHash,
+        confirmations,
+        order_ids: affectedOrderIds,
+      });
 
       return {
         verified: true,
@@ -725,7 +728,7 @@ export class CryptoPaymentService {
     const provider = this.providers.get(order.chain_id);
     if (!provider) throw new AppError('Unsupported chain', 400);
 
-    const privateKey = process.env.ADMIN_PRIVATE_KEY;
+    const privateKey = resolveOperatorPrivateKey(process.env);
     if (!privateKey) throw new AppError('Admin private key not configured', 500);
 
     const wallet = new ethers.Wallet(privateKey, provider);
@@ -770,7 +773,7 @@ export class CryptoPaymentService {
     const provider = this.providers.get(order.chain_id);
     if (!provider) throw new AppError('Unsupported chain', 400);
 
-    const privateKey = process.env.ADMIN_PRIVATE_KEY;
+    const privateKey = resolveOperatorPrivateKey(process.env);
     if (!privateKey) throw new AppError('Admin private key not configured', 500);
 
     const wallet = new ethers.Wallet(privateKey, provider);

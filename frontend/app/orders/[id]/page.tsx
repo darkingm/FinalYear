@@ -78,18 +78,22 @@ export default function OrderDetailPage() {
 
   // After on-chain confirm, update backend
   useEffect(() => {
-    if (!confirmSuccess || !order) return;
-    // Use PATCH /:id/status — state machine now allows PAID/ONCHAIN_CONFIRMED → COMPLETED
-    apiClient.patch(`/api/orders/${order.order_id}/status`, { status: 'COMPLETED' })
+    if (!confirmSuccess || !order || !confirmTxData) return;
+    // Sync backend to the on-chain completion without triggering a second release call.
+    apiClient.patch(`/api/orders/${order.order_id}/status`, {
+      status: 'COMPLETED',
+      completion_source: 'buyer_onchain',
+      release_tx_hash: confirmTxData,
+    })
       .then(() => {
-        toast.success('✅ Xác nhận nhận hàng thành công! Escrow đang giải ngân cho người bán.');
+        toast.success('✅ Xác nhận nhận hàng thành công! Hệ thống đang đồng bộ trạng thái đơn hàng.');
         fetchOrder();
       })
       .catch((e: any) => {
         const msg = e.response?.data?.message || 'Lỗi cập nhật backend';
         toast.error(`Cập nhật thất bại: ${msg}`);
-        // Don't panic — on-chain tx succeeded, admin can manually release
-        toast.info('Giao dịch on-chain thành công. Admin sẽ xác nhận thủ công nếu cần.', { duration: 8000 });
+        // Don't panic — on-chain tx already succeeded, backend can sync it later.
+        toast.info('Giao dịch on-chain đã thành công. Admin có thể đồng bộ trạng thái thủ công nếu cần.', { duration: 8000 });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmSuccess]);

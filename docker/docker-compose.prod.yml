@@ -36,7 +36,7 @@ services:
   # Chạy MỖI LẦN deploy — tự động apply các migration chưa áp dụng
   # Sau khi xong thì thoát (restart: no) — không chiếm tài nguyên
   db-migrator:
-    image: ${DOCKERHUB_USERNAME}/marketplace-db-migrator:latest
+    image: ${DOCKERHUB_USERNAME}/marketplace-db-migrator:${DB_MIGRATOR_IMAGE_TAG:-latest}
     container_name: marketplace-db-migrator
     environment:
       PGHOST: postgres
@@ -114,7 +114,7 @@ services:
     restart: unless-stopped
 
   main-api:
-    image: ${DOCKERHUB_USERNAME}/marketplace-main-api:latest
+    image: ${DOCKERHUB_USERNAME}/marketplace-main-api:${MAIN_API_IMAGE_TAG:-latest}
     container_name: marketplace-main-api
     environment:
       NODE_ENV: production
@@ -162,7 +162,7 @@ services:
     restart: unless-stopped
 
   payment-api:
-    image: ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest
+    image: ${DOCKERHUB_USERNAME}/marketplace-payment-api:${PAYMENT_API_IMAGE_TAG:-latest}
     container_name: marketplace-payment-api
     environment:
       NODE_ENV: production
@@ -187,7 +187,8 @@ services:
       ARBITRUM_RPC_URL: https://arb1.arbitrum.io/rpc
       ESCROW_CONTRACT_ADDRESS: ${ESCROW_CONTRACT_LOCALHOST:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
       MORALIS_API_KEY: ${MORALIS_API_KEY:-}
-      PRIVATE_KEY: ${BLOCKCHAIN_PRIVATE_KEY}
+      ADMIN_PRIVATE_KEY: ${PRIVATE_KEY:-${BLOCKCHAIN_PRIVATE_KEY}}
+      PRIVATE_KEY: ${PRIVATE_KEY:-${BLOCKCHAIN_PRIVATE_KEY}}
       FRONTEND_URL: https://kienai.id.vn
     ports:
       - "127.0.0.1:3002:3002" # Chỉ localhost — nginx proxy vào
@@ -208,7 +209,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ${DOCKERHUB_USERNAME}/marketplace-frontend:latest
+    image: ${DOCKERHUB_USERNAME}/marketplace-frontend:${FRONTEND_IMAGE_TAG:-latest}
     container_name: marketplace-frontend
     environment:
       NODE_ENV: production
@@ -294,7 +295,7 @@ services:
     restart: "no"
 
   ai-service:
-    image: ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest
+    image: ${DOCKERHUB_USERNAME}/marketplace-ai-service:${AI_SERVICE_IMAGE_TAG:-latest}
     container_name: marketplace-ai
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
@@ -315,7 +316,7 @@ services:
     restart: unless-stopped
 
   tokenization-service:
-    image: ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest
+    image: ${DOCKERHUB_USERNAME}/marketplace-tokenization:${TOKENIZATION_IMAGE_TAG:-latest}
     container_name: marketplace-tokenization
     environment:
       NODE_ENV: production

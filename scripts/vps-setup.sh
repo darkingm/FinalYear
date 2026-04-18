@@ -4,6 +4,7 @@ set -e
 
 ENV_FILE="/root/services/FinalYear/docker/.env"
 COMPOSE_DIR="/root/services/FinalYear/docker"
+TAG_ENV_FILE="/root/services/FinalYear/docker/.image-tags.env"
 INIT_DIR="/root/services/FinalYear/init_database.sql"
 
 echo "================================================"
@@ -212,14 +213,17 @@ cd "$COMPOSE_DIR"
 docker rm -f marketplace-db-migrator 2>/dev/null || true
 
 # Restart main-api and payment-api to pick up new env vars
+set -a
+[ -f "$TAG_ENV_FILE" ] && . "$TAG_ENV_FILE"
+set +a
 docker compose -f docker-compose.prod.yml --env-file .env up -d --no-deps main-api payment-api frontend
 
 sleep 10
 
 echo ""
 echo "=== Health checks ==="
-curl -sf http://127.0.0.1:3001/api/health > /dev/null && echo "✅ main-api :3001 OK" || echo "❌ main-api :3001 FAIL"
-curl -sf http://127.0.0.1:3002/api/health > /dev/null && echo "✅ payment-api :3002 OK" || echo "❌ payment-api :3002 FAIL"
+curl -sf http://127.0.0.1:3001/health > /dev/null && echo "✅ main-api :3001 OK" || echo "❌ main-api :3001 FAIL"
+curl -sf http://127.0.0.1:3002/health > /dev/null && echo "✅ payment-api :3002 OK" || echo "❌ payment-api :3002 FAIL"
 curl -sf http://127.0.0.1:3000 > /dev/null && echo "✅ frontend :3000 OK" || echo "❌ frontend :3000 FAIL"
 
 echo ""

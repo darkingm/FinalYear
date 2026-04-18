@@ -355,17 +355,54 @@ jobs:
 
             cd /root/services/FinalYear/docker
 
+            TAG_ENV_FILE=".image-tags.env"
+            touch "$TAG_ENV_FILE"
+
+            set_tag() {
+              local key="$1"
+              local value="$2"
+              if grep -q "^${key}=" "$TAG_ENV_FILE" 2>/dev/null; then
+                sed -i "s/^${key}=.*/${key}=${value}/" "$TAG_ENV_FILE"
+              else
+                echo "${key}=${value}" >> "$TAG_ENV_FILE"
+              fi
+            }
+
+            load_image_tags() {
+              set -a
+              [ -f "$TAG_ENV_FILE" ] && . "./$TAG_ENV_FILE"
+              set +a
+            }
+
             # ── Step 1: Pull ONLY changed images ─────────────────────
             echo ""
             echo "[1/3] Pulling changed Docker images..."
-            [ "$CHANGED_FRONTEND" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:latest &
-            [ "$CHANGED_MAIN_API" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-main-api:latest &
-            [ "$CHANGED_PAYMENT_API" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:latest &
-            [ "$CHANGED_AI" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:latest &
-            [ "$CHANGED_DB" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-db-migrator:latest &
-            [ "$CHANGED_TOKEN" = "true" ] && docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:latest &
-            wait
-            echo "✓ Images pulled"
+            if [ "$CHANGED_FRONTEND" = "true" ]; then
+              docker pull ${DOCKERHUB_USERNAME}/marketplace-frontend:${GIT_SHA}
+              set_tag FRONTEND_IMAGE_TAG ${GIT_SHA}
+            fi
+            if [ "$CHANGED_MAIN_API" = "true" ]; then
+              docker pull ${DOCKERHUB_USERNAME}/marketplace-main-api:${GIT_SHA}
+              set_tag MAIN_API_IMAGE_TAG ${GIT_SHA}
+            fi
+            if [ "$CHANGED_PAYMENT_API" = "true" ]; then
+              docker pull ${DOCKERHUB_USERNAME}/marketplace-payment-api:${GIT_SHA}
+              set_tag PAYMENT_API_IMAGE_TAG ${GIT_SHA}
+            fi
+            if [ "$CHANGED_AI" = "true" ]; then
+              docker pull ${DOCKERHUB_USERNAME}/marketplace-ai-service:${GIT_SHA}
+              set_tag AI_SERVICE_IMAGE_TAG ${GIT_SHA}
+            fi
+            if [ "$CHANGED_DB" = "true" ]; then
+              docker pull ${DOCKERHUB_USERNAME}/marketplace-db-migrator:${GIT_SHA}
+              set_tag DB_MIGRATOR_IMAGE_TAG ${GIT_SHA}
+            fi
+            if [ "$CHANGED_TOKEN" = "true" ]; then
+              docker pull ${DOCKERHUB_USERNAME}/marketplace-tokenization:${GIT_SHA}
+              set_tag TOKENIZATION_IMAGE_TAG ${GIT_SHA}
+            fi
+            load_image_tags
+            echo "✓ Images pulled and pinned to commit ${GIT_SHA:0:7}"
 
             # ── Step 2: Run DB migrations (if schema changed) ────────
             if [ "$CHANGED_DB" = "true" ]; then
@@ -433,6 +470,10 @@ jobs:
             echo ""
             echo "=== Container status ==="
             docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | grep marketplace
+
+            echo ""
+            echo "=== Active pinned tags ==="
+            cat "$TAG_ENV_FILE"
 
             # Cleanup dangling images
             docker image prune -f --filter "until=24h" || true

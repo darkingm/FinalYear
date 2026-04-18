@@ -3,6 +3,7 @@
  */
 import { productsApi, type ProductListParams } from '@/lib/api/products';
 import type { Product } from '@/types';
+import type { ProductUpsertPayload } from '@/lib/products/types';
 import { toast } from 'sonner';
 
 export type { ProductListParams } from '@/lib/api/products';
@@ -40,7 +41,7 @@ class ProductService {
     }
   }
 
-  async create(data: FormData): Promise<Product | null> {
+  async create(data: ProductUpsertPayload): Promise<Product | null> {
     try {
       const res = await productsApi.create(data);
       toast.success('Product created successfully');
@@ -51,7 +52,7 @@ class ProductService {
     }
   }
 
-  async update(id: number, data: FormData): Promise<Product | null> {
+  async update(id: number, data: ProductUpsertPayload): Promise<Product | null> {
     try {
       const res = await productsApi.update(id, data);
       toast.success('Product updated successfully');

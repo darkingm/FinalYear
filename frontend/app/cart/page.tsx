@@ -75,7 +75,7 @@ export default function CartPage() {
                             <AnimatePresence>
                                 {items.map((item) => (
                                     <motion.div
-                                        key={item.product_id}
+                                        key={item.cart_item_id}
                                         layout
                                         initial={{ opacity: 0, scale: 0.95 }}
                                         animate={{ opacity: 1, scale: 1 }}
@@ -112,7 +112,7 @@ export default function CartPage() {
                                             {/* Quantity Control */}
                                             <div className="flex items-center bg-muted/50 rounded-lg border border-border p-1 shrink-0">
                                                 <button
-                                                    onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                                                    onClick={() => updateQuantity(item.cart_item_id, item.quantity - 1)}
                                                     className="w-8 h-8 rounded-md flex items-center justify-center text-foreground hover:bg-background hover:shadow-sm transition-all"
                                                 >
                                                     <Minus className="w-4 h-4" />
@@ -121,7 +121,7 @@ export default function CartPage() {
                                                     {item.quantity}
                                                 </span>
                                                 <button
-                                                    onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                                                    onClick={() => updateQuantity(item.cart_item_id, item.quantity + 1)}
                                                     className="w-8 h-8 rounded-md flex items-center justify-center text-foreground hover:bg-background hover:shadow-sm transition-all"
                                                 >
                                                     <Plus className="w-4 h-4" />
@@ -136,7 +136,7 @@ export default function CartPage() {
 
                                         {/* Delete button absolutely positioned on mobile, flex on desktop */}
                                         <button
-                                            onClick={() => removeItem(item.product_id)}
+                                            onClick={() => removeItem(item.cart_item_id)}
                                             className="absolute top-4 right-4 sm:relative sm:top-0 sm:right-0 sm:ml-4 w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white flex items-center justify-center transition-colors shrink-0"
                                         >
                                             <Trash2 className="w-4 h-4" />

@@ -1,26 +1,38 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { ProductAcceptedTokenView } from '@/lib/products/types';
 
 export interface CartItem {
+  cart_item_id: string;
   product_id: number;
   name: string;
   base_price_usd: number;
   price_in_token?: number;
   token_symbol?: string;
+  selected_token_id?: number | null;
   quantity: number;
   image_url?: string;
   metadata?: { images?: string[] };
   seller_id?: number;
+  accepted_tokens?: ProductAcceptedTokenView[];
 }
 
 interface CartStore {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, 'quantity'>) => void;
-  removeItem: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
+  addItem: (item: Omit<CartItem, 'quantity' | 'cart_item_id'> & { cart_item_id?: string }) => void;
+  removeItem: (cartItemId: string) => void;
+  updateQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
   getTotal: () => number;
   getTotalItems: () => number;
+}
+
+function buildCartItemId(item: {
+  product_id: number;
+  selected_token_id?: number | null;
+  token_symbol?: string;
+}) {
+  return `${item.product_id}:${item.selected_token_id ?? item.token_symbol ?? 'default'}`;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -29,24 +41,25 @@ export const useCartStore = create<CartStore>()(
       items: [],
       addItem: (item) =>
         set((state) => {
-          const existing = state.items.find(i => i.product_id === item.product_id);
+          const cart_item_id = item.cart_item_id || buildCartItemId(item);
+          const existing = state.items.find(i => i.cart_item_id === cart_item_id);
           if (existing) {
             return {
               items: state.items.map(i =>
-                i.product_id === item.product_id ? { ...i, quantity: i.quantity + 1 } : i
+                i.cart_item_id === cart_item_id ? { ...i, quantity: i.quantity + 1 } : i
               ),
             };
           }
-          return { items: [...state.items, { ...item, quantity: 1 }] };
+          return { items: [...state.items, { ...item, cart_item_id, quantity: 1 }] };
         }),
-      removeItem: (productId) =>
-        set((state) => ({ items: state.items.filter(i => i.product_id !== productId) })),
-      updateQuantity: (productId, quantity) =>
+      removeItem: (cartItemId) =>
+        set((state) => ({ items: state.items.filter(i => i.cart_item_id !== cartItemId) })),
+      updateQuantity: (cartItemId, quantity) =>
         set((state) => ({
           items: quantity <= 0
-            ? state.items.filter(i => i.product_id !== productId)
+            ? state.items.filter(i => i.cart_item_id !== cartItemId)
             : state.items.map(i =>
-                i.product_id === productId ? { ...i, quantity } : i
+                i.cart_item_id === cartItemId ? { ...i, quantity } : i
               ),
         })),
       clearCart: () => set({ items: [] }),

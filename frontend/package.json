@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "start:local": "npm run build && kill-port 3000 && next start",
+    "reindex": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\grapuco-reindex.ps1",
     "lint": "next lint",
     "analyze": "cross-env ANALYZE=true next build",
     "clean": "rimraf .next",
