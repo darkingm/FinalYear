@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@jest/globals';
-import { normalizeAcceptedTokensForDisplay, seedAcceptedTokenEditorState } from '@/lib/products/pricing';
+import {
+  buildAcceptedTokenChipState,
+  normalizeAcceptedTokensForDisplay,
+  seedAcceptedTokenEditorState,
+} from '@/lib/products/pricing';
 
 describe('normalizeAcceptedTokensForDisplay', () => {
   it('keeps token-first ordering and emits USD estimate separately', () => {
@@ -11,6 +15,36 @@ describe('normalizeAcceptedTokensForDisplay', () => {
     expect(rows[0].symbol).toBe('ETH');
     expect(rows[0].display_amount).toContain('0.04');
     expect(rows[0].estimated_usdt).toBe('120.00');
+  });
+
+  it('limits card chips to three visible tokens and reports hidden overflow', () => {
+    const state = buildAcceptedTokenChipState(
+      [
+        { token_id: 1, symbol: 'ETH', price_in_token: '0.019996', is_primary: true },
+        { token_id: 2, symbol: 'USDT', price_in_token: '49.99', is_primary: false },
+        { token_id: 3, symbol: 'MATIC', price_in_token: '180', is_primary: false },
+        { token_id: 4, symbol: 'BNB', price_in_token: '0.14', is_primary: false },
+      ],
+      { maxVisible: 3 },
+    );
+
+    expect(state.visible.map((chip) => chip.amountLabel)).toEqual(['0.019996', '49.99', '180']);
+    expect(state.hiddenCount).toBe(1);
+    expect(state.activeToken?.symbol).toBe('ETH');
+  });
+
+  it('keeps the selected token active when the user has already chosen one', () => {
+    const state = buildAcceptedTokenChipState(
+      [
+        { token_id: 1, symbol: 'ETH', price_in_token: '0.019996', is_primary: true },
+        { token_id: 2, symbol: 'USDT', price_in_token: '49.99', is_primary: false },
+        { token_id: 3, symbol: 'MATIC', price_in_token: '180', is_primary: false },
+      ],
+      { selectedTokenId: 3, maxVisible: 3 },
+    );
+
+    expect(state.activeToken?.token_id).toBe(3);
+    expect(state.visible.find((chip) => chip.token_id === 3)?.isActive).toBe(true);
   });
 });
 

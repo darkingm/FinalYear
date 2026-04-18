@@ -1,7 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingBag, Shield, Wallet, Package, Mail, MapPin, Phone, Github, Twitter, TrendingUp, Zap, ExternalLink, MessageCircle } from 'lucide-react';
+import {
+  ShoppingBag,
+  Shield,
+  Wallet,
+  Package,
+  Mail,
+  MapPin,
+  Phone,
+  TrendingUp,
+  Zap,
+  ExternalLink,
+  MessageCircle,
+} from 'lucide-react';
+import { FaGithub, FaXTwitter } from 'react-icons/fa6';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 
@@ -82,8 +95,8 @@ export function Footer() {
             {/* Social */}
             <div className="flex gap-2">
               {[
-                { icon: Twitter, label: 'Twitter', color: 'hover:bg-sky-500/20 hover:text-sky-500' },
-                { icon: Github, label: 'GitHub', color: 'hover:bg-foreground/10 hover:text-foreground' },
+                { icon: FaXTwitter, label: 'Twitter', color: 'hover:bg-sky-500/20 hover:text-sky-500' },
+                { icon: FaGithub, label: 'GitHub', color: 'hover:bg-foreground/10 hover:text-foreground' },
                 { icon: MessageCircle, label: 'Discord', color: 'hover:bg-indigo-500/20 hover:text-indigo-500' },
               ].map(({ icon: Icon, label, color }) => (
                 <a key={label} href="#" title={label}

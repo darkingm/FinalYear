@@ -15,6 +15,18 @@ export interface ProductPricingDisplayRow extends ProductAcceptedTokenView {
   display_amount: string;
 }
 
+export interface ProductTokenChipView extends ProductAcceptedTokenView {
+  amountLabel: string;
+  isActive: boolean;
+}
+
+export interface ProductTokenChipState {
+  activeToken: ProductAcceptedTokenView | null;
+  visible: ProductTokenChipView[];
+  hiddenCount: number;
+  all: ProductTokenChipView[];
+}
+
 export interface ProductEditorSeedToken {
   token_id: number;
   symbol: string;

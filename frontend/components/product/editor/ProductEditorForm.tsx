@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api/client';
 import { productsApi } from '@/lib/api/products';
 import { ProductImageEditor } from '@/components/product/editor/ProductImageEditor';
 import { ProductPricingEditor } from '@/components/product/editor/ProductPricingEditor';
+import { ProductQuickActions } from '@/components/product/ProductQuickActions';
 import { ProductTokenPricing } from '@/components/product/ProductTokenPricing';
 import {
   buildPricingMetadataMap,
@@ -542,7 +543,19 @@ export function ProductEditorForm({
                   <p className="mt-1 text-sm text-muted-foreground">{form.description || 'Mô tả ngắn sản phẩm sẽ hiện ở đây.'}</p>
                 </div>
 
-                <ProductTokenPricing acceptedTokens={previewTokens} basePriceUsd={form.basePriceUsd} variant="card" />
+                <ProductTokenPricing
+                  acceptedTokens={previewTokens}
+                  basePriceUsd={form.basePriceUsd}
+                  variant="card"
+                  stock={form.stock}
+                />
+
+                <ProductQuickActions
+                  onAddToCart={() => {}}
+                  onBuyNow={() => {}}
+                  disabled
+                  size="card"
+                />
 
                 <div className="rounded-3xl border border-border bg-background p-4 text-sm">
                   <div className="flex items-center justify-between">

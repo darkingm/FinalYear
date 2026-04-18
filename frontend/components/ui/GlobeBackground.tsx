@@ -73,11 +73,9 @@ export function GlobeBackground() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef(0);
 
-    if (useLightWarp) {
-        return <LightWarpBackground />;
-    }
-
     useEffect(() => {
+        if (useLightWarp) return;
+
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -468,8 +466,11 @@ export function GlobeBackground() {
             cancelAnimationFrame(rafRef.current);
             ((canvas as any).__dispose as (() => void) | undefined)?.();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [useLightWarp]);
+
+    if (useLightWarp) {
+        return <LightWarpBackground />;
+    }
 
     return (
         <canvas

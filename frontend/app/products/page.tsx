@@ -1,7 +1,6 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -12,16 +11,12 @@ import { Footer } from '@/components/layout/Footer';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Grid3X3, List, SlidersHorizontal, X, ShoppingBag,
   Plus, ChevronDown, Sparkles, TrendingUp, Tag, Package,
-  Gem, Coins, Zap, ExternalLink, Star, Shield,
+  Gem, Coins, Zap, Shield,
 } from 'lucide-react';
-import { TESTNET_CHAIN_IDS } from '@/lib/hooks/useTokenPrice';
-import { useChainId } from 'wagmi';
-import { CoinImage } from '@/components/ui/CoinImage';
 
 
 
@@ -68,15 +63,6 @@ const SORT_OPTIONS = [
   { value: 'popular', label: 'Phổ biến nhất', icon: <Tag className="w-3.5 h-3.5" /> },
 ];
 
-const CHAIN_CONFIG: Record<string, { color: string; gradient: string; icon: string }> = {
-  polygon: { color: '#8247e5', gradient: 'from-[#8247e5]/20 to-[#a855f7]/10', icon: '🔷' },
-  arbitrum: { color: '#12aaff', gradient: 'from-[#12aaff]/20 to-[#60a5fa]/10', icon: '⚡' },
-  bnb: { color: '#f0b90b', gradient: 'from-[#f0b90b]/20 to-[#fbbf24]/10', icon: '🟡' },
-  ethereum: { color: '#627eea', gradient: 'from-[#627eea]/20 to-[#818cf8]/10', icon: '💎' },
-};
-
-const PLACEHOLDER = '/images/placeholder-product.png';
-
 /* ─── Skeleton ───────────────────────────────────────────────── */
 function SkeletonCard() {
   return (
@@ -92,141 +78,28 @@ function SkeletonCard() {
   );
 }
 
-const STABLECOINS_SET = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD']);
-
 /* ─── NFT Product Card ───────────────────────────────────────── */
 function NFTProductCard({ product, index }: { product: TokenProduct; index: number }) {
-  // Prefer non-stablecoin token for primary display
-  const nonStableToken = product.accepted_tokens?.find(t => !STABLECOINS_SET.has(t.symbol.toUpperCase()) && t.is_primary)
-    || product.accepted_tokens?.find(t => !STABLECOINS_SET.has(t.symbol.toUpperCase()))
-    || product.accepted_tokens?.find(t => t.is_primary)
-    || product.accepted_tokens?.[0];
-  const primaryToken = nonStableToken;
-  const chainKey = (primaryToken?.chain_name || '').toLowerCase().replace(/\s/g, '');
-  const chain = CHAIN_CONFIG[chainKey] || CHAIN_CONFIG.polygon;
-  const chainId = useChainId();
-  const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
-
-  const [imgSrc, setImgSrc] = useState(product.primary_image || PLACEHOLDER);
+  const mappedProduct: ProductCardData = {
+    product_id: product.product_id,
+    name: product.name,
+    description: product.description,
+    base_price_usd: product.base_price_usd,
+    primary_image: product.primary_image,
+    category: product.category,
+    rating_avg: product.rating_avg,
+    seller_name: product.seller_name,
+    seller_user_avatar: product.seller_user_avatar,
+    accepted_tokens: product.accepted_tokens,
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-      className="group relative"
-    >
-      <Link href={`/products/${product.product_id}`}>
-        <div className={`rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br ${chain.gradient} hover:border-white/20 transition-all duration-300 hover:shadow-xl hover:-translate-y-1`}>
-          {/* Image */}
-          <div className="relative h-52 overflow-hidden bg-black/20">
-            <img
-              src={imgSrc}
-              alt={product.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              onError={() => setImgSrc(PLACEHOLDER)}
-            />
-            {/* Chain badge */}
-            <div
-              className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold text-white backdrop-blur-md border border-white/20"
-              style={{ background: `${chain.color}55` }}
-            >
-              <span>{chain.icon}</span>
-              <span>{primaryToken?.chain_name || 'Blockchain'}</span>
-            </div>
-            {/* NFT badge */}
-            <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur text-xs font-black text-white border border-white/20 flex items-center gap-1">
-              <Gem className="w-3 h-3" style={{ color: chain.color }} />
-              NFT
-            </div>
-            {/* Hover overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-              <span className="text-white text-xs font-semibold">Xem chi tiết →</span>
-            </div>
-          </div>
-
-          {/* Info */}
-          <div className="p-4 space-y-3">
-            {/* Category */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-white/50 uppercase tracking-wider">
-                {product.category || 'Collectible'}
-              </span>
-              {parseFloat(product.rating_avg) > 0 && (
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  <span className="text-xs text-white/70">{parseFloat(product.rating_avg).toFixed(1)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Name */}
-            <h3 className="font-bold text-white text-sm leading-tight line-clamp-2 group-hover:text-white/90">
-              {product.name}
-            </h3>
-
-            {/* Price — show all seller-set token prices as pills */}
-            <div className="flex items-end justify-between">
-              <div className="flex-1 min-w-0">
-                {product.accepted_tokens?.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {product.accepted_tokens.map(t => (
-                        <span
-                          key={t.token_id}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black"
-                          style={{ background: `${chain.color}22`, color: chain.color }}
-                        >
-                          {Number(t.price_in_token).toLocaleString('en-US', {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: Number(t.price_in_token) >= 1 ? 4 : 8,
-                          })} {t.symbol}
-                          <CoinImage symbol={t.symbol} size={14} className="flex-shrink-0" />
-                        </span>
-                      ))}
-                  </div>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/20 text-sm font-black" style={{ background: `${chain.color}22`, color: chain.color }}>
-                    Chưa cấu hình giá token
-                  </span>
-                )}
-                {isTestnet && <p className="text-[10px] text-white/40 mt-0.5">(testnet)</p>}
-              </div>
-
-              {/* Token chips */}
-              {product.accepted_tokens?.length > 1 && (
-                <div className="flex gap-1">
-                  {product.accepted_tokens.slice(0, 3).map(t => (
-                    <span
-                      key={t.token_id}
-                      className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-white/70"
-                      style={{ borderColor: `${chain.color}60`, background: `${chain.color}15` }}
-                    >
-                      {t.symbol}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Seller */}
-            <div className="flex items-center gap-2 pt-1 border-t border-white/10">
-              <div className="w-5 h-5 rounded-full bg-white/10 overflow-hidden flex-shrink-0">
-                {product.seller_user_avatar ? (
-                  <img src={product.seller_user_avatar} alt="" className="w-full h-full object-cover"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white/60">
-                    {product.seller_name?.[0]?.toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <span className="text-xs text-white/50 truncate">@{product.seller_username || product.seller_name}</span>
-              <span title="Người bán đã xác minh"><Shield className="w-3 h-3 text-emerald-400 ml-auto flex-shrink-0" /></span>
-            </div>
-          </div>
-        </div>
-      </Link>
-    </motion.div>
+    <ProductCard
+      product={mappedProduct}
+      index={index}
+      variant="grid"
+      showAddToCart
+    />
   );
 }
 

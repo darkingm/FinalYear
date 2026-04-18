@@ -1,24 +1,16 @@
 /** @type {import('next').NextConfig} */
+import path from 'node:path';
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3001';
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:3005';
 const TOKEN_SERVICE_URL = process.env.TOKEN_SERVICE_URL || 'http://localhost:3003';
 
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   output: 'standalone',
-
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  outputFileTracingRoot: path.resolve(process.cwd(), '..'),
 
   productionBrowserSourceMaps: false,
-
-  modularizeImports: {
-    'lucide-react': {
-      transform: 'lucide-react/dist/esm/icons/{{kebabCase member}}',
-    },
-  },
 
   images: {
     remotePatterns: [
@@ -72,7 +64,6 @@ const nextConfig = {
       'framer-motion',
       'viem',
     ],
-    missingSuspenseWithCSRBailout: false,
   },
 
   webpack: (config, { isServer }) => {
