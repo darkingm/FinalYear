@@ -1,6 +1,7 @@
 import { TxMonitorWorker } from './tx-monitor.worker';
 import { PriceUpdaterWorker } from './price-updater.worker';
 import { InventoryCleanerWorker } from './inventory-cleaner.worker';
+import { PaymentOutboxWorker } from './payment-outbox.worker';
 import { logger } from '../utils/logger';
 
 export function startWorkers() {
@@ -8,6 +9,9 @@ export function startWorkers() {
 
   const txMonitor = new TxMonitorWorker();
   txMonitor.start();
+
+  const paymentOutbox = new PaymentOutboxWorker();
+  paymentOutbox.start();
 
   const priceUpdater = new PriceUpdaterWorker();
   priceUpdater.start();

@@ -1,5 +1,9 @@
 import { Router } from 'express';
 import {
+  createPaymentSession,
+  getPaymentSessionQuote,
+  submitPaymentSession,
+  getPaymentSessionStatus,
   generateQuote,
   generateQuoteBatch,
   submitTransaction,
@@ -11,6 +15,10 @@ import {
 import { authenticate } from '../../middleware/auth.middleware';
 import { validateRequest } from '../../middleware/validate.middleware';
 import {
+  createPaymentSessionSchema,
+  getPaymentSessionQuoteSchema,
+  submitPaymentSessionSchema,
+  getPaymentSessionStatusSchema,
   generateQuoteSchema,
   generateQuoteBatchSchema,
   submitTransactionSchema,
@@ -42,6 +50,11 @@ function authenticateOrInternalKey(req: Request, res: Response, next: NextFuncti
   // Fall through to standard JWT auth (admin action from browser)
   return authenticate(req as any, res, next);
 }
+
+router.post('/session', authenticate, validateRequest(createPaymentSessionSchema), createPaymentSession);
+router.post('/session/:sessionId/quote', authenticate, validateRequest(getPaymentSessionQuoteSchema), getPaymentSessionQuote);
+router.post('/session/:sessionId/submit', authenticate, validateRequest(submitPaymentSessionSchema), submitPaymentSession);
+router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
 router.post('/quote-batch', authenticate, validateRequest(generateQuoteBatchSchema), generateQuoteBatch);

@@ -1,6 +1,5 @@
 import { ethers } from 'ethers';
 import { query, mainQuery } from '../../config/database';
-import { publishEvent } from '../../config/rabbitmq';
 import { BinanceService } from '../pricing/binance.service';
 import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
@@ -9,6 +8,9 @@ import {
   resolveOperatorPrivateKey,
   resolveSellerWallet,
 } from './crypto-payment.logic';
+import { PaymentEventService } from './payment-event.service';
+import { PAYMENT_EVENT_TYPES } from './payment-event.contract';
+import type { PaymentSessionRecord } from './payment-session.service';
 
 const ESCROW_ABI = [
   // ERC-20 tokens: requires approve() first, then deposit()
@@ -39,10 +41,12 @@ const ESCROW_BY_CHAIN: Record<number, string | undefined> = {
 export class CryptoPaymentService {
   private binanceService: BinanceService;
   private providers: Map<number, ethers.AbstractProvider>;
+  private paymentEventService: PaymentEventService;
 
   constructor() {
     this.binanceService = new BinanceService();
     this.providers = new Map();
+    this.paymentEventService = new PaymentEventService();
 
     const localRpc = process.env.LOCALHOST_RPC_URL || 'http://127.0.0.1:8545';
 
@@ -85,6 +89,86 @@ export class CryptoPaymentService {
     this.providers.set(97, bscTestFallback);
     this.providers.set(421614, new ethers.JsonRpcProvider(process.env.ARB_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'));
     this.providers.set(84532, new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
+  }
+
+  private getRequiredConfirmations(chainId: number) {
+    if (chainId === 31337) {
+      return 0;
+    }
+
+    if ([80002, 97, 421614, 84532, 80001].includes(chainId)) {
+      return 1;
+    }
+
+    return 12;
+  }
+
+  private async loadOrderPaymentContext(orderId: number) {
+    const orderResult = await mainQuery(
+      `SELECT order_id, buyer_id, buyer_wallet, status, chain_id, token_id,
+              amount_token, escrow_contract, tx_hash
+       FROM orders
+       WHERE order_id = $1`,
+      [orderId]
+    );
+
+    const order = orderResult.rows[0];
+    if (!order) {
+      throw new AppError('Order not found', 404);
+    }
+
+    return order;
+  }
+
+  private async recordSubmittedPayment(input: {
+    orderId: number;
+    txHash: string;
+    sessionId: string | null;
+    userId?: number;
+    chainId?: number;
+    amountToken?: number | string;
+  }) {
+    if (!input.txHash.match(/^0x[a-fA-F0-9]{64}$/)) {
+      throw new AppError('Invalid transaction hash format', 400);
+    }
+
+    const order = await this.loadOrderPaymentContext(input.orderId);
+    const effectiveChainId = input.chainId ?? order.chain_id;
+    const effectiveAmount = Number(input.amountToken ?? order.amount_token);
+
+    if (!Number.isFinite(effectiveAmount) || effectiveAmount <= 0) {
+      throw new AppError('Missing canonical token amount for payment submission', 400);
+    }
+
+    if (!['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status)) {
+      throw new AppError(`Order ${input.orderId} is not payable`, 400);
+    }
+
+    const transition = await this.paymentEventService.recordSubmitted({
+      orderId: input.orderId,
+      sessionId: input.sessionId,
+      txHash: input.txHash,
+      chainId: effectiveChainId,
+      userId: input.userId ?? order.buyer_id,
+      amount: effectiveAmount,
+      tokenId: order.token_id ?? null,
+      fromAddress: order.buyer_wallet || String(order.buyer_id),
+      toAddress: order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS || null,
+    });
+
+    await mainQuery(
+      `UPDATE orders
+       SET tx_hash = $1,
+           status = 'TX_SUBMITTED',
+           updated_at = NOW()
+       WHERE order_id = $2`,
+      [input.txHash, input.orderId]
+    );
+
+    return {
+      order,
+      transition,
+    };
   }
 
   async generateQuote(orderId: number, tokenSymbol: string, preferredChainId?: number, buyerWallet?: string) {
@@ -259,6 +343,7 @@ export class CryptoPaymentService {
       escrow_contract: escrowAddress,   // ← primary field name
       escrow_address: escrowAddress,   // ← alias for backward compat
       token_address: token.token_address,
+      token_id: token.token_id,
       token_symbol: tokenSymbol,
       chain_id: token.chain_id,
       amount_token: amountToken,     // ← primary numeric amount
@@ -431,52 +516,31 @@ export class CryptoPaymentService {
   }
 
   async submitTransaction(orderId: number, txHash: string) {
-    // Validate transaction hash format
-    if (!txHash.match(/^0x[a-fA-F0-9]{64}$/)) {
-      throw new AppError('Invalid transaction hash format', 400);
-    }
-
-    // Get order details for chain_id
-    const orderResult = await mainQuery(
-      'SELECT * FROM orders WHERE order_id = $1',
-      [orderId]
-    );
-    if (orderResult.rows.length === 0) {
-      throw new AppError('Order not found', 404);
-    }
-    const order = orderResult.rows[0];
-
-    // Update order status first
-    await mainQuery(
-      `UPDATE orders SET tx_hash = $1, status = 'TX_SUBMITTED', updated_at = NOW() WHERE order_id = $2`,
-      [txHash, orderId]
-    );
-
-    // Batch checkout shares one tx hash across many orders, but each order needs its own payment row.
-    const existing = await query(
-      `SELECT payment_id FROM payments WHERE order_id = $1 AND tx_hash = $2 LIMIT 1`,
-      [orderId, txHash]
-    );
-
-    if (existing.rows.length === 0) {
-      const escrowAddr = order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS;
-      const fromAddr = order.buyer_wallet || String(order.buyer_id);
-      await query(
-        `INSERT INTO payments(order_id, tx_hash, chain_id, status, from_address, to_address)
-         VALUES($1, $2, $3, 'pending', $4, $5)`,
-        [orderId, txHash, order.chain_id, fromAddr, escrowAddr]
-      );
-    }
-
-    // Publish event
-    await publishEvent('tx.submitted', {
-      order_id: orderId,
-      tx_hash: txHash,
-      chain_id: order.chain_id,
-      timestamp: Date.now(),
+    const { order } = await this.recordSubmittedPayment({
+      orderId,
+      txHash,
+      sessionId: null,
     });
 
     logger.info('Transaction submitted', { orderId, txHash, chain_id: order.chain_id });
+  }
+
+  async submitTransactionWithSession(session: PaymentSessionRecord, txHash: string) {
+    const { order } = await this.recordSubmittedPayment({
+      orderId: session.order_id,
+      txHash,
+      sessionId: session.session_id,
+      userId: session.user_id,
+      chainId: session.chain_id,
+      amountToken: session.amount_token,
+    });
+
+    logger.info('Session transaction submitted', {
+      orderId: session.order_id,
+      txHash,
+      session_id: session.session_id,
+      chain_id: order.chain_id,
+    });
   }
 
   /**
@@ -579,23 +643,25 @@ export class CryptoPaymentService {
 
     // Check if transaction succeeded
     if (receipt.status === 0) {
-      // Transaction failed
-      await query(
-        `UPDATE payments SET status = 'failed', updated_at = NOW() WHERE tx_hash = $1`,
-        [txHash]
-      );
-
       await mainQuery(
         `UPDATE orders SET status = 'TX_FAILED', updated_at = NOW()
          WHERE order_id = ANY($1::int[])`,
         [affectedOrderIds]
       );
 
-      for (const affectedOrderId of affectedOrderIds) {
-        await publishEvent('payment.failed', {
-          order_id: affectedOrderId,
-          tx_hash: txHash,
+      for (const currentPayment of payments) {
+        await this.paymentEventService.recordTransition({
+          orderId: currentPayment.order_id,
+          paymentId: currentPayment.payment_id,
+          sessionId: null,
+          txHash,
+          chainId: currentPayment.chain_id,
+          eventType: PAYMENT_EVENT_TYPES.FAILED,
+          toState: 'failed',
           reason: 'Transaction reverted',
+          metadata: {
+            confirmations: 0,
+          },
         });
       }
 
@@ -609,7 +675,7 @@ export class CryptoPaymentService {
     // Get confirmation count
     const currentBlock = await provider.getBlockNumber();
     const confirmations = currentBlock - receipt.blockNumber;
-    const requiredConfirmations = payment.chain_id === 31337 ? 0 : 12;
+    const requiredConfirmations = this.getRequiredConfirmations(payment.chain_id);
 
     // Get block to retrieve timestamp (TransactionReceipt doesn't have blockTimestamp in ethers v6)
     const block = await provider.getBlock(receipt.blockNumber);
@@ -619,14 +685,13 @@ export class CryptoPaymentService {
     await query(
       `UPDATE payments 
        SET block_number = $1, block_timestamp = $2, gas_used = $3,
-          confirmations = $4, verified_by_rpc = true, status = $5, updated_at = NOW()
-       WHERE tx_hash = $6`,
+          confirmations = $4, verified_by_rpc = true, updated_at = NOW()
+       WHERE tx_hash = $5`,
       [
         receipt.blockNumber,
         blockTimestamp,
         receipt.gasUsed.toString(),
         confirmations,
-        confirmations >= requiredConfirmations ? 'confirmed' : 'pending',
         txHash,
       ]
     );
@@ -641,16 +706,20 @@ export class CryptoPaymentService {
         [affectedOrderIds]
       );
 
-      await query(
-        `UPDATE payments SET status = 'confirmed', updated_at = NOW() WHERE tx_hash = $1`,
-        [txHash]
-      );
-
-      for (const affectedOrderId of affectedOrderIds) {
-        await publishEvent('payment.validated', {
-          order_id: affectedOrderId,
-          tx_hash: txHash,
-          confirmations,
+      for (const currentPayment of payments) {
+        await this.paymentEventService.recordTransition({
+          orderId: currentPayment.order_id,
+          paymentId: currentPayment.payment_id,
+          sessionId: null,
+          txHash,
+          chainId: currentPayment.chain_id,
+          eventType: PAYMENT_EVENT_TYPES.CONFIRMED,
+          toState: 'confirmed',
+          metadata: {
+            confirmations,
+            required_confirmations: requiredConfirmations,
+            block_number: receipt.blockNumber,
+          },
         });
       }
 
@@ -668,6 +737,23 @@ export class CryptoPaymentService {
       };
     }
 
+    for (const currentPayment of payments) {
+      await this.paymentEventService.recordTransition({
+        orderId: currentPayment.order_id,
+        paymentId: currentPayment.payment_id,
+        sessionId: null,
+        txHash,
+        chainId: currentPayment.chain_id,
+        eventType: PAYMENT_EVENT_TYPES.CONFIRMING,
+        toState: 'confirming',
+        metadata: {
+          confirmations,
+          required_confirmations: requiredConfirmations,
+          block_number: receipt.blockNumber,
+        },
+      });
+    }
+
     return {
       verified: false,
       status: 'confirming',
@@ -677,30 +763,55 @@ export class CryptoPaymentService {
   }
 
   async getPaymentStatus(orderId: number) {
-    const orderResult = await mainQuery(
-      `SELECT * FROM orders WHERE order_id = $1`,
-      [orderId]
-    );
+    const readSnapshot = async () => {
+      const orderResult = await mainQuery(
+        `SELECT * FROM orders WHERE order_id = $1`,
+        [orderId]
+      );
 
-    if (orderResult.rows.length === 0) {
-      throw new AppError('Order not found', 404);
+      if (orderResult.rows.length === 0) {
+        throw new AppError('Order not found', 404);
+      }
+
+      const paymentResult = await query(
+        `SELECT tx_hash, status as payment_status, confirmations, block_number, chain_id, updated_at
+         FROM payments 
+         WHERE order_id = $1 
+         ORDER BY created_at DESC LIMIT 1`,
+        [orderId]
+      );
+
+      return {
+        order: orderResult.rows[0],
+        payment: paymentResult.rows[0] || {},
+      };
+    };
+
+    let snapshot = await readSnapshot();
+    const shouldVerify =
+      snapshot.payment?.tx_hash &&
+      ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(snapshot.order.status) &&
+      ['pending', 'confirming'].includes(snapshot.payment.payment_status);
+
+    if (shouldVerify) {
+      try {
+        await this.verifyTransaction(snapshot.payment.tx_hash);
+        snapshot = await readSnapshot();
+      } catch (error: any) {
+        logger.warn('Read-through verify failed, returning best-known payment status', {
+          order_id: orderId,
+          tx_hash: snapshot.payment.tx_hash,
+          error: error.message,
+        });
+      }
     }
 
-    const order = orderResult.rows[0];
-
-    const paymentResult = await query(
-      `SELECT tx_hash, status as payment_status, confirmations, block_number
-       FROM payments 
-       WHERE order_id = $1 
-       ORDER BY created_at DESC LIMIT 1`,
-      [orderId]
-    );
-
-    const payment = paymentResult.rows[0] || {};
-
     return {
-      ...order,
-      ...payment,
+      ...snapshot.order,
+      ...snapshot.payment,
+      verification_state: snapshot.payment.payment_status || 'unknown',
+      required_confirmations: snapshot.payment.chain_id ? this.getRequiredConfirmations(snapshot.payment.chain_id) : null,
+      last_verified_at: snapshot.payment.updated_at || null,
     };
   }
 
@@ -749,7 +860,29 @@ export class CryptoPaymentService {
         [tx.hash, orderId]
       );
 
-      await publishEvent('payment.released', { order_id: orderId, tx_hash: tx.hash });
+      const paymentResult = await query(
+        `SELECT * FROM payments
+         WHERE order_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [orderId]
+      );
+
+      const payment = paymentResult.rows[0];
+      if (payment) {
+        await this.paymentEventService.recordTransition({
+          orderId,
+          paymentId: payment.payment_id,
+          sessionId: null,
+          txHash: tx.hash,
+          chainId: payment.chain_id,
+          eventType: PAYMENT_EVENT_TYPES.RELEASED,
+          toState: payment.status,
+          metadata: {
+            release_tx_hash: tx.hash,
+          },
+        });
+      }
 
       return { success: true, tx_hash: tx.hash };
     } catch (error: any) {
@@ -787,6 +920,31 @@ export class CryptoPaymentService {
       await tx.wait(1);
 
       logger.info('Payment refunded from Escrow', { orderId, txHash: tx.hash });
+
+      const paymentResult = await query(
+        `SELECT * FROM payments
+         WHERE order_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [orderId]
+      );
+
+      const payment = paymentResult.rows[0];
+      if (payment) {
+        await this.paymentEventService.recordTransition({
+          orderId,
+          paymentId: payment.payment_id,
+          sessionId: null,
+          txHash: tx.hash,
+          chainId: payment.chain_id,
+          eventType: PAYMENT_EVENT_TYPES.REFUNDED,
+          toState: payment.status,
+          metadata: {
+            refund_tx_hash: tx.hash,
+          },
+        });
+      }
+
       return { success: true, tx_hash: tx.hash };
     } catch (error: any) {
       logger.error('Error refunding payment', { orderId, error: error.message });

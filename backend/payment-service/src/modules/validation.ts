@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const uuidField = z.string().uuid('Invalid UUID format');
+
 export const generateQuoteSchema = z.object({
   body: z.object({
     order_id: z.number().positive('order_id must be a positive number'),
@@ -15,6 +17,43 @@ export const generateQuoteBatchSchema = z.object({
     token_symbol: z.string().min(1, 'token_symbol is required'),
     preferred_chain_id: z.number().int().optional(),
     buyer_wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  }),
+});
+
+export const createPaymentSessionSchema = z.object({
+  body: z.object({
+    order_id: z.number().positive('order_id must be a positive number'),
+    token_symbol: z.string().min(1, 'token_symbol is required'),
+    preferred_chain_id: z.number().int().optional(),
+    buyer_wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  }),
+});
+
+export const getPaymentSessionQuoteSchema = z.object({
+  params: z.object({
+    sessionId: uuidField,
+  }),
+  body: z.object({
+    nonce: uuidField,
+  }),
+});
+
+export const submitPaymentSessionSchema = z.object({
+  params: z.object({
+    sessionId: uuidField,
+  }),
+  body: z.object({
+    nonce: uuidField,
+    tx_hash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash format'),
+  }),
+});
+
+export const getPaymentSessionStatusSchema = z.object({
+  params: z.object({
+    sessionId: uuidField,
+  }),
+  query: z.object({
+    nonce: uuidField,
   }),
 });
 

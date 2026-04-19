@@ -1,8 +1,162 @@
 import { Request, Response, NextFunction } from 'express';
 import { CryptoPaymentService } from './crypto-payment.service';
 import { logger } from '../../utils/logger';
+import { AuthRequest } from '../../middleware/auth.middleware';
+import { query, mainQuery } from '../../config/database';
+import { PaymentSessionService } from './payment-session.service';
+import { AppError } from '../../middleware/error-handler';
 
 const cryptoPaymentService = new CryptoPaymentService();
+const paymentSessionService = new PaymentSessionService({
+  paymentQuery: query,
+  mainQuery,
+  quoteResolver: ({ orderId, tokenSymbol, preferredChainId, buyerWallet }) =>
+    cryptoPaymentService.generateQuote(orderId, tokenSymbol, preferredChainId, buyerWallet),
+});
+
+function requireUserId(req: AuthRequest) {
+  const userId = req.user?.user_id;
+  if (!userId) {
+    throw new AppError('Authentication required', 401);
+  }
+  return userId;
+}
+
+export async function createPaymentSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const authReq = req as AuthRequest;
+    const { order_id, token_symbol, preferred_chain_id, buyer_wallet } = req.body;
+    const session = await paymentSessionService.createSession({
+      userId: requireUserId(authReq),
+      orderId: order_id,
+      tokenSymbol: token_symbol,
+      chainId: preferred_chain_id,
+      buyerWallet: buyer_wallet,
+    });
+
+    res.json({
+      success: true,
+      session,
+    });
+  } catch (error: any) {
+    logger.error('Create payment session error:', error);
+    next(error);
+  }
+}
+
+export async function getPaymentSessionQuote(req: Request, res: Response, next: NextFunction) {
+  try {
+    const authReq = req as AuthRequest;
+    const quote = await paymentSessionService.getSessionQuote({
+      sessionId: req.params.sessionId,
+      nonce: req.body.nonce,
+      userId: requireUserId(authReq),
+    });
+
+    res.json({
+      success: true,
+      quote,
+    });
+  } catch (error: any) {
+    logger.error('Get payment session quote error:', error);
+    next(error);
+  }
+}
+
+export async function submitPaymentSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = requireUserId(authReq);
+    const session = await paymentSessionService.getAccessibleSession({
+      sessionId: req.params.sessionId,
+      nonce: req.body.nonce,
+      userId,
+    });
+
+    await paymentSessionService.assertUsableSession({
+      sessionId: session.session_id,
+      nonce: req.body.nonce,
+      userId,
+      orderId: session.order_id,
+      tokenSymbol: session.token_symbol,
+      chainId: session.chain_id,
+      amountToken: session.amount_token,
+    });
+
+    await cryptoPaymentService.submitTransactionWithSession(session, req.body.tx_hash);
+    await paymentSessionService.markSessionSubmitted({
+      sessionId: session.session_id,
+      txHash: req.body.tx_hash,
+    });
+
+    setImmediate(async () => {
+      try {
+        await cryptoPaymentService.verifyTransaction(req.body.tx_hash);
+        logger.info('Auto-verify completed after session submit', {
+          order_id: session.order_id,
+          tx_hash: req.body.tx_hash,
+          session_id: session.session_id,
+        });
+      } catch (e: any) {
+        logger.warn('Auto-verify after session submit failed (will retry):', {
+          order_id: session.order_id,
+          tx_hash: req.body.tx_hash,
+          session_id: session.session_id,
+          error: e.message,
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Transaction submitted successfully',
+      session_id: session.session_id,
+    });
+  } catch (error: any) {
+    logger.error('Submit payment session error:', error);
+    next(error);
+  }
+}
+
+export async function getPaymentSessionStatus(req: Request, res: Response, next: NextFunction) {
+  try {
+    const authReq = req as AuthRequest;
+    const session = await paymentSessionService.getAccessibleSession({
+      sessionId: req.params.sessionId,
+      nonce: String(req.query.nonce || ''),
+      userId: requireUserId(authReq),
+    });
+
+    if (session.tx_hash) {
+      try {
+        await cryptoPaymentService.verifyTransaction(session.tx_hash);
+      } catch (error: any) {
+        logger.warn('Session status verify failed, returning best-known status', {
+          session_id: session.session_id,
+          tx_hash: session.tx_hash,
+          error: error.message,
+        });
+      }
+    }
+
+    const status = await cryptoPaymentService.getPaymentStatus(session.order_id);
+
+    res.json({
+      success: true,
+      session: {
+        session_id: session.session_id,
+        nonce: session.nonce,
+        status: session.status,
+        expires_at: session.expires_at,
+        tx_hash: session.tx_hash,
+      },
+      status,
+    });
+  } catch (error: any) {
+    logger.error('Get payment session status error:', error);
+    next(error);
+  }
+}
 
 export async function generateQuote(req: Request, res: Response, next: NextFunction) {
   try {
