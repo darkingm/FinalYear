@@ -7,3 +7,4 @@
 - For crypto checkout flows, never fall back to the escrow contract address when a seller payout wallet is missing. Fail fast and ask for a valid seller wallet instead.
 - For batch crypto payments, every order sharing the same transaction hash must still get its own payment row and status update.
 - Prefer the GitHub Actions deploy path. If a manual local deploy is necessary, make sure the worktree is clean, know the current commit SHA, and use `/health` for service checks.
+- For UI work, never ship text or important content that blends into the surface or background. Every new or edited screen must keep readable contrast in both light mode and dark mode, using semantic theme tokens instead of hard-coded light-on-light or dark-on-dark text where possible.

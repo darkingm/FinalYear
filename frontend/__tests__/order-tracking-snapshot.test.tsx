@@ -12,4 +12,11 @@ describe('OrderTrackingSnapshot', () => {
     expect(screen.getByText(/Người bán đã gửi hàng/i)).toBeTruthy();
     expect(screen.getByText('Người mua')).toBeTruthy();
   });
+
+  it('renders theme-safe surfaces instead of hard-coded dark-only colors', () => {
+    const { container } = render(<OrderTrackingSnapshot status="TX_SUBMITTED" />);
+
+    expect(container.querySelector('.bg-card')).toBeTruthy();
+    expect(container.querySelector('.text-foreground')).toBeTruthy();
+  });
 });

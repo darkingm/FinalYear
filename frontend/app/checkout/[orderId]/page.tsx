@@ -69,6 +69,16 @@ interface CryptoQuote {
   calldata: string; token_price: number; expires_at: number;
 }
 
+interface PaymentStatusSnapshot {
+  status?: string;
+  confirmations?: number;
+  required_confirmations?: number;
+  verification_state?: string;
+  verification_message?: string;
+  last_verified_at?: string | null;
+  stuck_reason?: string | null;
+}
+
 /* ─── SUPPORTED NETWORKS ────────────────────────────────────────────────── */
 export const PAYMENT_NETWORKS = [
   {
@@ -228,6 +238,11 @@ export default function CheckoutPage() {
   const [redirectIn, setRedirectIn] = useState<number | null>(null);
   const [confirmCount, setConfirmCount] = useState(0);    // live confirmation counter
   const [payError, setPayError] = useState<string | null>(null);
+  const [requiredConfirmations, setRequiredConfirmations] = useState(0);
+  const [verificationState, setVerificationState] = useState<string | null>(null);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [lastVerifiedAt, setLastVerifiedAt] = useState<string | null>(null);
+  const [statusRefreshLoading, setStatusRefreshLoading] = useState(false);
   const [gasEstimate, setGasEstimate] = useState<{ amount: string; symbol: string; usdAmount: number } | null>(null);
   const [gasLoading, setGasLoading] = useState(false);
 
@@ -302,7 +317,7 @@ export default function CheckoutPage() {
           }
           setOrder(o);
           // Show resume banner if payment already submitted on-chain
-          if (o.status === 'TX_SUBMITTED') {
+          if (['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(o.status)) {
             setResumeBanner(true);
             setStep(3);
           }
@@ -412,6 +427,57 @@ export default function CheckoutPage() {
     catch { toast.error('Chuyển mạng thất bại. Đổi thủ công trong MetaMask'); }
   };
 
+  const refreshPaymentStatus = useCallback(async (manual = false): Promise<PaymentStatusSnapshot | null> => {
+    if (!orderId) {
+      return null;
+    }
+
+    if (manual) {
+      setStatusRefreshLoading(true);
+    }
+
+    try {
+      const statusRes = await paymentClient.get(`/api/payments/crypto/status/${orderId}`);
+      const snapshot: PaymentStatusSnapshot = statusRes.data?.status ?? {};
+      const nextConfirmations = Number(snapshot.confirmations ?? 0);
+      const nextRequired = Number(snapshot.required_confirmations ?? 0);
+
+      setConfirmCount(nextConfirmations);
+      setRequiredConfirmations(nextRequired);
+      setVerificationState(snapshot.verification_state ?? null);
+      setVerificationMessage(snapshot.verification_message ?? null);
+      setLastVerifiedAt(snapshot.last_verified_at ?? null);
+
+      if (typeof snapshot.status === 'string') {
+        const nextStatus = snapshot.status;
+        setOrder(prev => prev ? { ...prev, status: nextStatus } : prev);
+        setResumeBanner(['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(nextStatus));
+      }
+
+      if (manual && snapshot.verification_message) {
+        toast.info(snapshot.verification_message, { duration: 5000 });
+      }
+
+      return snapshot;
+    } catch (error: any) {
+      if (manual) {
+        toast.error(error?.response?.data?.message || 'Kiểm tra blockchain thất bại');
+      }
+      return null;
+    } finally {
+      if (manual) {
+        setStatusRefreshLoading(false);
+      }
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    if (!order || !['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(order.status)) {
+      return;
+    }
+    refreshPaymentStatus().catch(() => null);
+  }, [order?.order_id, order?.status, refreshPaymentStatus]);
+
   /* ─── Approve ERC-20 ─────────────────────────────────────────────────── */
   const handleApprove = async () => {
     if (!quote || !address) return;
@@ -484,10 +550,8 @@ export default function CheckoutPage() {
           return;
         }
         try {
-          const statusRes = await paymentClient.get(`/api/payments/crypto/status/${orderId}`);
-          const orderStatus = statusRes.data?.status?.status || statusRes.data?.status;
-          const confs = Number(statusRes.data?.status?.confirmations ?? 0);
-          setConfirmCount(confs);
+          const statusSnapshot = await refreshPaymentStatus();
+          const orderStatus = statusSnapshot?.status;
 
           if (orderStatus === 'ONCHAIN_CONFIRMED' || orderStatus === 'PAID') {
             // Step 4: Done!
@@ -608,13 +672,22 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-amber-300">Giao dịch đang chờ xác nhận</p>
-                    <p className="text-xs text-amber-400/70 mt-0.5">Thanh toán đã được gửi lên blockchain. Bạn có thể theo dõi hoặc tiếp tục chờ.</p>
+                    <p className="text-xs text-amber-400/80 mt-0.5">{verificationMessage || 'Thanh toán đã được gửi lên blockchain. Bạn có thể theo dõi hoặc kiểm tra lại trạng thái ngay tại đây.'}</p>
                   </div>
-                  <Link href={`/orders/${orderId}`}>
-                    <button className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400 flex-shrink-0">
-                      Xem đơn
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => refreshPaymentStatus(true)}
+                      className="px-3 py-1.5 bg-background text-foreground border border-border font-bold rounded-lg text-xs hover:bg-muted flex items-center gap-1.5"
+                    >
+                      {statusRefreshLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                      Kiểm tra lại
                     </button>
-                  </Link>
+                    <Link href={`/orders/${orderId}`}>
+                      <button className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400 flex-shrink-0">
+                        Xem đơn
+                      </button>
+                    </Link>
+                  </div>
                 </motion.div>
               )}
 
@@ -1067,9 +1140,10 @@ export default function CheckoutPage() {
                           id: 'confirming',
                           label: 'Đợi xác nhận on-chain',
                           sub: payStep === 'confirming'
-                            ? confirmCount > 0
-                              ? `${confirmCount} xác nhận — đang chờ đủ...`
-                              : 'Đang chờ block miner xác nhận...'
+                            ? verificationMessage
+                              || (confirmCount > 0
+                                ? `${confirmCount}/${requiredConfirmations || '?'} block xác nhận — đang chờ đủ...`
+                                : 'Đang chờ blockchain xác nhận block đầu tiên...')
                             : 'Chờ đủ confirmations',
                           done: false,
                           active: payStep === 'confirming',
@@ -1097,14 +1171,29 @@ export default function CheckoutPage() {
                         <div className="mt-2 space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
                             <span>Confirmations</span>
-                            <span className="font-mono font-bold text-[#f0b90b]">{confirmCount} / 1</span>
+                            <span className="font-mono font-bold text-[#f0b90b]">{confirmCount} / {requiredConfirmations || '?'}</span>
                           </div>
                           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                             <div
                               className="h-full bg-gradient-to-r from-[#f0b90b] to-emerald-400 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(confirmCount * 100, 100)}%` }}
+                              style={{ width: `${requiredConfirmations > 0 ? Math.min((confirmCount / requiredConfirmations) * 100, 100) : confirmCount > 0 ? 100 : 0}%` }}
                             />
                           </div>
+                          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                            <span>{verificationState === 'retrying' ? 'Đang thử kiểm tra lại RPC' : 'Theo dõi xác nhận on-chain'}</span>
+                            <button
+                              onClick={() => refreshPaymentStatus(true)}
+                              className="font-semibold text-[#f0b90b] hover:underline flex items-center gap-1"
+                            >
+                              {statusRefreshLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                              Kiểm tra lại blockchain
+                            </button>
+                          </div>
+                          {lastVerifiedAt && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Kiểm tra gần nhất: {new Date(lastVerifiedAt).toLocaleTimeString('vi-VN')}
+                            </p>
+                          )}
                         </div>
                       )}
 

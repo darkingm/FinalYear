@@ -34,4 +34,18 @@ describe('order presentation helpers', () => {
     expect(status.waitingOn).toBe('Blockchain');
     expect(status.nextStep).toContain('Chờ');
   });
+
+  it('maps retrying verification errors into operator-friendly tracking guidance', () => {
+    const status = getOrderStatusMeta('TX_SUBMITTED', {
+      verificationState: 'retrying',
+      verificationMessage: 'RPC timeout while checking block confirmations',
+      confirmations: 1,
+      requiredConfirmations: 12,
+    });
+
+    expect(status.summary).toContain('1/12');
+    expect(status.waitingOn).toBe('RPC / blockchain');
+    expect(status.nextStep).toContain('thử kiểm tra lại');
+    expect(status.escrowCopy).toContain('RPC timeout');
+  });
 });

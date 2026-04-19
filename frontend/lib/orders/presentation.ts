@@ -33,6 +33,13 @@ export interface OrderStatusMeta {
   escrowCopy: string;
 }
 
+export interface OrderVerificationContext {
+  verificationState?: string | null;
+  verificationMessage?: string | null;
+  confirmations?: number | null;
+  requiredConfirmations?: number | null;
+}
+
 export interface OrderPricingDisplay {
   mode: 'usd' | 'token';
   usdAmount: number;
@@ -162,8 +169,51 @@ function normalizeSymbol(symbol: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
-export function getOrderStatusMeta(status: string | null | undefined): OrderStatusMeta {
-  return ORDER_STATUS_META[String(status ?? '').trim().toUpperCase()] ?? DEFAULT_STATUS_META;
+export function getOrderStatusMeta(
+  status: string | null | undefined,
+  verification?: OrderVerificationContext | null,
+): OrderStatusMeta {
+  const base = ORDER_STATUS_META[String(status ?? '').trim().toUpperCase()] ?? DEFAULT_STATUS_META;
+
+  if (!verification) {
+    return base;
+  }
+
+  const verificationState = String(verification.verificationState ?? '').trim().toLowerCase();
+  const verificationMessage = String(verification.verificationMessage ?? '').trim();
+  const confirmations = Number(verification.confirmations ?? 0);
+  const requiredConfirmations = Number(verification.requiredConfirmations ?? 0);
+
+  if (verificationState === 'retrying') {
+    return {
+      ...base,
+      summary: requiredConfirmations > 0
+        ? `Giao dịch đã gửi lên blockchain. Hệ thống đang thử kiểm tra lại xác nhận (${confirmations}/${requiredConfirmations} block).`
+        : 'Giao dịch đã gửi lên blockchain. Hệ thống đang thử kiểm tra lại xác nhận.',
+      waitingOn: 'RPC / blockchain',
+      nextStep: 'Chờ hệ thống thử kiểm tra lại, hoặc dùng nút kiểm tra lại blockchain để làm mới trạng thái.',
+      escrowCopy: verificationMessage || base.escrowCopy,
+    };
+  }
+
+  if (verificationState === 'confirming') {
+    return {
+      ...base,
+      summary: `Giao dịch đã có ${confirmations}/${requiredConfirmations} block xác nhận.`,
+      waitingOn: 'Blockchain',
+      nextStep: 'Đợi đủ xác nhận để hệ thống khóa tiền vào escrow.',
+      escrowCopy: verificationMessage || base.escrowCopy,
+    };
+  }
+
+  if (verificationMessage) {
+    return {
+      ...base,
+      escrowCopy: verificationMessage,
+    };
+  }
+
+  return base;
 }
 
 export function resolveOrderProductImage(

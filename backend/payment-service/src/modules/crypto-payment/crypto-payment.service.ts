@@ -9,6 +9,11 @@ import {
   resolveOperatorPrivateKey,
   resolveSellerWallet,
 } from './crypto-payment.logic';
+import {
+  buildPaymentVerificationMeta,
+  getRequiredConfirmationsForChain,
+  shouldReadThroughVerifyStatus,
+} from './crypto-payment.status';
 
 const ESCROW_ABI = [
   // ERC-20 tokens: requires approve() first, then deposit()
@@ -609,7 +614,7 @@ export class CryptoPaymentService {
     // Get confirmation count
     const currentBlock = await provider.getBlockNumber();
     const confirmations = currentBlock - receipt.blockNumber;
-    const requiredConfirmations = payment.chain_id === 31337 ? 0 : 12;
+    const requiredConfirmations = getRequiredConfirmationsForChain(payment.chain_id);
 
     // Get block to retrieve timestamp (TransactionReceipt doesn't have blockTimestamp in ethers v6)
     const block = await provider.getBlock(receipt.blockNumber);
@@ -677,30 +682,59 @@ export class CryptoPaymentService {
   }
 
   async getPaymentStatus(orderId: number) {
-    const orderResult = await mainQuery(
+    const loadOrder = async () => mainQuery(
       `SELECT * FROM orders WHERE order_id = $1`,
       [orderId]
     );
 
-    if (orderResult.rows.length === 0) {
-      throw new AppError('Order not found', 404);
-    }
-
-    const order = orderResult.rows[0];
-
-    const paymentResult = await query(
-      `SELECT tx_hash, status as payment_status, confirmations, block_number
+    const loadPayment = async () => query(
+      `SELECT tx_hash, status as payment_status, confirmations, block_number, updated_at
        FROM payments 
        WHERE order_id = $1 
        ORDER BY created_at DESC LIMIT 1`,
       [orderId]
     );
 
-    const payment = paymentResult.rows[0] || {};
+    let orderResult = await loadOrder();
+    if (orderResult.rows.length === 0) {
+      throw new AppError('Order not found', 404);
+    }
+
+    let order = orderResult.rows[0];
+    let paymentResult = await loadPayment();
+    let payment = paymentResult.rows[0] || {};
+    let verifyError: string | null = null;
+
+    if (shouldReadThroughVerifyStatus({
+      orderStatus: order.status,
+      paymentStatus: payment.payment_status,
+      txHash: order.tx_hash || payment.tx_hash,
+    })) {
+      try {
+        await this.verifyTransaction(String(order.tx_hash || payment.tx_hash));
+        orderResult = await loadOrder();
+        paymentResult = await loadPayment();
+        order = orderResult.rows[0];
+        payment = paymentResult.rows[0] || {};
+      } catch (error: any) {
+        verifyError = error?.message || 'Verification failed';
+      }
+    }
+
+    const verificationMeta = buildPaymentVerificationMeta({
+      chainId: order.chain_id,
+      orderStatus: order.status,
+      paymentStatus: payment.payment_status,
+      confirmations: payment.confirmations,
+      verifyError,
+    });
 
     return {
       ...order,
       ...payment,
+      ...verificationMeta,
+      last_verified_at: payment.updated_at || null,
+      stuck_reason: verifyError || null,
     };
   }
 

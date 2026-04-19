@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient, paymentClient } from '@/lib/api/client';
@@ -15,7 +15,7 @@ import Link from 'next/link';
 import {
   Package, ArrowLeft, CheckCircle, XCircle, Loader2, Truck, Check,
   AlertTriangle, Star, Shield, ExternalLink, Upload, ImagePlus, X,
-  Info, Clock, FileText
+  Info, Clock, FileText, RefreshCw
 } from 'lucide-react';
 import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/order/OrderStepper';
 import { OrderTrackingSnapshot } from '@/components/order/OrderTrackingSnapshot';
@@ -25,7 +25,7 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagm
 import { parseAbi, keccak256, toBytes } from 'viem';
 import { CHAIN_META } from '@/lib/web3/config';
 import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
-import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage } from '@/lib/orders/presentation';
+import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
 
 type ProductImageLike = string | { url?: string; image_url?: string; is_primary?: boolean; sort_order?: number };
 
@@ -56,6 +56,14 @@ interface Order {
   amount_token?: number | string;
 }
 
+interface PaymentStatusSnapshot extends OrderVerificationContext {
+  status?: string;
+  confirmations?: number | null;
+  requiredConfirmations?: number | null;
+  stuck_reason?: string | null;
+  last_verified_at?: string | null;
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function OrderDetailPage() {
@@ -76,6 +84,8 @@ export default function OrderDetailPage() {
   const [disputeImages, setDisputeImages] = useState<string[]>([]); // Cloudinary URLs
   const [uploadingImg, setUploadingImg] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [paymentSnapshot, setPaymentSnapshot] = useState<PaymentStatusSnapshot | null>(null);
+  const [paymentSnapshotLoading, setPaymentSnapshotLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Wagmi for on-chain buyerConfirmDelivery
@@ -117,21 +127,6 @@ export default function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, id]);
 
-  // Auto poll order status while waiting for blockchain confirmation
-  useEffect(() => {
-    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'];
-    const terminalStatuses = ['PAID', 'CANCELLED', 'TX_FAILED', 'REFUNDED', 'COMPLETED', 'SHIPPED', 'DELIVERED', 'DISPUTED'];
-
-    if (!order?.status || terminalStatuses.includes(order.status)) return;
-    if (!pollingStatuses.includes(order.status)) return;
-
-    const interval = setInterval(() => {
-      fetchOrder();
-    }, 4000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.status, id]);
-
   useEffect(() => {
     if (!order || !success || !order.paypal_order_id || capturing) return;
     if (order.status === 'PAID' || order.status === 'COMPLETED') return; // already done
@@ -139,7 +134,7 @@ export default function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, success]);
 
-  const fetchOrder = async () => {
+  async function fetchOrder() {
     try {
       if (isInternalId) {
         const res = await apiClient.get(`/api/orders/internal/${id}`);
@@ -158,7 +153,66 @@ export default function OrderDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  const refreshBlockchainStatus = useCallback(async (manual = false) => {
+    if (!order || order.payment_method !== 'crypto') {
+      return null;
+    }
+
+    if (manual) {
+      setPaymentSnapshotLoading(true);
+    }
+
+    try {
+      const res = await paymentClient.get(`/api/payments/crypto/status/${order.order_id}`);
+      const raw = res.data?.status ?? {};
+      const snapshot: PaymentStatusSnapshot = {
+        status: raw.status,
+        verificationState: raw.verification_state ?? null,
+        verificationMessage: raw.verification_message ?? null,
+        confirmations: raw.confirmations ?? null,
+        requiredConfirmations: raw.required_confirmations ?? null,
+        stuck_reason: raw.stuck_reason ?? null,
+        last_verified_at: raw.last_verified_at ?? null,
+      };
+      setPaymentSnapshot(snapshot);
+
+      if (snapshot.status && snapshot.status !== order.status) {
+        await fetchOrder();
+      }
+
+      if (manual && snapshot.verificationMessage) {
+        toast.info(snapshot.verificationMessage, { duration: 5000 });
+      }
+
+      return snapshot;
+    } catch (e: any) {
+      if (manual) {
+        toast.error(e.response?.data?.message || 'Kiểm tra blockchain thất bại');
+      }
+      return null;
+    } finally {
+      if (manual) {
+        setPaymentSnapshotLoading(false);
+      }
+    }
+  }, [fetchOrder, order]);
+
+  // Auto poll order status while waiting for blockchain confirmation
+  useEffect(() => {
+    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'];
+    const terminalStatuses = ['PAID', 'CANCELLED', 'TX_FAILED', 'REFUNDED', 'COMPLETED', 'SHIPPED', 'DELIVERED', 'DISPUTED'];
+
+    if (!order?.status || terminalStatuses.includes(order.status)) return;
+    if (!pollingStatuses.includes(order.status)) return;
+
+    refreshBlockchainStatus().catch(() => null);
+    const interval = setInterval(() => {
+      refreshBlockchainStatus().catch(() => null);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [order?.status, refreshBlockchainStatus]);
 
   const capturePayPal = async () => {
     if (!order?.paypal_order_id) return;
@@ -262,7 +316,7 @@ export default function OrderDetailPage() {
 
   const isBuyer = session?.user?.id === String(order?.buyer_id);
   const isSeller = session?.user?.id === String(order?.seller_id);
-  const statusMeta = order ? getOrderStatusMeta(order.status) : null;
+  const statusMeta = order ? getOrderStatusMeta(order.status, paymentSnapshot) : null;
   const pricingDisplay = order ? getOrderPricingDisplay(order) : null;
   const orderImage = order ? resolveOrderProductImage(order) : null;
   const showEscrowPanel = Boolean(order?.payment_method === 'crypto' && order.escrow_contract);
@@ -321,13 +375,13 @@ export default function OrderDetailPage() {
           {/* Header Action */}
           <div className="flex items-center gap-4 mb-8">
             <Link href="/orders">
-              <button className="p-2.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all hover:-translate-x-1 group">
+              <button className="p-2.5 rounded-full bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all hover:-translate-x-1 group">
                 <ArrowLeft className="w-5 h-5 group-hover:scale-110 transition-transform" />
               </button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Chi tiết đơn hàng</h1>
-              <p className="text-gray-500 font-mono text-sm mt-1">Order #{order.order_id}</p>
+              <h1 className="text-2xl font-bold text-foreground">Chi tiết đơn hàng</h1>
+              <p className="text-muted-foreground font-mono text-sm mt-1">Order #{order.order_id}</p>
             </div>
           </div>
 
@@ -372,14 +426,14 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 mb-6 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+          <div className="bg-card/95 border border-border rounded-3xl p-6 mb-6 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-white/5 pb-6">
               <div className="space-y-3">
                 <OrderStatusIndicator status={order.status} />
                 <div>
-                  <p className="text-sm font-semibold text-gray-100">{statusMeta?.summary}</p>
-                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+                  <p className="text-sm font-semibold text-foreground">{statusMeta?.summary}</p>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" />
                     Cập nhật: {new Date(order.created_at).toLocaleString('vi-VN')}
                   </p>
                 </div>
@@ -387,7 +441,7 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-6 mb-8">
-              <div className="relative w-32 h-32 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 group">
+              <div className="relative w-32 h-32 rounded-2xl overflow-hidden bg-muted border border-border flex-shrink-0 group">
                 {orderImage ? (
                   <Image
                     src={orderImage}
@@ -405,10 +459,10 @@ export default function OrderDetailPage() {
               </div>
 
               <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <h2 className="font-bold text-xl text-white mb-2 leading-tight">{order.product_name}</h2>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 w-fit mb-3">
-                  <span className="text-xs text-gray-400">Số lượng:</span>
-                  <span className="text-sm font-bold text-white">x{order.quantity}</span>
+                <h2 className="font-bold text-xl text-foreground mb-2 leading-tight">{order.product_name}</h2>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg border border-border w-fit mb-3">
+                  <span className="text-xs text-muted-foreground">Số lượng:</span>
+                  <span className="text-sm font-bold text-foreground">x{order.quantity}</span>
                 </div>
 
                 {pricingDisplay?.mode !== 'token' ? (
@@ -419,7 +473,7 @@ export default function OrderDetailPage() {
                       className="text-emerald-400"
                       amountClassName="text-emerald-400"
                     />
-                    <p className="text-xs text-gray-500">Giá thanh toán trực tiếp theo USDT.</p>
+                    <p className="text-xs text-muted-foreground">Giá thanh toán trực tiếp theo USDT.</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1.5">
@@ -432,7 +486,7 @@ export default function OrderDetailPage() {
                         amountClassName="text-[#f0b90b]"
                       />
                     ) : null}
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>≈</span>
                       <UsdtAmountInline amount={pricingDisplay?.usdAmount ?? order.price_usd} size="sm" />
                     </div>
@@ -441,28 +495,53 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div className="p-5 bg-black/20 rounded-2xl border border-white/5 mb-8">
+            <div className="p-5 bg-muted/50 rounded-2xl border border-border mb-8">
               <OrderStepper currentStatus={order.status} className="py-2" />
             </div>
 
-            <OrderTrackingSnapshot status={order.status} className="mb-8" />
+            <OrderTrackingSnapshot status={order.status} verification={paymentSnapshot} className="mb-8" />
+
+            {order.payment_method === 'crypto' && ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(order.status) && (
+              <div className="mb-8 rounded-2xl border border-amber-500/20 bg-amber-500/8 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-amber-300">Theo dõi xác nhận blockchain</p>
+                    <p className="text-xs text-amber-400/90">
+                      {paymentSnapshot?.verificationMessage || statusMeta?.escrowCopy}
+                    </p>
+                    {typeof paymentSnapshot?.confirmations === 'number' && typeof paymentSnapshot?.requiredConfirmations === 'number' && (
+                      <p className="text-[11px] font-mono text-amber-300/90">
+                        {paymentSnapshot.confirmations}/{paymentSnapshot.requiredConfirmations} block xác nhận
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => refreshBlockchainStatus(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
+                  >
+                    {paymentSnapshotLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Kiểm tra lại blockchain
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 bg-white/5 rounded-xl border border-white/5">
-                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
+              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+                <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
                   Người mua {isBuyer && <span className="text-blue-400 normal-case font-medium tracking-normal">(Bạn)</span>}
                 </dt>
-                <dd className="font-medium text-sm text-gray-200 truncate">{order.buyer_name}</dd>
+                <dd className="font-medium text-sm text-foreground truncate">{order.buyer_name}</dd>
               </div>
-              <div className="p-4 bg-white/5 rounded-xl border border-white/5">
-                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
+              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+                <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
                   Trợ lý / Bán {isSeller && <span className="text-emerald-400 normal-case font-medium tracking-normal">(Bạn)</span>}
                 </dt>
-                <dd className="font-medium text-sm text-gray-200 truncate">{order.seller_name}</dd>
+                <dd className="font-medium text-sm text-foreground truncate">{order.seller_name}</dd>
               </div>
-              <div className="p-4 bg-white/5 rounded-xl border border-white/5">
-                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">Phương thức</dt>
-                <dd className="font-medium text-sm text-gray-200 uppercase flex items-center gap-1.5">
+              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+                <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5">Phương thức</dt>
+                <dd className="font-medium text-sm text-foreground uppercase flex items-center gap-1.5">
                   {order.payment_method === 'crypto' ? (
                     <><span className="w-2 h-2 rounded-full bg-[#f0b90b]" /> Crypto Web3</>
                   ) : order.payment_method === 'paypal' ? (
@@ -472,8 +551,8 @@ export default function OrderDetailPage() {
                   )}
                 </dd>
               </div>
-              <div className="p-4 bg-white/5 rounded-xl border border-white/5">
-                <dt className="text-gray-500 text-[10px] uppercase tracking-widest font-bold mb-1.5">Mã Invoice</dt>
+              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+                <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5">Mã Invoice</dt>
                 <dd className="font-mono text-xs text-gray-400 bg-black/30 px-2 py-1 rounded inline-block">
                   {order.internal_order_id.split('-')[0].toUpperCase()}
                 </dd>

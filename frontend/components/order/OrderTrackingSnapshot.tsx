@@ -1,14 +1,15 @@
 'use client';
 
-import { getOrderStatusMeta } from '@/lib/orders/presentation';
+import { getOrderStatusMeta, type OrderVerificationContext } from '@/lib/orders/presentation';
 
 interface OrderTrackingSnapshotProps {
   status: string;
+  verification?: OrderVerificationContext | null;
   className?: string;
 }
 
-export function OrderTrackingSnapshot({ status, className = '' }: OrderTrackingSnapshotProps) {
-  const meta = getOrderStatusMeta(status);
+export function OrderTrackingSnapshot({ status, verification, className = '' }: OrderTrackingSnapshotProps) {
+  const meta = getOrderStatusMeta(status, verification);
 
   const items = [
     {
@@ -34,14 +35,14 @@ export function OrderTrackingSnapshot({ status, className = '' }: OrderTrackingS
   return (
     <div className={['grid grid-cols-1 gap-3 md:grid-cols-3', className].filter(Boolean).join(' ')}>
       {items.map(({ label, value, marker, tone }) => (
-        <div key={label} className="rounded-2xl border border-white/5 bg-black/20 p-4">
+        <div key={label} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
-            <div className={`flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 text-[10px] font-black tracking-[0.18em] ${tone}`}>
+            <div className={`flex h-8 w-8 items-center justify-center rounded-xl bg-muted text-[10px] font-black tracking-[0.18em] ${tone}`}>
               {marker}
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">{label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
           </div>
-          <p className="text-sm font-semibold leading-relaxed text-gray-100">{value}</p>
+          <p className="text-sm font-semibold leading-relaxed text-foreground">{value}</p>
         </div>
       ))}
     </div>
