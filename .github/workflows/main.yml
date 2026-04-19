@@ -36,15 +36,19 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - '.github/workflows/main.yml'
             main-api:
               - 'backend/main-service/**'
+              - '.github/workflows/main.yml'
             payment-api:
               - 'backend/payment-service/**'
+              - '.github/workflows/main.yml'
             ai-service:
               - 'backend/ai-service/**'
             db-migrator:
               - 'init_database.sql/**'
               - 'payment_init_database.sql/**'
+              - '.github/workflows/main.yml'
             tokenization:
               - 'backend/tokenization-service/**'
             docker:
