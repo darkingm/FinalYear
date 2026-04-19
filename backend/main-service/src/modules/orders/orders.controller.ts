@@ -499,7 +499,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
       } else {
         try {
           const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || process.env.PAYMENT_API_URL || 'http://localhost:5001';
-          await axios.post(`${paymentApiUrl}/api/crypto-payment/release`, {
+          await axios.post(`${paymentApiUrl}/api/payments/crypto/release`, {
             order_id: orderId
           }, {
             headers: { 'X-Internal-Service-Key': internalKey },

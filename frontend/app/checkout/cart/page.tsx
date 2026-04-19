@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { apiClient, paymentClient } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { toast } from 'sonner';
@@ -24,6 +24,12 @@ import { CoinImage } from '@/components/ui/CoinImage';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { PAYMENT_NETWORKS, CHAIN_TOKENS, CHAIN_META } from '@/lib/web3/config';
 import { useCartStore } from '@/store/cart-store';
+import {
+  createPaymentBatchSession,
+  getPaymentBatchSessionQuote,
+  submitPaymentBatchSessionTransaction,
+  type PaymentBatchSession,
+} from '@/lib/payments/payment-batch-session';
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
 interface CryptoQuoteBatch {
@@ -113,6 +119,7 @@ export default function CartCheckoutPage() {
 
   const [quote, setQuote] = useState<CryptoQuoteBatch | null>(null);
   const [createdOrderIds, setCreatedOrderIds] = useState<number[]>([]);
+  const [paymentBatchSession, setPaymentBatchSession] = useState<PaymentBatchSession | null>(null);
 
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -159,6 +166,7 @@ export default function CartCheckoutPage() {
     if (!tokensToShow.includes(selectedToken)) {
       setSelectedToken(tokensToShow[0] || 'ETH');
       setQuote(null);
+      setPaymentBatchSession(null);
     }
   }, [selectedNet]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -216,14 +224,18 @@ export default function CartCheckoutPage() {
 
       // Step B: Get batch crypto quote
       toast.loading('Đang lấy báo giá gộp...', { id: 'quote' });
-      const resQuote = await paymentClient.post('/api/payments/crypto/quote-batch', {
-        order_ids: orderIdsToQuote,
-        token_symbol: selectedToken,
-        buyer_wallet: address,
-        preferred_chain_id: selectedNet,
+      const session = await createPaymentBatchSession({
+        orderIds: orderIdsToQuote,
+        tokenSymbol: selectedToken,
+        buyerWallet: address,
+        preferredChainId: selectedNet,
       });
+      const q = await getPaymentBatchSessionQuote({
+        sessionId: session.session_id,
+        nonce: session.nonce,
+      }) as CryptoQuoteBatch;
 
-      const q: CryptoQuoteBatch = resQuote.data.quote;
+      setPaymentBatchSession(session);
       setQuote(q);
       setStep(3);
       toast.success('Báo giá sẵn sàng!', { id: 'quote' });
@@ -282,9 +294,15 @@ export default function CartCheckoutPage() {
   };
 
   const handlePay = async () => {
-    if (!quote || !walletClient || !address) { toast.error('Kết nối ví'); return; }
+    if (!quote || !paymentBatchSession || !walletClient || !address) { toast.error('Kết nối ví'); return; }
     if (isWrongChain) { await handleSwitchChain(); return; }
-    if (timeLeft === 0) { toast.error('Báo giá đã hết hạn — lấy lại báo giá'); setQuote(null); setStep(2); return; }
+    if (timeLeft === 0) {
+      toast.error('Báo giá đã hết hạn — lấy lại báo giá');
+      setQuote(null);
+      setPaymentBatchSession(null);
+      setStep(2);
+      return;
+    }
     if (nativeBalance && Number(nativeBalance.formatted) < 0.001) {
       toast.error('Giao dịch thất bại! Bạn cần tối thiểu 0.001 MATIC/BNB/ETH trong ví để làm phí Gas chuyển mạng.');
       return;
@@ -303,20 +321,13 @@ export default function CartCheckoutPage() {
 
       toast.loading('Đang chờ xác nhận...', { id: 'tx' });
 
-      // Notify payment service for each order (non-blocking)
-      const submitResults = await Promise.allSettled(
-        quote.order_ids.map(id =>
-          paymentClient.post('/api/payments/crypto/submit', { order_id: id, tx_hash: hash })
-        )
-      );
+      await submitPaymentBatchSessionTransaction({
+        sessionId: paymentBatchSession.session_id,
+        nonce: paymentBatchSession.nonce,
+        txHash: hash,
+      });
 
-      const failedSubmissions = submitResults.filter(result => result.status === 'rejected');
-
-      if (failedSubmissions.length > 0) {
-        toast.error('Giao dịch đã lên chain nhưng một số đơn chưa đồng bộ với backend. Kiểm tra trang Orders hoặc báo admin để sync lại.', { id: 'tx' });
-      } else {
-        toast.success('Giao dịch đã gửi thành công! 🎉', { id: 'tx' });
-      }
+      toast.success('Giao dịch đã gửi thành công! 🎉', { id: 'tx' });
       setTxHash(hash);
       setPayStep('done');
       setConfirmed(true);
@@ -471,7 +482,7 @@ export default function CartCheckoutPage() {
                       {PAYMENT_NETWORKS.map(net => (
                         <button
                           key={net.chainId}
-                          onClick={() => { setSelectedNet(net.chainId); setQuote(null); setCreatedOrderIds([]); }}
+                          onClick={() => { setSelectedNet(net.chainId); setQuote(null); setPaymentBatchSession(null); setCreatedOrderIds([]); }}
                           className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${selectedNet === net.chainId
                             ? 'border-[#8247e5]/60 bg-[#8247e5]/10'
                             : 'border-border hover:border-[#8247e5]/30'
@@ -498,7 +509,7 @@ export default function CartCheckoutPage() {
                       {tokensToShow.map(token => (
                         <button
                           key={token}
-                          onClick={() => { setSelectedToken(token); setQuote(null); setCreatedOrderIds([]); }}
+                          onClick={() => { setSelectedToken(token); setQuote(null); setPaymentBatchSession(null); setCreatedOrderIds([]); }}
                           className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all ${selectedToken === token
                             ? 'border-[#8247e5] bg-[#8247e5]/10 text-[#8247e5]'
                             : 'border-border hover:border-[#8247e5]/40 text-foreground'

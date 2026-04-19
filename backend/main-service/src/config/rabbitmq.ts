@@ -40,11 +40,19 @@ export async function subscribeToEvents(topics: string[], callback: (msg: any) =
       await channel.bindQueue(queue.queue, 'marketplace', topic);
     }
 
-    channel.consume(queue.queue, (msg: any) => {
+    channel.consume(queue.queue, async (msg: any) => {
       if (msg) {
         const data = JSON.parse(msg.content.toString());
-        callback(data);
-        channel.ack(msg);
+        try {
+          await callback(data);
+          channel.ack(msg);
+        } catch (error) {
+          logger.error('Event consumer callback failed', {
+            topics,
+            error,
+          });
+          channel.nack(msg, false, true);
+        }
       }
     });
 

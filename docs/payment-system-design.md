@@ -27,7 +27,7 @@ Hệ thống gồm 3 module thanh toán **độc lập**, mỗi cái có flow ri
               ↓ backend tính amount_wei
        → [Nếu ERC-20] Approve token cho EscrowCore
        → [Nếu native] Trực tiếp call depositNative
-       → Submit TX hash → POST /api/payments/crypto/submit
+       → Submit TX hash qua guarded payment session
        → TxMonitor worker poll on-chain
        → Khi confirmed → UPDATE orders.status = 'PAID'
        → Seller nhận tiền từ EscrowCore

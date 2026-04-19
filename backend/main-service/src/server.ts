@@ -7,12 +7,14 @@ import { connectDatabase } from './config/database';
 import { connectRedis } from './config/redis';
 import { connectRabbitMQ } from './config/rabbitmq';
 import { initCronJobs } from './utils/cron';
+import { OrderPaymentEventsConsumer } from './modules/orders/order-payment-events.consumer';
 
 const PORT = process.env.PORT || 3001;
 
 async function startServer() {
   try {
     await connectDatabase();
+    let orderPaymentEventsConsumer: OrderPaymentEventsConsumer | null = null;
 
     // Redis optional — cache only, not critical
     try {
@@ -25,6 +27,7 @@ async function startServer() {
     // RabbitMQ optional — notifications only
     try {
       await connectRabbitMQ();
+      orderPaymentEventsConsumer = new OrderPaymentEventsConsumer();
     } catch (mqErr: any) {
       logger.warn('RabbitMQ unavailable, continuing without queue:', mqErr?.message);
     }
@@ -35,6 +38,12 @@ async function startServer() {
 
       // Initialize cron jobs
       initCronJobs();
+
+      if (orderPaymentEventsConsumer) {
+        orderPaymentEventsConsumer.start()
+          .then(() => logger.info('Order payment projection consumer started'))
+          .catch((error) => logger.error('Failed to start order payment projection consumer', error));
+      }
     });
   } catch (error) {
     logger.error('Failed to start server (DB required):', error);

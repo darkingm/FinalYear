@@ -27,6 +27,13 @@ import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/Check
 import { resolveCheckoutProductImage } from '@/lib/checkout/images';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
 import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
+import {
+  createPaymentSession,
+  getPaymentSessionQuote,
+  getPaymentSessionStatus,
+  submitPaymentSessionTransaction,
+  type PaymentSession,
+} from '@/lib/payments/payment-session';
 
 /* ─── Block Explorers per chain ─────────────────────────────────────────── */
 export const CHAIN_EXPLORERS: Record<number, { name: string; tx: string; address: string }> = {
@@ -225,6 +232,7 @@ export default function CheckoutPage() {
 
   // Quote
   const [quote, setQuote] = useState<CryptoQuote | null>(null);
+  const [paymentSession, setPaymentSession] = useState<PaymentSession | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
@@ -283,6 +291,7 @@ export default function CheckoutPage() {
     if (!tokensToShow.includes(selectedToken)) {
       setSelectedToken(tokensToShow[0] || 'ETH');
       setQuote(null);
+      setPaymentSession(null);
     }
   }, [selectedNet, tokensToShow, selectedToken]);
 
@@ -343,15 +352,20 @@ export default function CheckoutPage() {
   /* ─── Get Quote ─────────────────────────────────────────────────────── */
   const handleGetQuote = async () => {
     if (!isConnected || !address) { toast.error('Kết nối ví MetaMask trước'); return; }
-    setQuote(null); setQuoteError(null); setQuoteLoading(true); setGasEstimate(null);
+    setQuote(null); setPaymentSession(null); setQuoteError(null); setQuoteLoading(true); setGasEstimate(null);
     try {
-      const res = await paymentClient.post('/api/payments/crypto/quote', {
-        order_id: orderId,
-        token_symbol: selectedToken,
-        buyer_wallet: address,
-        preferred_chain_id: selectedNet,
+      const session = await createPaymentSession({
+        orderId,
+        tokenSymbol: selectedToken,
+        buyerWallet: address,
+        preferredChainId: selectedNet,
       });
-      const q: CryptoQuote = res.data.quote;
+      const q = await getPaymentSessionQuote({
+        sessionId: session.session_id,
+        nonce: session.nonce,
+      }) as CryptoQuote;
+
+      setPaymentSession(session);
       setQuote(q);
       setStep(3);
 
@@ -437,8 +451,13 @@ export default function CheckoutPage() {
     }
 
     try {
-      const statusRes = await paymentClient.get(`/api/payments/crypto/status/${orderId}`);
-      const snapshot: PaymentStatusSnapshot = statusRes.data?.status ?? {};
+      const statusPayload = paymentSession
+        ? await getPaymentSessionStatus({
+          sessionId: paymentSession.session_id,
+          nonce: paymentSession.nonce,
+        })
+        : (await paymentClient.get(`/api/payments/crypto/status/${orderId}`)).data;
+      const snapshot: PaymentStatusSnapshot = statusPayload?.status ?? {};
       const nextConfirmations = Number(snapshot.confirmations ?? 0);
       const nextRequired = Number(snapshot.required_confirmations ?? 0);
 
@@ -469,7 +488,7 @@ export default function CheckoutPage() {
         setStatusRefreshLoading(false);
       }
     }
-  }, [orderId]);
+  }, [orderId, paymentSession]);
 
   useEffect(() => {
     if (!order || !['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(order.status)) {
@@ -508,7 +527,16 @@ export default function CheckoutPage() {
   const handlePay = async () => {
     if (!quote || !walletClient || !address) { toast.error('Kết nối ví'); return; }
     if (isWrongChain) { await handleSwitchChain(); return; }
-    if (timeLeft === 0) { toast.error('Báo giá đã hết hạn, lấy lại'); setQuote(null); setStep(2); return; }
+    if (!paymentSession) {
+      toast.info('Phiên thanh toán chưa sẵn sàng, đang làm mới báo giá');
+      await handleGetQuote();
+      return;
+    }
+    if (timeLeft === 0) {
+      toast.info('Phiên thanh toán đã hết hạn, đang tạo lại session mới');
+      await handleGetQuote();
+      return;
+    }
     if (nativeBalance && Number(nativeBalance.formatted) < 0.001) {
       toast.error('Giao dịch thất bại! Bạn cần tối thiểu 0.001 MATIC/BNB/ETH trong ví để làm phí Gas giao dịch.');
       return;
@@ -532,7 +560,11 @@ export default function CheckoutPage() {
       setTxHash(hash);
       toast.success('Giao dịch đã gửi lên blockchain!', { duration: 4000 });
 
-      await paymentClient.post('/api/payments/crypto/submit', { order_id: orderId, tx_hash: hash });
+      await submitPaymentSessionTransaction({
+        sessionId: paymentSession.session_id,
+        nonce: paymentSession.nonce,
+        txHash: hash,
+      });
 
       // Step 3: Waiting for on-chain confirmations — unlock UI so user sees progress
       setPayStep('confirming');

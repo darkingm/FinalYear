@@ -1,8 +1,16 @@
 import { Router } from 'express';
 import {
+  createPaymentSession,
+  createPaymentBatchSession,
+  getPaymentSessionQuote,
+  getPaymentBatchSessionQuote,
+  submitPaymentSession,
+  submitPaymentBatchSession,
+  getPaymentSessionStatus,
+  getPaymentBatchSessionStatus,
+  getPaymentReconciliationCases,
+  retryVerifyOrderPayment,
   generateQuote,
-  generateQuoteBatch,
-  submitTransaction,
   getPaymentStatus,
   verifyTransaction,
   releaseFunds,
@@ -11,9 +19,17 @@ import {
 import { authenticate } from '../../middleware/auth.middleware';
 import { validateRequest } from '../../middleware/validate.middleware';
 import {
+  createPaymentSessionSchema,
+  createPaymentBatchSessionSchema,
+  getPaymentSessionQuoteSchema,
+  getPaymentBatchSessionQuoteSchema,
+  submitPaymentSessionSchema,
+  submitPaymentBatchSessionSchema,
+  getPaymentSessionStatusSchema,
+  getPaymentBatchSessionStatusSchema,
+  getPaymentReconciliationCasesSchema,
+  retryVerifyOrderPaymentSchema,
   generateQuoteSchema,
-  generateQuoteBatchSchema,
-  submitTransactionSchema,
   getPaymentStatusSchema,
   verifyTransactionSchema,
   releaseFundsSchema,
@@ -43,9 +59,18 @@ function authenticateOrInternalKey(req: Request, res: Response, next: NextFuncti
   return authenticate(req as any, res, next);
 }
 
+router.post('/session', authenticate, validateRequest(createPaymentSessionSchema), createPaymentSession);
+router.post('/session-batch', authenticate, validateRequest(createPaymentBatchSessionSchema), createPaymentBatchSession);
+router.post('/session/:sessionId/quote', authenticate, validateRequest(getPaymentSessionQuoteSchema), getPaymentSessionQuote);
+router.post('/session-batch/:sessionId/quote', authenticate, validateRequest(getPaymentBatchSessionQuoteSchema), getPaymentBatchSessionQuote);
+router.post('/session/:sessionId/submit', authenticate, validateRequest(submitPaymentSessionSchema), submitPaymentSession);
+router.post('/session-batch/:sessionId/submit', authenticate, validateRequest(submitPaymentBatchSessionSchema), submitPaymentBatchSession);
+router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
+router.get('/session-batch/:sessionId/status', authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
+router.get('/admin/reconciliation', authenticateOrInternalKey, validateRequest(getPaymentReconciliationCasesSchema), getPaymentReconciliationCases);
+router.post('/admin/reconciliation/:orderId/retry-verify', authenticateOrInternalKey, validateRequest(retryVerifyOrderPaymentSchema), retryVerifyOrderPayment);
+
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
-router.post('/quote-batch', authenticate, validateRequest(generateQuoteBatchSchema), generateQuoteBatch);
-router.post('/submit', authenticate, validateRequest(submitTransactionSchema), submitTransaction);
 router.get('/status/:orderId', authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);
 router.post('/verify/:txHash', authenticate, validateRequest(verifyTransactionSchema), verifyTransaction);
 

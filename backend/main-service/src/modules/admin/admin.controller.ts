@@ -3,9 +3,11 @@ import { AuthRequest } from '../../middleware/auth.middleware';
 import { AdminService } from './admin.service';
 import { P2PService } from '../p2p/p2p.service';
 import { logger } from '../../utils/logger';
+import { PaymentReconciliationAdminService } from './payment-reconciliation.service';
 
 const adminService = new AdminService();
 const p2pService = new P2PService();
+const paymentReconciliationAdminService = new PaymentReconciliationAdminService();
 
 // ─── Dashboard ───────────────────────────────────────────────────
 
@@ -256,6 +258,44 @@ export async function getEscrowOrders(req: AuthRequest, res: Response, next: Nex
         res.json({ success: true, orders });
     } catch (error: any) {
         logger.error('Admin get escrow orders error:', error);
+        next(error);
+    }
+}
+
+export async function getPaymentReconciliationCases(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const { limit, problems_only, order_id } = req.query;
+        const cases = await paymentReconciliationAdminService.listCases({
+            limit: limit ? parseInt(limit as string, 10) : undefined,
+            problemsOnly: problems_only === 'false' ? false : true,
+            orderId: order_id ? parseInt(order_id as string, 10) : undefined,
+        });
+
+        res.json({ success: true, cases });
+    } catch (error: any) {
+        logger.error('Admin get payment reconciliation cases error:', error);
+        next(error);
+    }
+}
+
+export async function retryVerifyPayment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const orderId = parseInt(req.params.id, 10);
+        const result = await paymentReconciliationAdminService.retryVerify(orderId);
+        res.json({ success: true, ...result });
+    } catch (error: any) {
+        logger.error('Admin retry verify payment error:', error);
+        next(error);
+    }
+}
+
+export async function repairOrderPaymentProjection(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const orderId = parseInt(req.params.id, 10);
+        const result = await paymentReconciliationAdminService.repairOrderState(orderId);
+        res.json({ success: true, ...result });
+    } catch (error: any) {
+        logger.error('Admin repair order payment projection error:', error);
         next(error);
     }
 }

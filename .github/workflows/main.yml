@@ -119,6 +119,7 @@ jobs:
         run: |
           npm ci
           npx tsc --noEmit
+          npm run test:ci
 
       - name: Install & type-check payment-service
         if: needs.changes.outputs.payment-api == 'true'
@@ -126,6 +127,7 @@ jobs:
         run: |
           npm ci
           npx tsc --noEmit
+          npm run test:ci
 
       - name: Install & type-check frontend
         if: needs.changes.outputs.frontend == 'true'
@@ -133,6 +135,7 @@ jobs:
         run: |
           npm ci
           npx tsc --noEmit
+          npm run test:ci
 
   # ============================================================
   # JOB 2a — Build & Push Frontend (only if frontend changed)

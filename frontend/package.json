@@ -15,6 +15,7 @@
     "clean": "rimraf .next",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:ci": "jest --runInBand",
     "test:e2e": "playwright test"
   },
   "dependencies": {

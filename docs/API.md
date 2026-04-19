@@ -229,16 +229,43 @@ Get quote for crypto payment.
 }
 ```
 
-### POST /api/payments/crypto/submit
-Submit transaction hash after user signs.
+### POST /api/payments/crypto/session
+Create a guarded single-order payment session.
 
 **Request Body:**
 ```json
 {
   "order_id": 123,
-  "tx_hash": "0x..."
+  "token_symbol": "USDT",
+  "preferred_chain_id": 31337,
+  "buyer_wallet": "0x..."
 }
 ```
+
+### POST /api/payments/crypto/session/:sessionId/quote
+Load the single-order quote bound to the session nonce.
+
+### POST /api/payments/crypto/session/:sessionId/submit
+Submit transaction hash for a guarded single-order session.
+
+### POST /api/payments/crypto/session-batch
+Create a guarded batch payment session for cart checkout.
+
+**Request Body:**
+```json
+{
+  "order_ids": [123, 124],
+  "token_symbol": "USDT",
+  "preferred_chain_id": 31337,
+  "buyer_wallet": "0x..."
+}
+```
+
+### POST /api/payments/crypto/session-batch/:sessionId/quote
+Load the batch quote bound to the batch session nonce.
+
+### POST /api/payments/crypto/session-batch/:sessionId/submit
+Submit transaction hash for a guarded batch session.
 
 ### GET /api/payments/crypto/status/:orderId
 Check payment status.

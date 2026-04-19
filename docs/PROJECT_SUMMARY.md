@@ -134,7 +134,7 @@
   - Tính token amount từ USD
   - Generate calldata cho smart contract
   - Return escrow address, amount_wei, calldata
-- ✅ POST `/api/payments/crypto/submit` - Submit tx hash
+  - ✅ Guarded payment session submit endpoints for single-order and batch checkout
   - Update order status → TX_SUBMITTED
   - Tạo payment record
   - Publish RabbitMQ event
