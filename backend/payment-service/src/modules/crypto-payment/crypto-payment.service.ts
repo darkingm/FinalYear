@@ -11,6 +11,7 @@ import {
 import { PaymentEventService } from './payment-event.service';
 import { PAYMENT_EVENT_TYPES } from './payment-event.contract';
 import type { PaymentSessionRecord } from './payment-session.service';
+import type { PaymentBatchSessionRecord } from './payment-batch-session.service';
 
 const ESCROW_ABI = [
   // ERC-20 tokens: requires approve() first, then deposit()
@@ -540,6 +541,77 @@ export class CryptoPaymentService {
       txHash,
       session_id: session.session_id,
       chain_id: order.chain_id,
+    });
+  }
+
+  async submitBatchTransactionWithSession(session: PaymentBatchSessionRecord, txHash: string) {
+    if (!txHash.match(/^0x[a-fA-F0-9]{64}$/)) {
+      throw new AppError('Invalid transaction hash format', 400);
+    }
+
+    const quote = session.quote_snapshot as {
+      order_ids: number[];
+      amounts_wei_split?: string[];
+      amount_token_total: number | string;
+      token_id?: number | null;
+    };
+    const orderIds = Array.isArray(quote.order_ids) ? quote.order_ids : [];
+    if (orderIds.length === 0) {
+      throw new AppError('Payment session does not contain any orders', 400);
+    }
+
+    const orderContexts = await Promise.all(orderIds.map((orderId) => this.loadOrderPaymentContext(orderId)));
+    for (const order of orderContexts) {
+      if (!['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status)) {
+        throw new AppError(`Order ${order.order_id} is not payable`, 400);
+      }
+    }
+
+    const batchResults = await this.paymentEventService.recordSubmittedBatch(
+      orderContexts.map((order) => {
+        const effectiveAmount = Number(order.amount_token);
+        if (!Number.isFinite(effectiveAmount) || effectiveAmount <= 0) {
+          throw new AppError(`Missing canonical token amount for order ${order.order_id}`, 400);
+        }
+
+        return {
+          orderId: order.order_id,
+          sessionId: session.session_id,
+          txHash,
+          chainId: session.chain_id,
+          userId: session.user_id,
+          amount: effectiveAmount,
+          tokenId: order.token_id ?? null,
+          fromAddress: order.buyer_wallet || String(order.buyer_id),
+          toAddress: order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS || null,
+        };
+      })
+    );
+
+    try {
+      await mainQuery(
+        `UPDATE orders
+         SET tx_hash = $1,
+             status = 'TX_SUBMITTED',
+             updated_at = NOW()
+         WHERE order_id = ANY($2::int[])`,
+        [txHash, orderIds]
+      );
+    } catch (error: any) {
+      logger.error('Best-effort batch order sync after submit failed; projection will retry via events', {
+        order_ids: orderIds,
+        tx_hash: txHash,
+        session_id: session.session_id,
+        error: error.message,
+      });
+    }
+
+    logger.info('Batch session transaction submitted', {
+      order_ids: orderIds,
+      txHash,
+      session_id: session.session_id,
+      chain_id: session.chain_id,
+      payment_rows: batchResults.length,
     });
   }
 

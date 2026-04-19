@@ -82,54 +82,16 @@ export class PaymentEventService {
 
   async recordSubmitted(input: SubmitTransitionInput): Promise<PaymentEventResult> {
     return this.withTransaction(async (client) => {
-      const existingPayment = await this.findPaymentByOrderAndHash(client, input.orderId, input.txHash);
-      const aggregateId = this.buildAggregateId(input.orderId, input.txHash);
-
-      if (existingPayment) {
-        const existingEvent = await this.findOutboxEvent(client, aggregateId, PAYMENT_EVENT_TYPES.SUBMITTED);
-        if (existingEvent) {
-          return {
-            payment: existingPayment,
-            outboxEvent: existingEvent,
-          };
-        }
-      }
-
-      const payment = existingPayment
-        ? await this.updatePaymentStatus(client, existingPayment.payment_id, 'pending')
-        : await this.insertSubmittedPayment(client, input);
-
-      const outboxEvent = buildPaymentEvent({
-        eventType: PAYMENT_EVENT_TYPES.SUBMITTED,
-        paymentId: payment.payment_id,
-        orderId: input.orderId,
-        sessionId: input.sessionId,
-        txHash: input.txHash,
-        chainId: input.chainId,
-        fromState: existingPayment?.status ?? null,
-        toState: 'pending',
-        metadata: {
-          amount: input.amount,
-          token_id: input.tokenId ?? null,
-          submitted_at: this.now().toISOString(),
-        },
-      });
-
-      await client.query(
-        `INSERT INTO payment_outbox (
-           aggregate_type,
-           aggregate_id,
-           event_type,
-           payload
-         ) VALUES ($1, $2, $3, $4::jsonb)`,
-        ['payment', aggregateId, PAYMENT_EVENT_TYPES.SUBMITTED, JSON.stringify(outboxEvent)]
-      );
-
-      return {
-        payment,
-        outboxEvent,
-      };
+      return this.recordSubmittedEntries(client, [input]).then((results) => results[0]);
     });
+  }
+
+  async recordSubmittedBatch(inputs: SubmitTransitionInput[]): Promise<PaymentEventResult[]> {
+    if (inputs.length === 0) {
+      return [];
+    }
+
+    return this.withTransaction(async (client) => this.recordSubmittedEntries(client, inputs));
   }
 
   async recordTransition(input: {
@@ -209,6 +171,66 @@ export class PaymentEventService {
     );
 
     return result.rows[0] as PaymentRow | undefined;
+  }
+
+  private async recordSubmittedEntries(
+    client: TransactionClient,
+    inputs: SubmitTransitionInput[]
+  ): Promise<PaymentEventResult[]> {
+    const results: PaymentEventResult[] = [];
+
+    for (const input of inputs) {
+      const existingPayment = await this.findPaymentByOrderAndHash(client, input.orderId, input.txHash);
+      const aggregateId = this.buildAggregateId(input.orderId, input.txHash);
+
+      if (existingPayment) {
+        const existingEvent = await this.findOutboxEvent(client, aggregateId, PAYMENT_EVENT_TYPES.SUBMITTED);
+        if (existingEvent) {
+          results.push({
+            payment: existingPayment,
+            outboxEvent: existingEvent,
+          });
+          continue;
+        }
+      }
+
+      const payment = existingPayment
+        ? await this.updatePaymentStatus(client, existingPayment.payment_id, 'pending')
+        : await this.insertSubmittedPayment(client, input);
+
+      const outboxEvent = buildPaymentEvent({
+        eventType: PAYMENT_EVENT_TYPES.SUBMITTED,
+        paymentId: payment.payment_id,
+        orderId: input.orderId,
+        sessionId: input.sessionId,
+        txHash: input.txHash,
+        chainId: input.chainId,
+        fromState: existingPayment?.status ?? null,
+        toState: 'pending',
+        metadata: {
+          amount: input.amount,
+          token_id: input.tokenId ?? null,
+          submitted_at: this.now().toISOString(),
+        },
+      });
+
+      await client.query(
+        `INSERT INTO payment_outbox (
+           aggregate_type,
+           aggregate_id,
+           event_type,
+           payload
+         ) VALUES ($1, $2, $3, $4::jsonb)`,
+        ['payment', aggregateId, PAYMENT_EVENT_TYPES.SUBMITTED, JSON.stringify(outboxEvent)]
+      );
+
+      results.push({
+        payment,
+        outboxEvent,
+      });
+    }
+
+    return results;
   }
 
   private async findOutboxEvent(client: TransactionClient, aggregateId: string, eventType: PaymentEventType) {

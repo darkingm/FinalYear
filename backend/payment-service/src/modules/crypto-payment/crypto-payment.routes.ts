@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import {
   createPaymentSession,
+  createPaymentBatchSession,
   getPaymentSessionQuote,
+  getPaymentBatchSessionQuote,
   submitPaymentSession,
+  submitPaymentBatchSession,
   getPaymentSessionStatus,
+  getPaymentBatchSessionStatus,
   generateQuote,
   generateQuoteBatch,
   submitTransaction,
@@ -16,9 +20,13 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { validateRequest } from '../../middleware/validate.middleware';
 import {
   createPaymentSessionSchema,
+  createPaymentBatchSessionSchema,
   getPaymentSessionQuoteSchema,
+  getPaymentBatchSessionQuoteSchema,
   submitPaymentSessionSchema,
+  submitPaymentBatchSessionSchema,
   getPaymentSessionStatusSchema,
+  getPaymentBatchSessionStatusSchema,
   generateQuoteSchema,
   generateQuoteBatchSchema,
   submitTransactionSchema,
@@ -52,9 +60,13 @@ function authenticateOrInternalKey(req: Request, res: Response, next: NextFuncti
 }
 
 router.post('/session', authenticate, validateRequest(createPaymentSessionSchema), createPaymentSession);
+router.post('/session-batch', authenticate, validateRequest(createPaymentBatchSessionSchema), createPaymentBatchSession);
 router.post('/session/:sessionId/quote', authenticate, validateRequest(getPaymentSessionQuoteSchema), getPaymentSessionQuote);
+router.post('/session-batch/:sessionId/quote', authenticate, validateRequest(getPaymentBatchSessionQuoteSchema), getPaymentBatchSessionQuote);
 router.post('/session/:sessionId/submit', authenticate, validateRequest(submitPaymentSessionSchema), submitPaymentSession);
+router.post('/session-batch/:sessionId/submit', authenticate, validateRequest(submitPaymentBatchSessionSchema), submitPaymentBatchSession);
 router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
+router.get('/session-batch/:sessionId/status', authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
 router.post('/quote-batch', authenticate, validateRequest(generateQuoteBatchSchema), generateQuoteBatch);

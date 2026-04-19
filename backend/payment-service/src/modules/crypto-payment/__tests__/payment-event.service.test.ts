@@ -145,4 +145,75 @@ describe('PaymentEventService', () => {
     expect(client.query).toHaveBeenCalledTimes(2);
     expect(result.outboxEvent.event_id).toBe('evt-1');
   });
+
+  it('writes one payment row and one outbox event per order for batch submit', async () => {
+    const queries: Array<{ text: string; params?: unknown[] }> = [];
+    let paymentId = 10;
+    const client: { query: jest.Mock } = {
+      query: jest.fn().mockImplementation(async (text: string, params?: unknown[]) => {
+        queries.push({ text, params });
+
+        if (text.includes('SELECT * FROM payments WHERE order_id')) {
+          return { rows: [] };
+        }
+
+        if (text.includes('INSERT INTO payments')) {
+          paymentId += 1;
+          return {
+            rows: [{
+              payment_id: paymentId,
+              order_id: params?.[0],
+              tx_hash: params?.[1],
+              chain_id: params?.[2],
+              status: 'pending',
+              user_id: params?.[5],
+            }],
+          };
+        }
+
+        if (text.includes('INSERT INTO payment_outbox')) {
+          return { rows: [{ event_id: `evt-${paymentId}` }] };
+        }
+
+        return { rows: [] };
+      }),
+    };
+    const withTransaction = async <T>(callback: (txClient: typeof client) => Promise<T>): Promise<T> => callback(client);
+
+    const service = new PaymentEventService({
+      withTransaction,
+      now: () => new Date('2026-04-19T12:00:00.000Z'),
+    });
+
+    const result = await service.recordSubmittedBatch([
+      {
+        orderId: 42,
+        sessionId: 'batch-session-1',
+        txHash: '0xabc',
+        chainId: 31337,
+        userId: 7,
+        amount: 75,
+        tokenId: 9,
+        fromAddress: '0xbuyer',
+        toAddress: '0xescrow',
+      },
+      {
+        orderId: 43,
+        sessionId: 'batch-session-1',
+        txHash: '0xabc',
+        chainId: 31337,
+        userId: 7,
+        amount: 75,
+        tokenId: 9,
+        fromAddress: '0xbuyer',
+        toAddress: '0xescrow',
+      },
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((entry) => entry.payment.order_id)).toEqual([42, 43]);
+    expect(result.every((entry) => entry.outboxEvent.event_type === PAYMENT_EVENT_TYPES.SUBMITTED)).toBe(true);
+    expect(queries.filter((entry) => entry.text.includes('INSERT INTO payments'))).toHaveLength(2);
+    expect(queries.filter((entry) => entry.text.includes('INSERT INTO payment_outbox'))).toHaveLength(2);
+  });
 });
