@@ -44,6 +44,7 @@ jobs:
               - 'backend/ai-service/**'
             db-migrator:
               - 'init_database.sql/**'
+              - 'payment_init_database.sql/**'
             tokenization:
               - 'backend/tokenization-service/**'
             docker:
@@ -326,7 +327,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "docker/docker-compose.prod.yml,init_database.sql/schema.sql,init_database.sql/seed.sql,init_database.sql/db-migrate.sh,init_database.sql/migrations/"
+          source: "docker/docker-compose.prod.yml,init_database.sql/schema.sql,init_database.sql/seed.sql,init_database.sql/db-migrate.sh,init_database.sql/migrations/,payment_init_database.sql/"
           target: "/root/services/FinalYear/"
           overwrite: true
 
@@ -374,6 +375,12 @@ jobs:
             load_image_tags() {
               set -a
               [ -f "$TAG_ENV_FILE" ] && . "./$TAG_ENV_FILE"
+              set +a
+            }
+
+            load_runtime_env() {
+              set -a
+              [ -f ".env" ] && . "./.env"
               set +a
             }
 
@@ -429,6 +436,31 @@ jobs:
               echo "=== Migration logs ==="
               docker logs marketplace-db-migrator 2>&1 | tail -25
               echo "====================="
+
+              echo ""
+              echo "=== Applying payment_db migrations ==="
+              load_runtime_env
+              PAYMENT_DB_CONTAINER="marketplace-payment-postgres"
+              PAYMENT_DB_NAME="payment_db"
+              PAYMENT_MIGRATIONS="
+                ../payment_init_database.sql/02_add_tx_hash_unique.sql
+                ../payment_init_database.sql/03_payment_event_infra.sql
+                ../payment_init_database.sql/04_payment_batch_session_infra.sql
+              "
+
+              for f in $PAYMENT_MIGRATIONS; do
+                if [ ! -f "$f" ]; then
+                  echo "  Skipping missing payment migration: $f"
+                  continue
+                fi
+
+                echo "  → Applying $(basename "$f") to ${PAYMENT_DB_NAME}"
+                docker exec -i "$PAYMENT_DB_CONTAINER" \
+                  env PGPASSWORD="${POSTGRES_PASSWORD}" \
+                  psql -U "${POSTGRES_USER:-postgres}" -d "${PAYMENT_DB_NAME}" -v ON_ERROR_STOP=1 \
+                  < "$f"
+              done
+              echo "=== payment_db migrations complete ==="
             else
               echo "[2/3] No DB changes — skipping migrations"
             fi
