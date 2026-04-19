@@ -21,6 +21,7 @@ const dataCache: Record<string, PriceData> = {};
 
 interface PriceState {
   prices: Record<string, PriceData>;
+  displaySnapshotPrices: Record<string, PriceData>;
   isConnected: boolean;
   ws: null;
 
@@ -32,6 +33,7 @@ interface PriceState {
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let jitterTimer: ReturnType<typeof setInterval> | null = null;
+let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 let pollSymbols: string[] = [];
 
 /** Tiny noise: ±0.005% around the real price — subtle breathing */
@@ -40,8 +42,26 @@ const applyJitter = (real: number): number => {
   return real * (1 + noise * 0.00005);       // ±0.005% — barely noticeable
 };
 
+const buildDisplaySnapshot = (): Record<string, PriceData> => {
+  const snapshot: Record<string, PriceData> = {};
+
+  for (const sym of pollSymbols) {
+    const base = dataCache[sym];
+    const real = realPriceCache[sym];
+    if (!base) continue;
+
+    snapshot[sym] = {
+      ...base,
+      price: Number.isFinite(real) && real > 0 ? real : base.price,
+    };
+  }
+
+  return snapshot;
+};
+
 export const usePriceStore = create<PriceState>()((set, get) => ({
   prices: {},
+  displaySnapshotPrices: {},
   isConnected: false,
   ws: null,
 
@@ -64,6 +84,7 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
 
     if (pollTimer) clearInterval(pollTimer);
     if (jitterTimer) clearInterval(jitterTimer);
+    if (snapshotTimer) clearInterval(snapshotTimer);
 
     const fetchAll = async () => {
       try {
@@ -94,8 +115,17 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
           dataCache[d.symbol] = entry;
         }
 
+        const currentSnapshot = get().displaySnapshotPrices;
+        const seededSnapshot = buildDisplaySnapshot();
+
         set((state) => ({
           prices: { ...state.prices, ...updates },
+          displaySnapshotPrices: {
+            ...state.displaySnapshotPrices,
+            ...Object.fromEntries(
+              Object.entries(seededSnapshot).filter(([symbol]) => !currentSnapshot[symbol])
+            ),
+          },
           isConnected: true,
         }));
       } catch {
@@ -124,12 +154,22 @@ export const usePriceStore = create<PriceState>()((set, get) => ({
       }
     }, 2000);
 
+    snapshotTimer = setInterval(() => {
+      const snapshot = buildDisplaySnapshot();
+      if (Object.keys(snapshot).length > 0) {
+        set((state) => ({
+          displaySnapshotPrices: { ...state.displaySnapshotPrices, ...snapshot },
+        }));
+      }
+    }, 30000);
+
     set({ isConnected: true });
   },
 
   disconnect: () => {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     if (jitterTimer) { clearInterval(jitterTimer); jitterTimer = null; }
+    if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
     set({ isConnected: false });
   },
 }));

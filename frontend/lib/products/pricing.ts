@@ -8,6 +8,24 @@ import {
   ProductUpsertAcceptedTokenPayload,
 } from './types';
 
+interface MarketQuotePrice {
+  price: number;
+}
+
+interface BuildLiveUsdtEstimateInput {
+  tokenSymbol?: string | null;
+  tokenAmount?: string | number | null;
+  basePriceUsd?: string | number | null;
+  marketPrices?: Record<string, MarketQuotePrice | undefined>;
+}
+
+interface LiveUsdtEstimate {
+  displayAmount: string;
+  numericAmount: number;
+  source: 'market' | 'fallback' | 'token-usdt';
+  quoteSymbol: string | null;
+}
+
 function normalizeAmount(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
@@ -38,6 +56,59 @@ export function formatTokenAmountOnly(amount: string | number | null | undefined
     minimumFractionDigits: 0,
     maximumFractionDigits: numeric >= 1 ? 4 : 8,
   });
+}
+
+function toNumericValue(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const numeric = typeof value === 'number' ? value : Number(String(value).replace(/,/g, '').trim());
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatUsdtDisplay(value: number): string {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export function resolveMarketQuoteSymbol(symbol: string | null | undefined): string | null {
+  const normalized = String(symbol ?? '').trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === 'USDT') return 'USDT';
+  return `${normalized}USDT`;
+}
+
+export function buildLiveUsdtEstimate(input: BuildLiveUsdtEstimateInput): LiveUsdtEstimate {
+  const quoteSymbol = resolveMarketQuoteSymbol(input.tokenSymbol);
+  const tokenAmount = toNumericValue(input.tokenAmount);
+  const basePriceUsd = toNumericValue(input.basePriceUsd);
+
+  if (quoteSymbol === 'USDT') {
+    return {
+      displayAmount: formatUsdtDisplay(tokenAmount || basePriceUsd),
+      numericAmount: tokenAmount || basePriceUsd,
+      source: 'token-usdt',
+      quoteSymbol,
+    };
+  }
+
+  const marketQuote = quoteSymbol ? input.marketPrices?.[quoteSymbol] : null;
+  if (marketQuote && Number.isFinite(marketQuote.price) && marketQuote.price > 0 && tokenAmount > 0) {
+    const estimated = tokenAmount * marketQuote.price;
+    return {
+      displayAmount: formatUsdtDisplay(estimated),
+      numericAmount: estimated,
+      source: 'market',
+      quoteSymbol,
+    };
+  }
+
+  return {
+    displayAmount: formatUsdtDisplay(basePriceUsd),
+    numericAmount: basePriceUsd,
+    source: 'fallback',
+    quoteSymbol,
+  };
 }
 
 export function normalizeAcceptedTokensForDisplay(tokens: ProductAcceptedTokenView[]): ProductPricingDisplayRow[] {

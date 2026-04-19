@@ -18,9 +18,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { CoinImage } from '@/components/ui/CoinImage';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
-import { formatUSD, formatCrypto } from '@/lib/utils/format-price';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { formatUSD } from '@/lib/utils/format-price';
+import { getOrderPricingDisplay, resolveOrderProductImage } from '@/lib/orders/presentation';
 
 /* ─── Types ───────────────────────────────────────────────────── */
 interface Order {
@@ -51,6 +52,7 @@ const STATUS_CONFIG: Record<string, {
 }> = {
   UNPAID: { labelKey: 'orders.statusUnpaid', textColor: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', icon: Clock, step: 0 },
   TX_SUBMITTED: { labelKey: 'orders.statusTxSubmitted', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: Clock, step: 1 },
+  ONCHAIN_PENDING: { labelKey: 'orders.statusTxSubmitted', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: Clock, step: 1 },
   ONCHAIN_CONFIRMED: { labelKey: 'orders.statusOnchainConfirmed', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
   PAYMENT_VALIDATED: { labelKey: 'orders.statusPaymentValidated', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
   PAID: { labelKey: 'orders.statusPaid', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 2 },
@@ -59,6 +61,7 @@ const STATUS_CONFIG: Record<string, {
   SHIPPED: { labelKey: 'orders.statusShipped', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
   DELIVERED: { labelKey: 'orders.statusDelivered', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 4 },
   COMPLETED: { labelKey: 'orders.statusCompleted', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: Star, step: 4 },
+  TX_FAILED: { labelKey: 'orders.statusCancelled', textColor: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/30', icon: XCircle, step: -1 },
   DISPUTED: { labelKey: 'orders.statusDisputed', textColor: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/30', icon: AlertTriangle, step: -1 },
   CANCELLED: { labelKey: 'orders.statusCancelled', textColor: 'text-gray-500', bgColor: 'bg-gray-500/10', borderColor: 'border-gray-500/30', icon: XCircle, step: -1 },
   REFUNDED: { labelKey: 'orders.statusRefunded', textColor: 'text-purple-400', bgColor: 'bg-purple-500/10', borderColor: 'border-purple-500/30', icon: XCircle, step: -1 },
@@ -66,11 +69,11 @@ const STATUS_CONFIG: Record<string, {
 
 const FILTERS = [
   { value: 'all', labelKey: 'orders.filterAll', statuses: [] as string[] },
-  { value: 'pending', labelKey: 'orders.filterPending', statuses: ['UNPAID', 'TX_SUBMITTED'] },
+  { value: 'pending', labelKey: 'orders.filterPending', statuses: ['UNPAID', 'TX_SUBMITTED', 'ONCHAIN_PENDING'] },
   { value: 'active', labelKey: 'orders.filterActive', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PROCESSING'] },
   { value: 'shipping', labelKey: 'orders.filterShipping', statuses: ['DELIVERING', 'SHIPPED'] },
   { value: 'done', labelKey: 'orders.filterDone', statuses: ['DELIVERED', 'COMPLETED'] },
-  { value: 'issue', labelKey: 'orders.filterIssue', statuses: ['CANCELLED', 'REFUNDED', 'DISPUTED'] },
+  { value: 'issue', labelKey: 'orders.filterIssue', statuses: ['CANCELLED', 'REFUNDED', 'DISPUTED', 'TX_FAILED'] },
 ];
 
 const JOURNEY_KEYS = ['orders.journeyOrder', 'orders.journeyPayment', 'orders.journeyConfirm', 'orders.journeyShipping', 'orders.journeyComplete'];
@@ -107,20 +110,18 @@ function JourneyBar({ status }: { status: string }) {
 function OrderCard({ order, index }: { order: Order; index: number }) {
   const [imgError, setImgError] = useState(false);
   const { t } = useClientTranslation();
-  const imgSrc = order.primary_image
-    || order.product_metadata?.primaryImage
-    || order.product_metadata?.images?.[0]
-    || null;
+  const imgSrc = resolveOrderProductImage(order);
 
   const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.UNPAID;
   const StatusIcon = cfg.icon;
-
-  const tokenAmount = order.amount_token
-    ?? (order.price_in_token ? Number(order.price_in_token) * order.quantity : null);
-  const priceIsToken = !!(tokenAmount && order.token_symbol);
-  const priceLabel = priceIsToken
-    ? `${formatCrypto(Number(tokenAmount), order.token_symbol!)} ${order.token_symbol}`
-    : formatUSD(Number(order.price_usd ?? order.total_amount ?? 0));
+  const pricingDisplay = getOrderPricingDisplay({
+    token_symbol: order.token_symbol,
+    subtotal_token: order.amount_token ?? (order.price_in_token ? Number(order.price_in_token) * order.quantity : null),
+    amount_token: order.amount_token,
+    price_usd: order.price_usd ?? order.total_amount ?? 0,
+    primary_image: order.primary_image,
+    product_metadata: order.product_metadata,
+  });
 
   const orderId = order.internal_order_id || order.order_id;
   const showJourney = cfg.step >= 0 && cfg.step <= 4;
@@ -182,15 +183,27 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
 
               {/* Bottom row: price + arrow */}
               <div className="flex items-end justify-between mt-2">
-                {priceIsToken ? (
-                  <span className={`text-xl font-black font-mono text-[#f0b90b] flex items-center gap-1.5`}>
-                    <CoinImage symbol={order.token_symbol!} size={20} className="rounded-full" />
-                    {formatCrypto(Number(tokenAmount), order.token_symbol!)} {order.token_symbol}
-                  </span>
+                {pricingDisplay.mode === 'token' && pricingDisplay.tokenSymbol && pricingDisplay.tokenAmountLabel ? (
+                  <div className="flex flex-col gap-1">
+                    <TokenAmountInline
+                      amount={pricingDisplay.tokenAmountLabel}
+                      symbol={pricingDisplay.tokenSymbol}
+                      size="lg"
+                      className="text-[#f0b90b]"
+                      amountClassName="text-[#f0b90b]"
+                    />
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>≈</span>
+                      <UsdtAmountInline amount={pricingDisplay.usdAmount} size="sm" />
+                    </div>
+                  </div>
                 ) : (
-                  <span className="text-xl font-black font-mono text-[#8247e5]">
-                    {formatUSD(Number(order.price_usd ?? order.total_amount ?? 0))}
-                  </span>
+                  <UsdtAmountInline
+                    amount={pricingDisplay.usdAmount}
+                    size="lg"
+                    className="text-[#8247e5]"
+                    amountClassName="text-[#8247e5]"
+                  />
                 )}
                 <span className="text-[#8247e5] opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-bold transition-all -translate-x-2 group-hover:translate-x-0">
                   {t('orders.details')} <ArrowRight className="w-3.5 h-3.5" />
@@ -275,7 +288,7 @@ export default function OrdersPage() {
   // Summary stats
   const totalSpentUSD = orders.reduce((s, o) => s + Number(o.price_usd ?? o.total_amount ?? 0), 0);
   const completedCount = orders.filter(o => ['COMPLETED', 'DELIVERED'].includes(o.status)).length;
-  const pendingCount = orders.filter(o => ['UNPAID', 'TX_SUBMITTED'].includes(o.status)).length;
+  const pendingCount = orders.filter(o => ['UNPAID', 'TX_SUBMITTED', 'ONCHAIN_PENDING'].includes(o.status)).length;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

@@ -23,6 +23,8 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseUnits, formatUnits, erc20Abi, type Address } from 'viem';
 import { CoinImage } from '@/components/ui/CoinImage';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { resolveCheckoutProductImage } from '@/lib/checkout/images';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
 import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
 
@@ -54,7 +56,11 @@ interface Order {
   product_name: string; quantity: number; price_usd: number;
   total_amount?: number; status: string; payment_method: string | null;
   buyer_name: string; seller_name: string;
-  product_metadata: { images?: string[]; accepted_tokens?: { crypto?: string[]; fiat?: string[] } };
+  primary_image?: string | null;
+  product_metadata: {
+    images?: Array<string | { url?: string; image_url?: string; sort_order?: number; is_primary?: boolean }>;
+    accepted_tokens?: { crypto?: string[]; fiat?: string[] };
+  };
 }
 
 interface CryptoQuote {
@@ -222,7 +228,7 @@ export default function CheckoutPage() {
   const [redirectIn, setRedirectIn] = useState<number | null>(null);
   const [confirmCount, setConfirmCount] = useState(0);    // live confirmation counter
   const [payError, setPayError] = useState<string | null>(null);
-  const [gasEstimate, setGasEstimate] = useState<{ gas: string; usd: string } | null>(null);
+  const [gasEstimate, setGasEstimate] = useState<{ amount: string; symbol: string; usdAmount: number } | null>(null);
   const [gasLoading, setGasLoading] = useState(false);
 
   // Quote timer
@@ -304,12 +310,12 @@ export default function CheckoutPage() {
           if (tokens?.length) setSelectedToken(tokens[0]);
 
           // Fetch product image if metadata has none
-          const hasImg = o.product_metadata?.images?.length > 0;
+          const hasImg = Boolean(resolveCheckoutProductImage(o));
           if (!hasImg && o.product_id) {
             apiClient.get(`/api/products/${o.product_id}`)
               .then(pr => {
-                const imgs = pr.data?.product?.images || pr.data?.product?.product_metadata?.images;
-                if (imgs?.length) setProductImage(imgs[0]);
+                const resolvedImage = resolveCheckoutProductImage(null, pr.data?.product ?? null);
+                if (resolvedImage) setProductImage(resolvedImage);
               })
               .catch(() => { });
           }
@@ -380,8 +386,9 @@ export default function CheckoutPage() {
 
           const gasCostUsd = gasCostNative * nativePrice;
           setGasEstimate({
-            gas: `${gasCostNative.toFixed(6)} ${nativeSym}`,
-            usd: `~${formatUSD(gasCostUsd)}`,
+            amount: gasCostNative.toFixed(6),
+            symbol: nativeSym,
+            usdAmount: gasCostUsd,
           });
         } catch (e) {
           // Gas estimation may fail if wrong chain — silently ignore
@@ -550,7 +557,17 @@ export default function CheckoutPage() {
   );
 
   const totalUSD = Number(order.total_amount || order.price_usd);
-  const estimatedCrypto = coinPrice ? (totalUSD / coinPrice).toFixed(6) : '...';
+  const selectedTokenPrice = quote?.token_price || coinPrice || null;
+  const estimatedCrypto = selectedTokenPrice ? (totalUSD / selectedTokenPrice).toFixed(6) : '...';
+  const platformFeeUsd = totalUSD > Number(order.price_usd)
+    ? totalUSD - Number(order.price_usd)
+    : calcPlatformFee(Number(order.price_usd));
+  const productTokenAmount = selectedTokenPrice ? (Number(order.price_usd) / selectedTokenPrice).toFixed(6) : '...';
+  const platformFeeTokenAmount = selectedTokenPrice ? (platformFeeUsd / selectedTokenPrice).toFixed(6) : '...';
+  const checkoutProductImage = resolveCheckoutProductImage(
+    order,
+    productImage ? { primary_image: productImage } : null,
+  );
 
   /* ─────────────────────────────────────────────────────────────────────── */
   return (
@@ -610,8 +627,8 @@ export default function CheckoutPage() {
                 onClick={() => step > 1 && setStep(1)}
               >
                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
-                  {(order.product_metadata?.images?.[0] || productImage)
-                    ? <img src={order.product_metadata?.images?.[0] || productImage!} alt={order.product_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
+                  {checkoutProductImage
+                    ? <img src={checkoutProductImage} alt={order.product_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
                     : <div className="w-full h-full flex items-center justify-center"><Package className="w-6 h-6 text-muted-foreground" /></div>}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -620,8 +637,13 @@ export default function CheckoutPage() {
                   <p className="text-xs text-muted-foreground">Số lượng: {order.quantity}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xl font-black text-[#f0b90b]">{estimatedCrypto} <span className="text-sm">{selectedToken}</span></p>
-                  <p className="text-[10px] text-muted-foreground">≈ {formatUSD(totalUSD)}</p>
+                  <div className="flex flex-col items-end gap-1">
+                    <TokenAmountInline amount={estimatedCrypto} symbol={selectedToken} size="lg" amountClassName="text-[#f0b90b]" />
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span aria-hidden="true">≈</span>
+                      <UsdtAmountInline amount={totalUSD} size="sm" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -780,8 +802,11 @@ export default function CheckoutPage() {
                   <div className="p-4 bg-background border border-border rounded-xl flex items-center justify-between">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Ước tính cần trả</p>
-                      <p className="text-xl font-black font-mono">{estimatedCrypto} <span className="text-sm text-[#f0b90b]">{selectedToken}</span></p>
-                      <p className="text-xs text-muted-foreground mt-0.5">≈ {formatUSD(totalUSD)}</p>
+                      <TokenAmountInline amount={estimatedCrypto} symbol={selectedToken} size="lg" amountClassName="text-[#f0b90b]" />
+                      <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <span aria-hidden="true">≈</span>
+                        <UsdtAmountInline amount={totalUSD} size="sm" />
+                      </div>
                     </div>
                     <RefreshCw className="w-4 h-4 text-muted-foreground" />
                   </div>
@@ -862,12 +887,20 @@ export default function CheckoutPage() {
                   <div className="flex items-center justify-between p-4 bg-background border border-border rounded-xl">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Số tiền thanh toán</p>
-                      <p className="text-2xl font-black font-mono">{quote.amount_token.toFixed(6)}</p>
-                      <p className="text-sm font-bold text-[#f0b90b]">{selectedToken}</p>
+                      <TokenAmountInline amount={quote.amount_token.toFixed(6)} symbol={selectedToken} size="lg" amountClassName="text-[#f0b90b]" />
                     </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      <p>≈ {formatUSD(totalUSD)}</p>
-                      {quote.token_price > 0 && <p>1 {selectedToken} = {formatUSD(quote.token_price)}</p>}
+                    <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <span aria-hidden="true">≈</span>
+                        <UsdtAmountInline amount={totalUSD} size="sm" />
+                      </div>
+                      {quote.token_price > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          <TokenAmountInline amount="1" symbol={selectedToken} size="sm" />
+                          <span className="text-muted-foreground/70">=</span>
+                          <UsdtAmountInline amount={quote.token_price} size="sm" />
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -883,9 +916,12 @@ export default function CheckoutPage() {
                         <span>Đang tính...</span>
                       </div>
                     ) : gasEstimate ? (
-                      <div className="text-right">
-                        <p className="text-xs font-semibold text-amber-400">{gasEstimate.gas}</p>
-                        <p className="text-[10px] text-muted-foreground">{gasEstimate.usd}</p>
+                      <div className="flex flex-col items-end gap-1 text-right">
+                        <TokenAmountInline amount={gasEstimate.amount} symbol={gasEstimate.symbol} size="sm" amountClassName="text-amber-400" />
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span aria-hidden="true">≈</span>
+                          <UsdtAmountInline amount={gasEstimate.usdAmount} size="sm" />
+                        </div>
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground">—</p>
@@ -1177,10 +1213,10 @@ export default function CheckoutPage() {
 
                 {/* Product image */}
                 <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-muted">
-                  {(order.product_metadata?.images?.[0] || productImage) ? (
+                  {checkoutProductImage ? (
                     <>
                       <img
-                        src={order.product_metadata?.images?.[0] || productImage!}
+                        src={checkoutProductImage}
                         alt={order.product_name}
                         className="w-full h-full object-cover"
                         onError={e => { e.currentTarget.style.display = 'none'; }}
@@ -1201,20 +1237,30 @@ export default function CheckoutPage() {
 
                 {/* Invoice */}
                 <div className="space-y-2 text-sm">
-                  {[
-                    { label: 'Số lượng', val: `× ${order.quantity}` },
-                    { label: 'Giá sản phẩm', val: coinPrice ? `${(Number(order.price_usd) / coinPrice).toFixed(6)} ${selectedToken}` : `${estimatedCrypto} ${selectedToken}` },
-                    { label: `Phí nền tảng (${PLATFORM_FEE_LABEL})`, val: coinPrice ? `${(calcPlatformFee(totalUSD) / coinPrice).toFixed(6)} ${selectedToken}` : formatUSD(calcPlatformFee(totalUSD)) },
-                    { label: 'Phí giao dịch', val: 'Miễn phí', green: true },
-                  ].map(r => (
-                    <div key={r.label} className="flex justify-between text-muted-foreground pb-2 border-b border-border">
-                      <span>{r.label}</span>
-                      <span className={`font-semibold ${r.green ? 'text-emerald-400' : 'text-foreground'}`}>{r.val}</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-muted-foreground pb-2 border-b border-border">
+                    <span>Số lượng</span>
+                    <span className="font-semibold text-foreground">× {order.quantity}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-3 text-muted-foreground pb-2 border-b border-border">
+                    <span>Giá sản phẩm</span>
+                    <TokenAmountInline amount={productTokenAmount} symbol={selectedToken} size="md" />
+                  </div>
+                  <div className="flex justify-between items-center gap-3 text-muted-foreground pb-2 border-b border-border">
+                    <span>Phí nền tảng ({PLATFORM_FEE_LABEL})</span>
+                    <TokenAmountInline amount={platformFeeTokenAmount} symbol={selectedToken} size="md" />
+                  </div>
+                  <div className="flex justify-between text-muted-foreground pb-2 border-b border-border">
+                    <span>Phí giao dịch</span>
+                    <span className="font-semibold text-emerald-400">Miễn phí</span>
+                  </div>
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-bold">Tổng thanh toán</span>
-                    <span className="text-lg font-black text-[#f0b90b]">{estimatedCrypto} {selectedToken}</span>
+                    <TokenAmountInline
+                      amount={quote ? quote.amount_token.toFixed(6) : estimatedCrypto}
+                      symbol={selectedToken}
+                      size="lg"
+                      amountClassName="text-[#f0b90b]"
+                    />
                   </div>
                 </div>
 

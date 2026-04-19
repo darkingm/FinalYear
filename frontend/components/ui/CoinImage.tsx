@@ -30,6 +30,16 @@
 
 import { useState, useMemo } from 'react';
 
+function normalizeCoinSymbol(symbol: string): string {
+    const upper = (symbol || '').toUpperCase().replace(/_LOCAL$/, '').trim();
+    if (!upper) return '';
+    if (upper === 'USDT') return upper;
+    if (upper.endsWith('USDT') && upper.length > 4) {
+        return upper.slice(0, -4);
+    }
+    return upper;
+}
+
 // ── Brand colors ─────────────────────────────────────────────────────────────
 const COIN_COLORS: Record<string, string> = {
     BTC: '#f7931a', ETH: '#627eea', BNB: '#f0b90b', SOL: '#9945ff',
@@ -212,7 +222,7 @@ const CRYPTOLOGOS: Record<string, string> = {
 // ── Build the fallback URL list for a given symbol ────────────────────────────
 function buildFallbacks(symbol: string): string[] {
     if (!symbol) return [];
-    const up = symbol.toUpperCase().replace(/USDT$/, '').replace(/_LOCAL$/, '').trim();
+    const up = normalizeCoinSymbol(symbol);
     if (!up) return [];
 
     const list: string[] = [];
@@ -255,7 +265,7 @@ interface CoinImageProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function CoinImage({ symbol, size = 24, className = '', alt }: CoinImageProps) {
     const upper = useMemo(
-        () => (symbol || '').toUpperCase().replace(/USDT$/, '').replace(/_LOCAL$/, '').trim(),
+        () => normalizeCoinSymbol(symbol),
         [symbol]
     );
     const fallbacks = useMemo(() => buildFallbacks(upper), [upper]);

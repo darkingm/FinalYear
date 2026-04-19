@@ -298,11 +298,19 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
 
     const result = await query(
       `SELECT o.*, p.name AS product_name, p.metadata AS product_metadata,
-              buyer.username AS buyer_name, seller_u.username AS seller_name
+              tw.symbol AS token_symbol,
+              buyer.username AS buyer_name, seller_u.username AS seller_name,
+              COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
-       LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
-       LEFT JOIN users seller_u ON o.seller_id = seller_u.user_id
+       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+        LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
+        LEFT JOIN users seller_u ON o.seller_id = seller_u.user_id
+       LEFT JOIN LATERAL (
+         SELECT image_url FROM product_images
+         WHERE product_id = p.product_id
+         ORDER BY is_primary DESC, sort_order ASC LIMIT 1
+       ) pi ON true
        WHERE o.internal_order_id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)`,
       [internalOrderId, userId]
     );

@@ -8,10 +8,10 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { signOut } from 'next-auth/react';
 import { useDisconnect, useAccount } from 'wagmi';
 import {
-  Menu, X, ShoppingBag, Wallet, Package,
-  LogOut, User, Shield, Bell, Home,
-  TrendingUp, Zap, BarChart3, ChevronDown, Copy, Check,
-  Building, Brain, Fish, Activity,
+  Menu, X, Wallet, Package,
+  LogOut, User, Shield, Bell,
+  Zap, BarChart3, ChevronDown, Copy, Check,
+  Fish,
 } from 'lucide-react';
 import { useState, useEffect, memo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -30,6 +30,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Separator } from '@/components/ui/separator';
 import { WhaleAlertBadge } from '@/components/whale-tracker/WhaleAlertBadge';
 import { WhalePanelSlideOver } from '@/components/whale-tracker/WhalePanelSlideOver';
+import {
+  buildHeaderNavGroups,
+  HEADER_HOME_ITEM,
+  isHeaderNavGroupActive,
+  isHeaderNavItemActive,
+  resolveHeaderNavHref,
+} from '@/lib/navigation/header-nav';
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * TickerItem — isolated memo component, only re-renders for its OWN symbol
@@ -139,30 +146,8 @@ export function Header() {
 
   const handleLogout = () => { disconnect(); signOut({ callbackUrl: '/' }); };
 
-  // Click handler for auth-required links — redirect to login if not logged in
-  const handleAuthLink = (href: string) => (e: React.MouseEvent) => {
-    if (!isAuthenticated) {
-      e.preventDefault();
-      router.push(`/login?callbackUrl=${encodeURIComponent(href)}`);
-    }
-  };
-
-  const navLinks = [
-    { href: '/', label: 'Trang chủ', icon: Home, authRequired: false },
-    { href: '/products', label: 'Sản phẩm', icon: Package, authRequired: false },
-    { href: '/trading/BTCUSDT', label: 'Giao dịch', icon: TrendingUp, authRequired: false },
-    { href: '/whale-tracker', label: 'On-Chain', icon: Activity, authRequired: false },
-    { href: '/orders', label: 'Đơn hàng', icon: ShoppingBag, authRequired: true },
-    { href: '/wallet', label: 'Ví', icon: Wallet, authRequired: true },
-  ];
-
-  const specialNavLinks = [
-    { href: '/assets', label: 'RWA', icon: Building, authRequired: false },
-    { href: '/profile/credit', label: 'AI Credit', icon: Brain, authRequired: true },
-  ];
-
-  const isActive = (href: string) => href === '/' ? pathname === '/' : pathname?.startsWith(href);
   const isAdmin = (user as any)?.role === 'admin' || (user as any)?.email === 'admin@marketplace.com';
+  const navGroups = buildHeaderNavGroups({ isAdmin });
   const userInitials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U';
 
   const headerBg = scrolled
@@ -191,51 +176,93 @@ export function Header() {
               </Link>
 
               {/* Desktop Nav */}
-              <nav className="hidden lg:flex items-center gap-0.5">
-                {navLinks.map((link) => {
-                  const show = !link.authRequired || isAuthenticated;
-                  if (!show) return null;
+              <nav className="hidden lg:flex items-center gap-1.5">
+                <Link
+                  href={resolveHeaderNavHref(HEADER_HOME_ITEM, isAuthenticated)}
+                  className={`relative inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-200 ${
+                    isHeaderNavItemActive(HEADER_HOME_ITEM, pathname)
+                      ? 'bg-[#8247e5]/10 text-[#8247e5]'
+                      : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'
+                  }`}
+                >
+                  <HEADER_HOME_ITEM.icon className="h-3.5 w-3.5" />
+                  {HEADER_HOME_ITEM.label}
+                </Link>
+
+                {navGroups.map((group) => {
+                  const GroupIcon = group.icon;
+                  const groupActive = isHeaderNavGroupActive(group, pathname);
+
                   return (
-                    <Link key={link.href} href={link.href}
-                      className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
-                        ? 'text-[#8247e5] bg-[#8247e5]/10'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                        }`}>
-                      {link.icon && <link.icon className="w-3.5 h-3.5" />}
-                      {link.label}
-                    </Link>
+                    <DropdownMenu key={group.key}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className={`relative inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-200 ${
+                            groupActive
+                              ? 'bg-[#8247e5]/10 text-[#8247e5]'
+                              : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'
+                          }`}
+                        >
+                          <GroupIcon className="h-3.5 w-3.5" />
+                          {group.label}
+                          <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-[340px] rounded-2xl border-border/80 p-2">
+                        <DropdownMenuLabel className="px-3 pb-2 pt-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#8247e5]/10 text-[#8247e5]">
+                              <GroupIcon className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-foreground">{group.label}</p>
+                              <p className="text-[11px] text-muted-foreground">Nhóm điều hướng liên quan</p>
+                            </div>
+                          </div>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <div className="space-y-1 p-1">
+                          {group.items.map((item) => {
+                            const href = resolveHeaderNavHref(item, isAuthenticated);
+                            const itemActive = isHeaderNavItemActive(item, pathname);
+
+                            return (
+                              <DropdownMenuItem key={item.href} asChild className="cursor-pointer rounded-xl p-0 focus:bg-transparent">
+                                <Link
+                                  href={href}
+                                  className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 transition-colors ${
+                                    itemActive
+                                      ? 'bg-[#8247e5]/10 text-[#8247e5]'
+                                      : 'hover:bg-accent/10'
+                                  }`}
+                                >
+                                  <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${
+                                    itemActive ? 'bg-[#8247e5]/15 text-[#8247e5]' : 'bg-muted text-muted-foreground'
+                                  }`}>
+                                    <item.icon className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-sm font-semibold ${itemActive ? 'text-[#8247e5]' : 'text-foreground'}`}>
+                                        {item.label}
+                                      </span>
+                                      {item.authRequired && !isAuthenticated ? (
+                                        <span className="rounded-full bg-[#8247e5]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#8247e5]">
+                                          Login
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                                  </div>
+                                </Link>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   );
                 })}
-
-                {/* Special links: always visible, redirect to login if not authed */}
-                {specialNavLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={isAuthenticated ? link.href : `/login?callbackUrl=${encodeURIComponent(link.href)}`}
-                    className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive(link.href)
-                      ? 'text-[#8247e5] bg-[#8247e5]/10'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                      }`}
-                  >
-                    <link.icon className="w-3.5 h-3.5" />
-                    {link.label}
-                    {!isAuthenticated && (
-                      <span className="ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-[#8247e5]/15 text-[#8247e5]">
-                        Login
-                      </span>
-                    )}
-                  </Link>
-                ))}
-
-                {isAdmin && (
-                  <Link href="/admin"
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${pathname?.startsWith('/admin')
-                      ? 'text-[#8247e5] bg-[#8247e5]/10'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                      }`}>
-                    <Shield className="w-3.5 h-3.5" /> Admin
-                  </Link>
-                )}
               </nav>
 
               <div className="flex-1" />
@@ -457,40 +484,68 @@ export function Header() {
             <div className="lg:hidden border-t border-border bg-background animate-fade-in">
               <div className="container mx-auto px-4 py-4 space-y-3">
                 <nav className="flex flex-col gap-1">
-                  {navLinks.map((link) => {
-                    const href = (!link.authRequired || isAuthenticated)
-                      ? link.href
-                      : `/login?callbackUrl=${encodeURIComponent(link.href)}`;
-                    return (
-                      <Link key={link.href} href={href}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(link.href) ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-                          }`}
-                        onClick={() => setMobileMenuOpen(false)}>
-                        {link.icon && <link.icon className="w-4 h-4" />}
-                        {link.label}
-                      </Link>
-                    );
-                  })}
-                  {/* Special nav links in mobile too */}
-                  {specialNavLinks.map((link) => {
-                    const href = isAuthenticated ? link.href : `/login?callbackUrl=${encodeURIComponent(link.href)}`;
-                    return (
-                      <Link key={link.href} href={href}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(link.href) ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'}`}
-                        onClick={() => setMobileMenuOpen(false)}>
-                        <link.icon className="w-4 h-4" />
-                        {link.label}
-                        {!isAuthenticated && <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#8247e5]/15 text-[#8247e5]">Login</span>}
-                      </Link>
-                    );
-                  })}
-                  {isAdmin && (
-                    <Link href="/admin"
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/10"
-                      onClick={() => setMobileMenuOpen(false)}>
-                      <Shield className="w-4 h-4" /> Admin Panel
-                    </Link>
-                  )}
+                  <Link
+                    href={resolveHeaderNavHref(HEADER_HOME_ITEM, isAuthenticated)}
+                    className={`flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${
+                      isHeaderNavItemActive(HEADER_HOME_ITEM, pathname)
+                        ? 'bg-[#8247e5]/10 text-[#8247e5]'
+                        : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${
+                      isHeaderNavItemActive(HEADER_HOME_ITEM, pathname)
+                        ? 'bg-[#8247e5]/15 text-[#8247e5]'
+                        : 'bg-muted text-muted-foreground'
+                    }`}>
+                      <HEADER_HOME_ITEM.icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className={`font-semibold ${
+                        isHeaderNavItemActive(HEADER_HOME_ITEM, pathname) ? 'text-[#8247e5]' : 'text-foreground'
+                      }`}>
+                        {HEADER_HOME_ITEM.label}
+                      </span>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{HEADER_HOME_ITEM.description}</p>
+                    </div>
+                  </Link>
+
+                  {navGroups.map((group) => (
+                    <div key={group.key} className="space-y-1.5">
+                      <div className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/70">
+                        {group.label}
+                      </div>
+                      {group.items.map((item) => {
+                        const href = resolveHeaderNavHref(item, isAuthenticated);
+                        const itemActive = isHeaderNavItemActive(item, pathname);
+
+                        return (
+                          <Link key={item.href} href={href}
+                            className={`flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${
+                              itemActive ? 'bg-[#8247e5]/10 text-[#8247e5]' : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'
+                            }`}
+                            onClick={() => setMobileMenuOpen(false)}>
+                            <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${
+                              itemActive ? 'bg-[#8247e5]/15 text-[#8247e5]' : 'bg-muted text-muted-foreground'
+                            }`}>
+                              <item.icon className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-semibold ${itemActive ? 'text-[#8247e5]' : 'text-foreground'}`}>{item.label}</span>
+                                {item.authRequired && !isAuthenticated ? (
+                                  <span className="rounded-full bg-[#8247e5]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#8247e5]">
+                                    Login
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </nav>
 
                 <div className="flex items-center gap-3 pt-3 border-t border-border">

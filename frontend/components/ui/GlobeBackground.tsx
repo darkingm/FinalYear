@@ -59,11 +59,11 @@ const PRESETS = {
         nightOpacity: 0.7,
     },
     light: {
-        clearColor: 0xdce8f4,   // soft light blue-gray
+        clearColor: 0xffffff,
         ambientColor: 0xffffff, ambientIntens: 2.5,
         sunColor: 0xfff8e7, sunIntens: 6.0,
         sunPos: [3, 2, 3] as [number, number, number],
-        starOpacity: 1.0,       // particles visible — size=0 hides them, swarm logic controls
+        starOpacity: 0.0,
         nightOpacity: 0.0,
     },
 } as const;
@@ -74,8 +74,6 @@ export function GlobeBackground() {
     const rafRef = useRef(0);
 
     useEffect(() => {
-        if (useLightWarp) return;
-
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -93,7 +91,7 @@ export function GlobeBackground() {
             const H = () => window.innerHeight;
 
             /* ── Renderer ────────────────────────────────────────────────── */
-            const R = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+            const R = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
             R.setPixelRatio(dpr);
             R.setSize(W(), H());
 
@@ -276,13 +274,11 @@ export function GlobeBackground() {
 
             let currentTheme: 'dark' | 'light' = getTheme();
             let tickTime = 0;
-            const SWARM_R = 220;   // radius around mouse for particle visibility
-            const SWARM_LG = 14 * dpr; // max particle glow size in swarm
 
             const applyTheme = (t: 'dark' | 'light') => {
                 currentTheme = t;
                 const p = PRESETS[t];
-                R.setClearColor(p.clearColor, 1);
+                R.setClearColor(p.clearColor, t === 'light' ? 0 : 1);
                 ambientLight.color.setHex(p.ambientColor);
                 ambientLight.intensity = p.ambientIntens;
                 sun.color.setHex(p.sunColor);
@@ -295,11 +291,12 @@ export function GlobeBackground() {
                 const src = t === 'light' ? lightStarCol : col;
                 for (let i = 0; i < STAR_N * 3; i++) colA.array[i] = src[i];
                 colA.needsUpdate = true;
-                // Light mode: start with all particles hidden (swarm logic in tick reveals near cursor)
                 if (t === 'light') {
                     for (let i = 0; i < STAR_N; i++) { sz[i] = 0; tgt[i] = 0; }
-                    szA.needsUpdate = true;
+                } else {
+                    for (let i = 0; i < STAR_N; i++) { sz[i] = base[i]; tgt[i] = base[i]; }
                 }
+                szA.needsUpdate = true;
 
                 // ── Light mode: bright earth + clouds ──
                 const isLight = t === 'light';
@@ -364,6 +361,10 @@ export function GlobeBackground() {
                 lastX = e.clientX; lastY = e.clientY;
             };
             const onUp = () => { dragging = false; };
+            const onLeaveWindow = () => {
+                mouseX = -9999;
+                mouseY = -9999;
+            };
 
             /* ── Touch events (mobile) ───────────────────────────────────── */
             const onTouchStart = (e: TouchEvent) => {
@@ -391,6 +392,7 @@ export function GlobeBackground() {
             window.addEventListener('mousedown', onDown);
             window.addEventListener('mousemove', onMove);
             window.addEventListener('mouseup', onUp);
+            window.addEventListener('mouseleave', onLeaveWindow);
             canvas.addEventListener('touchstart', onTouchStart, { passive: true });
             canvas.addEventListener('touchmove', onTouchMove, { passive: false });
             canvas.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -414,21 +416,9 @@ export function GlobeBackground() {
                 // ── Star / Particle rendering ──
                 tickTime += 0.016;
                 if (currentTheme === 'light') {
-                    // LIGHT MODE: vibrant particles only near mouse cursor
-                    // Particles appear within SWARM_R radius, wobble like water droplets
                     for (let i = 0; i < STAR_N; i++) {
-                        const dist = Math.hypot(scrX[i] - mouseX, scrY[i] - mouseY);
-                        if (dist < SWARM_R) {
-                            // Fade factor: 1.0 at center → 0.0 at edge
-                            const fade = (1 - dist / SWARM_R);
-                            // Wobble: each particle oscillates at unique phase/freq
-                            const wobble = 0.7 + 0.3 * Math.sin(tickTime * (2.5 + (i % 7) * 0.4) + i * 1.37);
-                            // Size: bigger near center, wobbling, smooth fade at edge
-                            tgt[i] = fade * fade * SWARM_LG * wobble;
-                        } else {
-                            tgt[i] = 0; // invisible outside radius
-                        }
-                        sz[i] += (tgt[i] - sz[i]) * 0.14; // smooth in/out
+                        tgt[i] = 0;
+                        sz[i] += (tgt[i] - sz[i]) * 0.14;
                     }
                 } else {
                     // DARK MODE: standard star hover glow
@@ -441,6 +431,7 @@ export function GlobeBackground() {
                     }
                 }
                 szA.needsUpdate = true;
+                R.setRenderTarget(null);
                 R.render(scene, camera);
             };
             tick();
@@ -454,6 +445,7 @@ export function GlobeBackground() {
                 window.removeEventListener('mousedown', onDown);
                 window.removeEventListener('mousemove', onMove);
                 window.removeEventListener('mouseup', onUp);
+                window.removeEventListener('mouseleave', onLeaveWindow);
                 canvas.removeEventListener('touchstart', onTouchStart);
                 canvas.removeEventListener('touchmove', onTouchMove);
                 canvas.removeEventListener('touchend', onTouchEnd);
@@ -468,19 +460,19 @@ export function GlobeBackground() {
         };
     }, [useLightWarp]);
 
-    if (useLightWarp) {
-        return <LightWarpBackground />;
-    }
-
     return (
-        <canvas
-            ref={canvasRef}
-            style={{
-                position: 'fixed', inset: 0, width: '100vw', height: '100vh',
-                zIndex: -1, pointerEvents: 'auto', display: 'block',
-                touchAction: 'none',
-            }}
-            aria-hidden
-        />
+        <>
+            <canvas
+                ref={canvasRef}
+                style={{
+                    position: 'fixed', inset: 0, width: '100vw', height: '100vh',
+                    zIndex: -1, pointerEvents: 'auto', display: 'block',
+                    touchAction: 'none',
+                }}
+                data-globe-background="true"
+                aria-hidden
+            />
+            {useLightWarp ? <LightWarpBackground /> : null}
+        </>
     );
 }

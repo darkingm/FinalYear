@@ -21,6 +21,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion } from 'framer-motion';
 import { type Address } from 'viem';
 import { CoinImage } from '@/components/ui/CoinImage';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { PAYMENT_NETWORKS, CHAIN_TOKENS, CHAIN_META } from '@/lib/web3/config';
 import { useCartStore } from '@/store/cart-store';
 
@@ -340,7 +341,8 @@ export default function CartCheckoutPage() {
   }
 
   const totalUSD = getTotal();
-  const estimatedCrypto = coinPrice && coinPrice > 0 ? (totalUSD / coinPrice).toFixed(6) : '...';
+  const selectedTokenPrice = quote?.token_price || coinPrice || null;
+  const estimatedCrypto = selectedTokenPrice ? (totalUSD / selectedTokenPrice).toFixed(6) : '...';
   const displayItems = items.length > 0 ? items : [];
   const orderCount = createdOrderIds.length > 0 ? createdOrderIds.length : items.length;
 
@@ -513,10 +515,11 @@ export default function CartCheckoutPage() {
                   <div className="p-4 bg-background border border-border rounded-xl flex items-center justify-between">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Ước tính cần trả</p>
-                      <p className="text-xl font-black font-mono">
-                        {estimatedCrypto} <span className="text-sm text-[#8247e5]">{selectedToken}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">≈ ${totalUSD.toFixed(2)} USD</p>
+                      <TokenAmountInline amount={estimatedCrypto} symbol={selectedToken} size="lg" amountClassName="text-[#8247e5]" />
+                      <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <span aria-hidden="true">≈</span>
+                        <UsdtAmountInline amount={totalUSD} size="sm" />
+                      </div>
                     </div>
                   </div>
 
@@ -587,12 +590,20 @@ export default function CartCheckoutPage() {
                       <p className="text-xs text-muted-foreground mb-1">
                         Tổng thanh toán gộp ({quote.order_ids.length} đơn hàng)
                       </p>
-                      <p className="text-3xl font-black font-mono">{quote.amount_token_total.toFixed(6)}</p>
-                      <p className="text-sm font-bold text-[#8247e5] mt-0.5">{selectedToken}</p>
+                      <TokenAmountInline amount={quote.amount_token_total.toFixed(6)} symbol={selectedToken} size="lg" amountClassName="text-[#8247e5]" />
                     </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      <p>≈ ${totalUSD.toFixed(2)} USD</p>
-                      {quote.token_price > 0 && <p>1 {selectedToken} = ${quote.token_price.toFixed(4)}</p>}
+                    <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <span aria-hidden="true">≈</span>
+                        <UsdtAmountInline amount={totalUSD} size="sm" />
+                      </div>
+                      {quote.token_price > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          <TokenAmountInline amount="1" symbol={selectedToken} size="sm" />
+                          <span className="text-muted-foreground/70">=</span>
+                          <UsdtAmountInline amount={quote.token_price} size="sm" />
+                        </div>
+                      )}
                     </div>
                   </div>
 

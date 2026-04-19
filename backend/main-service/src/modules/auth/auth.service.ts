@@ -5,6 +5,7 @@ import { query } from '../../config/database';
 import { setCache, getCache, deleteCache } from '../../config/redis';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
+import { getRefreshTokenErrorMessage } from './auth.refresh-logic';
 
 export class AuthService {
   async register(data: {
@@ -189,31 +190,30 @@ export class AuthService {
   }
 
   async refreshToken(refreshToken: string) {
+    let decoded: any;
+
     try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
-
-      // Check if token is blacklisted
-      const blacklisted = await this.isTokenBlacklisted(refreshToken);
-      if (blacklisted) {
-        throw new AppError('Token has been revoked', 401);
-      }
-
-      // Get user
-      const result = await query('SELECT * FROM users WHERE user_id = $1', [decoded.user_id]);
-      if (result.rows.length === 0) {
-        throw new AppError('User not found', 404);
-      }
-
-      const user = result.rows[0];
-      const tokens = this.generateTokens(user);
-
-      // Blacklist old refresh token
-      await this.blacklistToken(refreshToken);
-
-      return tokens;
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
     } catch (error) {
-      throw new AppError('Invalid refresh token', 401);
+      throw new AppError(getRefreshTokenErrorMessage(error), 401);
     }
+
+    const blacklisted = await this.isTokenBlacklisted(refreshToken);
+    if (blacklisted) {
+      throw new AppError('Refresh token revoked', 401);
+    }
+
+    const result = await query('SELECT * FROM users WHERE user_id = $1', [decoded.user_id]);
+    if (result.rows.length === 0) {
+      throw new AppError('User not found', 404);
+    }
+
+    const user = result.rows[0];
+    const tokens = this.generateTokens(user);
+
+    await this.blacklistToken(refreshToken);
+
+    return tokens;
   }
 
   async logout(refreshToken: string) {

@@ -18,21 +18,29 @@ import {
   Info, Clock, FileText
 } from 'lucide-react';
 import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/order/OrderStepper';
+import { OrderTrackingSnapshot } from '@/components/order/OrderTrackingSnapshot';
 import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseAbi, keccak256, toBytes } from 'viem';
 import { CHAIN_META } from '@/lib/web3/config';
+import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
+import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage } from '@/lib/orders/presentation';
+
+type ProductImageLike = string | { url?: string; image_url?: string; is_primary?: boolean; sort_order?: number };
 
 interface Order {
   order_id: number;
   internal_order_id: string;
   product_id: number;
   product_name: string;
-  product_metadata: { images?: string[]; category?: string };
+  product_metadata: { images?: ProductImageLike[]; category?: string; primaryImage?: string };
+  primary_image?: string | null;
   quantity: number;
   price_usd: number;
   pricing_mode?: string;
-  subtotal_token?: number;
+  subtotal_token?: number | string;
+  token_symbol?: string | null;
   status: OrderStatus;
   payment_method: string | null;
   buyer_id: number;
@@ -45,7 +53,7 @@ interface Order {
   tracking_number?: string;
   chain_id?: number;
   escrow_contract?: string;
-  amount_token?: number;
+  amount_token?: number | string;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,7 +119,7 @@ export default function OrderDetailPage() {
 
   // Auto poll order status while waiting for blockchain confirmation
   useEffect(() => {
-    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_CONFIRMED'];
+    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'];
     const terminalStatuses = ['PAID', 'CANCELLED', 'TX_FAILED', 'REFUNDED', 'COMPLETED', 'SHIPPED', 'DELIVERED', 'DISPUTED'];
 
     if (!order?.status || terminalStatuses.includes(order.status)) return;
@@ -254,42 +262,27 @@ export default function OrderDetailPage() {
 
   const isBuyer = session?.user?.id === String(order?.buyer_id);
   const isSeller = session?.user?.id === String(order?.seller_id);
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'PAID':
-      case 'COMPLETED':
-        return <CheckCircle className="w-6 h-6 text-green-500" />;
-      case 'ONCHAIN_CONFIRMED':
-        return <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />;
-      case 'TX_SUBMITTED':
-        return <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />;
-      case 'CANCELLED':
-      case 'REFUNDED':
-      case 'TX_FAILED':
-        return <XCircle className="w-6 h-6 text-red-500" />;
-      default:
-        return <Package className="w-6 h-6 text-amber-500" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PAID':
-      case 'COMPLETED':
-        return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
-      case 'ONCHAIN_CONFIRMED':
-        return 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200';
-      case 'TX_SUBMITTED':
-        return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200';
-      case 'CANCELLED':
-      case 'REFUNDED':
-      case 'TX_FAILED':
-        return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
-      default:
-        return 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200';
-    }
-  };
+  const statusMeta = order ? getOrderStatusMeta(order.status) : null;
+  const pricingDisplay = order ? getOrderPricingDisplay(order) : null;
+  const orderImage = order ? resolveOrderProductImage(order) : null;
+  const showEscrowPanel = Boolean(order?.payment_method === 'crypto' && order.escrow_contract);
+  const showTrackingCard = Boolean(order && ['SHIPPED', 'DELIVERED', 'COMPLETED'].includes(order.status));
+  const showPaymentCta = Boolean(order && isBuyer && ['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status));
+  const paymentCtaLabel = order?.status === 'TX_FAILED'
+    ? 'Thử thanh toán lại'
+    : order?.status === 'TX_SUBMITTED'
+      ? 'Mở lại trang thanh toán'
+      : 'Tiếp tục thanh toán an toàn';
+  const trackingTitle = order?.status === 'COMPLETED'
+    ? 'Đơn hàng đã hoàn tất'
+    : order?.status === 'DELIVERED'
+      ? 'Đơn hàng đã được giao'
+      : 'Hàng đang trên đường giao';
+  const trackingDescription = order?.tracking_number
+    ? `Mã vận đơn: ${order.tracking_number}`
+    : order?.status === 'COMPLETED'
+      ? 'Đơn hàng đã hoàn thành. Bạn có thể đối soát lại vận đơn nếu cần.'
+      : 'Người bán chưa cập nhật mã vận đơn.';
 
   if (authLoading || loading) {
     return (
@@ -343,8 +336,8 @@ export default function OrderDetailPage() {
             <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3">
               <Loader2 className="w-5 h-5 text-amber-400 animate-spin flex-shrink-0" />
               <div>
-                <p className="font-semibold text-amber-300 text-sm">Đang giải ngân từ escrow...</p>
-                <p className="text-xs text-amber-400/70 mt-0.5">Thanh toán đã xác nhận on-chain. Hệ thống đang chuyển tiền cho người bán.</p>
+                <p className="font-semibold text-amber-300 text-sm">Đang đồng bộ thanh toán on-chain...</p>
+                <p className="text-xs text-amber-400/70 mt-0.5">{statusMeta?.escrowCopy}</p>
               </div>
             </div>
           )}
@@ -381,14 +374,10 @@ export default function OrderDetailPage() {
 
           <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 mb-6 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-white/5 pb-6">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-xl ${getStatusColor(order.status).replace('text-', 'bg-').replace('bg-', 'bg-opacity-20 bg-')}`}>
-                  {getStatusIcon(order.status)}
-                </div>
+              <div className="space-y-3">
+                <OrderStatusIndicator status={order.status} />
                 <div>
-                  <span className={`text-lg font-bold uppercase tracking-wider ${getStatusColor(order.status).split(' ')[0]}`}>
-                    {order.status}
-                  </span>
+                  <p className="text-sm font-semibold text-gray-100">{statusMeta?.summary}</p>
                   <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
                     Cập nhật: {new Date(order.created_at).toLocaleString('vi-VN')}
@@ -399,9 +388,9 @@ export default function OrderDetailPage() {
 
             <div className="flex flex-col sm:flex-row gap-6 mb-8">
               <div className="relative w-32 h-32 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 group">
-                {order.product_metadata?.images?.[0] ? (
+                {orderImage ? (
                   <Image
-                    src={order.product_metadata.images[0]}
+                    src={orderImage}
                     alt={order.product_name}
                     fill
                     className="object-cover group-hover:scale-110 transition-transform duration-700"
@@ -422,18 +411,31 @@ export default function OrderDetailPage() {
                   <span className="text-sm font-bold text-white">x{order.quantity}</span>
                 </div>
 
-                {order.pricing_mode === 'usd' || !order.pricing_mode ? (
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl font-bold font-mono text-emerald-400">\${Number(order.price_usd).toFixed(2)}</span>
-                    <span className="text-sm text-gray-500 font-medium tracking-wide">USD</span>
+                {pricingDisplay?.mode !== 'token' ? (
+                  <div className="flex flex-col gap-1.5">
+                    <UsdtAmountInline
+                      amount={pricingDisplay?.usdAmount ?? order.price_usd}
+                      size="lg"
+                      className="text-emerald-400"
+                      amountClassName="text-emerald-400"
+                    />
+                    <p className="text-xs text-gray-500">Giá thanh toán trực tiếp theo USDT.</p>
                   </div>
                 ) : (
-                  <div className="flex flex-col">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold font-mono text-[#f0b90b]">{Number(order.subtotal_token).toFixed(4)}</span>
-                      <span className="text-sm text-gray-500 font-medium tracking-wide">Token</span>
+                  <div className="flex flex-col gap-1.5">
+                    {pricingDisplay?.tokenSymbol && pricingDisplay.tokenAmountLabel ? (
+                      <TokenAmountInline
+                        amount={pricingDisplay.tokenAmountLabel}
+                        symbol={pricingDisplay.tokenSymbol}
+                        size="lg"
+                        className="text-[#f0b90b]"
+                        amountClassName="text-[#f0b90b]"
+                      />
+                    ) : null}
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>≈</span>
+                      <UsdtAmountInline amount={pricingDisplay?.usdAmount ?? order.price_usd} size="sm" />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">~ \${Number(order.price_usd).toFixed(2)} USD</p>
                   </div>
                 )}
               </div>
@@ -442,6 +444,8 @@ export default function OrderDetailPage() {
             <div className="p-5 bg-black/20 rounded-2xl border border-white/5 mb-8">
               <OrderStepper currentStatus={order.status} className="py-2" />
             </div>
+
+            <OrderTrackingSnapshot status={order.status} className="mb-8" />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 bg-white/5 rounded-xl border border-white/5">
@@ -478,7 +482,7 @@ export default function OrderDetailPage() {
           </div>
 
           {/* ── ESCROW CONTRACT TRACKING PANEL ─── */}
-          {order.payment_method === 'crypto' && order.escrow_contract && (
+          {showEscrowPanel && (
             <div className="p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl mb-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -494,21 +498,16 @@ export default function OrderDetailPage() {
 
               {/* Status explanation */}
               <p className="text-xs text-emerald-400/70">
-                {order.status === 'TX_SUBMITTED' && 'Giao dịch đang chờ xác nhận từ blockchain...'}
-                {order.status === 'ONCHAIN_CONFIRMED' && 'Thanh toán đã xác nhận. Tiền đang khóa trong escrow.'}
-                {order.status === 'PAID' && 'Tiền đã khóa an toàn. Người bán nhận tiền khi bạn xác nhận nhận hàng.'}
-                {(order.status === 'SHIPPED' || order.status === 'DELIVERED') && 'Tiền vẫn khóa. Xác nhận nhận hàng để giải ngân cho người bán.'}
-                {order.status === 'COMPLETED' && 'Escrow đã giải ngân thành công cho người bán.'}
-                {order.status === 'DISPUTED' && 'Tiền đóng băng. Admin đang xem xét khiếu nại.'}
+                {statusMeta?.escrowCopy}
               </p>
 
               {/* ── Blockchain Timeline ── */}
               <div className="flex items-center gap-0 text-[9px] font-bold select-none">
                 {[
-                  { label: 'Deposit', done: ['TX_SUBMITTED','ONCHAIN_CONFIRMED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
-                  { label: 'Confirmed', done: ['ONCHAIN_CONFIRMED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
-                  { label: 'Locked', done: ['PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
-                  { label: 'Released', done: order.status === 'COMPLETED' },
+                  { label: 'Đã gửi', done: ['TX_SUBMITTED','ONCHAIN_PENDING','ONCHAIN_CONFIRMED','PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
+                  { label: 'Xác nhận', done: ['ONCHAIN_PENDING','ONCHAIN_CONFIRMED','PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
+                  { label: 'Đang khóa', done: ['PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED','DISPUTED'].includes(order.status) },
+                  { label: 'Giải ngân', done: ['COMPLETED','REFUNDED'].includes(order.status) },
                 ].map((step, i, arr) => (
                   <div key={step.label} className="flex items-center flex-1">
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
@@ -523,10 +522,10 @@ export default function OrderDetailPage() {
                 ))}
               </div>
               <div className="flex text-[8px] text-white/30 font-semibold">
-                <span className="flex-1 text-center">Deposit</span>
-                <span className="flex-1 text-center">Confirmed</span>
-                <span className="flex-1 text-center">Locked</span>
-                <span className="flex-1 text-center">Released</span>
+                <span className="flex-1 text-center">Đã gửi</span>
+                <span className="flex-1 text-center">Xác nhận</span>
+                <span className="flex-1 text-center">Đang khóa</span>
+                <span className="flex-1 text-center">Giải ngân</span>
               </div>
 
               {/* Contract address */}
@@ -580,35 +579,47 @@ export default function OrderDetailPage() {
               )}
 
               {/* Amount locked */}
-              {order.amount_token && order.amount_token > 0 && (
+              {hasPositiveAmount(order.amount_token) && (
                 <div className="flex items-center justify-between text-xs p-2.5 bg-black/20 rounded-lg">
                   <span className="text-gray-500">Số tiền khóa trong escrow</span>
-                  <span className="font-mono font-bold text-emerald-400">{order.amount_token.toFixed(6)} Token</span>
+                  {order.token_symbol ? (
+                    <TokenAmountInline
+                      amount={formatEscrowAmount(order.amount_token)}
+                      symbol={order.token_symbol}
+                      size="sm"
+                      className="text-emerald-400"
+                      amountClassName="text-emerald-400"
+                    />
+                  ) : (
+                    <span className="font-mono font-bold text-emerald-400">{formatEscrowAmount(order.amount_token)}</span>
+                  )}
                 </div>
               )}
             </div>
           )}
 
           {/* ── TRACKING INFO CARD (SHIPPED) ─── */}
-          {order.status === 'SHIPPED' && (
+          {showTrackingCard && (
             <div className="p-5 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl mb-6">
               <div className="flex items-center gap-2 mb-2">
                 <Truck className="w-4 h-4 text-indigo-400" />
-                <p className="font-semibold text-indigo-300 text-sm">Hàng đang trên đường giao</p>
+                <p className="font-semibold text-indigo-300 text-sm">{trackingTitle}</p>
               </div>
-              {order.tracking_number ? (
-                <p className="text-xs text-indigo-400/80">Mã vận đơn: <span className="font-mono font-bold text-indigo-300">{order.tracking_number}</span></p>
-              ) : (
-                <p className="text-xs text-indigo-400/70">Người bán chưa cập nhật mã vận đơn.</p>
-              )}
+              <p className="text-xs text-indigo-400/80">
+                {order.tracking_number ? (
+                  <>
+                    Mã vận đơn: <span className="font-mono font-bold text-indigo-300">{order.tracking_number}</span>
+                  </>
+                ) : trackingDescription}
+              </p>
             </div>
           )}
 
-          {order.status === 'UNPAID' && isBuyer && (
+          {showPaymentCta && (
             <Link href={`/checkout/${order.order_id}`}>
               <button className="w-full relative overflow-hidden group py-4 bg-gradient-to-r from-[#f0b90b] to-[#f3ba2f] text-black font-bold rounded-2xl text-base transition-all shadow-[0_4px_20px_rgba(240,185,11,0.2)] hover:shadow-[0_4px_30px_rgba(240,185,11,0.35)] hover:-translate-y-0.5 mb-6">
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                <span className="relative z-10 block text-center">Tiếp tục thanh toán an toàn &rarr;</span>
+                <span className="relative z-10 block text-center">{paymentCtaLabel} &rarr;</span>
               </button>
             </Link>
           )}

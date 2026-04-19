@@ -28,6 +28,7 @@ import { CoinPriceStrip } from '@/components/home/CoinPriceStrip';
 import {
   Laptop, Shirt, Home as HomeIcon, Dumbbell, BookOpen, Gamepad2, Car, Diamond, Sparkles,
 } from 'lucide-react';
+import { Store, ShieldCheck, Truck, BadgeCheck } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 
@@ -270,6 +271,49 @@ const TOP_COINS = [
   { symbol: 'ARBUSDT', name: 'Arbitrum', short: 'ARB', color: '#28a0f0' },
   { symbol: 'SUIUSDT', name: 'Sui', short: 'SUI', color: '#4ca3ff' },
 ];
+
+const HOW_IT_WORKS_STEPS = [
+  {
+    step: '01',
+    eyebrow: 'Marketplace',
+    title: 'Duyệt & Mua',
+    desc: 'Tìm sản phẩm và đặt hàng bằng crypto hoặc tiền tệ thông thường.',
+    icon: Store,
+    iconTone: 'text-sky-300',
+    iconSurface: 'border-sky-400/20 bg-sky-500/[0.10] shadow-sky-500/10',
+    divider: 'from-sky-400/65 via-sky-400/20 to-transparent',
+  },
+  {
+    step: '02',
+    eyebrow: 'Escrow',
+    title: 'Escrow khóa',
+    desc: 'Thanh toán được khóa trong hợp đồng thông minh Escrow an toàn.',
+    icon: ShieldCheck,
+    iconTone: 'text-violet-300',
+    iconSurface: 'border-violet-400/20 bg-violet-500/[0.10] shadow-violet-500/10',
+    divider: 'from-violet-400/65 via-violet-400/20 to-transparent',
+  },
+  {
+    step: '03',
+    eyebrow: 'Delivery',
+    title: 'Nhận hàng',
+    desc: 'Người bán giao hàng. Xác nhận khi nhận được.',
+    icon: Truck,
+    iconTone: 'text-emerald-300',
+    iconSurface: 'border-emerald-400/20 bg-emerald-500/[0.10] shadow-emerald-500/10',
+    divider: 'from-emerald-400/65 via-emerald-400/20 to-transparent',
+  },
+  {
+    step: '04',
+    eyebrow: 'Settlement',
+    title: 'Hoàn tất',
+    desc: 'Admin giải ngân cho người bán hoặc hoàn tiền khi có tranh chấp.',
+    icon: BadgeCheck,
+    iconTone: 'text-amber-200',
+    iconSurface: 'border-amber-400/20 bg-amber-500/[0.12] shadow-amber-500/10',
+    divider: 'from-amber-300/70 via-amber-300/20 to-transparent',
+  },
+] as const;
 
 
 /* ─── Main Page ──────────────────────────────────────── */
@@ -1023,28 +1067,30 @@ export default function HomePage() {
               <p className="text-muted-foreground mt-2 text-sm">{t('home.howItWorksDesc')}</p>
             </div>
             <div className="grid md:grid-cols-4 gap-5">
-              {[
-                { step: '1', title: 'Duyệt & Mua', desc: 'Tìm sản phẩm và đặt hàng bằng crypto hoặc tiền tệ thông thường.', icon: ShoppingBag, color: 'from-blue-600 to-blue-700' },
-                { step: '2', title: 'Escrow khóa', desc: 'Thanh toán được khóa trong hợp đồng thông minh Escrow an toàn.', icon: Shield, color: 'from-purple-600 to-purple-700' },
-                { step: '3', title: 'Nhận hàng', desc: 'Người bán giao hàng. Xác nhận khi nhận được.', icon: Package, color: 'from-emerald-600 to-emerald-700' },
-                { step: '4', title: 'Hoàn tất', desc: 'Admin giải ngân cho người bán hoặc hoàn tiền khi có tranh chấp.', icon: Zap, color: 'from-amber-500 to-orange-600' },
-              ].map((item, i) => (
+              {HOW_IT_WORKS_STEPS.map((item, i) => (
                 <motion.div
                   key={item.step}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.1 }}
-                  className="relative text-center p-6 rounded-2xl bg-card border border-border hover:border-white/20 hover:shadow-lg transition-all group"
+                  className="group relative overflow-hidden rounded-[28px] border border-border/80 bg-card/95 px-6 py-7 text-left shadow-[0_18px_40px_rgba(0,0,0,0.16)] transition-all duration-300 hover:-translate-y-1 hover:border-white/15 hover:shadow-[0_24px_55px_rgba(0,0,0,0.22)]"
                 >
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#e6a800] text-black text-xs font-bold flex items-center justify-center shadow-md">
-                    {item.step}
+                  <div className={`absolute left-6 right-6 top-0 h-px bg-gradient-to-r ${item.divider}`} />
+                  <div className="mb-5 flex items-start justify-between gap-4">
+                    <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#f0b90b]/25 bg-[#f0b90b]/10 px-3 text-[11px] font-black tracking-[0.2em] text-[#f0b90b]">
+                      {item.step}
+                    </span>
+                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border shadow-lg transition-transform duration-300 group-hover:scale-[1.04] ${item.iconSurface}`}>
+                      <item.icon className={`h-6 w-6 ${item.iconTone}`} strokeWidth={1.9} />
+                    </div>
                   </div>
-                  <div className={`w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br ${item.color} shadow-lg group-hover:scale-110 transition-transform`}>
-                    <item.icon className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="font-bold text-foreground mb-2">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">
+                    {item.eyebrow}
+                  </p>
+                  <h3 className="mt-3 text-xl font-bold text-foreground">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{item.desc}</p>
+                  <div className={`mt-6 h-px w-full bg-gradient-to-r ${item.divider}`} />
                 </motion.div>
               ))}
             </div>

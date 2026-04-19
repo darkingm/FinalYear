@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 export interface CryptoPrice {
   symbol: string;
@@ -17,36 +17,38 @@ export function useCryptoPrice(symbols: string[]) {
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectEnabledRef = useRef(false);
+
+  const symbolsKey = symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean).join(',');
+  const normalizedSymbols = useMemo(
+    () => symbolsKey.split(',').filter(Boolean),
+    [symbolsKey]
+  );
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (normalizedSymbols.length === 0) {
+      return;
+    }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
     try {
+      const streams = normalizedSymbols.map((symbol) => `${symbol.toLowerCase()}@ticker`).join('/');
       const ws = new WebSocket(
-        process.env.NEXT_PUBLIC_BINANCE_WS || 'wss://stream.binance.com:9443/ws'
+        process.env.NEXT_PUBLIC_BINANCE_WS || `wss://stream.binance.com:9443/stream?streams=${streams}`
       );
 
       ws.onopen = () => {
-        console.log('Binance WebSocket connected');
         setIsConnected(true);
         setError(null);
-
-        // Subscribe to ticker streams for all symbols
-        const streams = symbols.map((s) => `${s.toLowerCase()}@ticker`).join('/');
-        ws.send(
-          JSON.stringify({
-            method: 'SUBSCRIBE',
-            params: symbols.map((s) => `${s.toLowerCase()}@ticker`),
-            id: 1,
-          })
-        );
       };
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
+          const payload = JSON.parse(event.data);
+          const data = payload?.data ?? payload;
 
           if (data.e === '24hrTicker') {
             setPrices((prev) => ({
@@ -61,44 +63,47 @@ export function useCryptoPrice(symbols: string[]) {
               },
             }));
           }
-        } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
+        } catch {
+          setError('Failed to parse price feed');
         }
       };
 
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
+      ws.onerror = () => {
         setError('WebSocket connection error');
         setIsConnected(false);
       };
 
       ws.onclose = () => {
-        console.log('Binance WebSocket closed');
         setIsConnected(false);
+        wsRef.current = null;
 
-        // Attempt to reconnect after 5 seconds
+        if (!reconnectEnabledRef.current) {
+          return;
+        }
+
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('Attempting to reconnect...');
           connect();
         }, 5000);
       };
 
       wsRef.current = ws;
-    } catch (err) {
-      console.error('Failed to create WebSocket:', err);
+    } catch {
       setError('Failed to connect to price feed');
     }
-  }, [symbols]);
+  }, [normalizedSymbols]);
 
   useEffect(() => {
+    reconnectEnabledRef.current = true;
     connect();
 
     return () => {
+      reconnectEnabledRef.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, [connect]);

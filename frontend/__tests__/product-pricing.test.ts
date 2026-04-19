@@ -1,7 +1,9 @@
 import { describe, expect, it } from '@jest/globals';
 import {
   buildAcceptedTokenChipState,
+  buildLiveUsdtEstimate,
   normalizeAcceptedTokensForDisplay,
+  resolveMarketQuoteSymbol,
   seedAcceptedTokenEditorState,
 } from '@/lib/products/pricing';
 
@@ -62,5 +64,54 @@ describe('seedAcceptedTokenEditorState', () => {
 
     expect(state[0].amount).toBe('0.05');
     expect(state[1].amount).toBe('120');
+  });
+});
+
+describe('live pricing helpers', () => {
+  it('maps supported symbols to Binance-compatible USDT quote symbols', () => {
+    expect(resolveMarketQuoteSymbol('ETH')).toBe('ETHUSDT');
+    expect(resolveMarketQuoteSymbol('matic')).toBe('MATICUSDT');
+    expect(resolveMarketQuoteSymbol('USDT')).toBe('USDT');
+    expect(resolveMarketQuoteSymbol('')).toBeNull();
+  });
+
+  it('builds an estimate from the selected token amount and market quote', () => {
+    const estimate = buildLiveUsdtEstimate({
+      tokenSymbol: 'ETH',
+      tokenAmount: '0.5',
+      basePriceUsd: 900,
+      marketPrices: {
+        ETHUSDT: { price: 2400 } as any,
+      },
+    });
+
+    expect(estimate.displayAmount).toBe('1,200.00');
+    expect(estimate.source).toBe('market');
+    expect(estimate.quoteSymbol).toBe('ETHUSDT');
+  });
+
+  it('falls back to base USD when no market quote exists', () => {
+    const estimate = buildLiveUsdtEstimate({
+      tokenSymbol: 'ARB',
+      tokenAmount: '10',
+      basePriceUsd: 42,
+      marketPrices: {},
+    });
+
+    expect(estimate.displayAmount).toBe('42.00');
+    expect(estimate.source).toBe('fallback');
+  });
+
+  it('mirrors the selected amount when the token is already USDT', () => {
+    const estimate = buildLiveUsdtEstimate({
+      tokenSymbol: 'USDT',
+      tokenAmount: '49.99',
+      basePriceUsd: 50,
+      marketPrices: {},
+    });
+
+    expect(estimate.displayAmount).toBe('49.99');
+    expect(estimate.source).toBe('token-usdt');
+    expect(estimate.quoteSymbol).toBe('USDT');
   });
 });

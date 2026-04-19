@@ -24,11 +24,132 @@ const CHAIN_TO_EXPLORER: Record<SupportedChain, ExplorerChain> = {
 /* ── Etherscan proxy helper (API keys stay server-side) ── */
 const ETHERSCAN_PROXY = '/api/proxy/etherscan';
 
+const EXPLORER_SUPPORTED_PROXY_CHAINS = new Set<ExplorerChain>(['ETH']);
+const EXPLORER_TTL_MS = 15_000;
+const WALLET_ACTIVITY_TTL_MS = 15_000;
+
+const explorerCache = new Map<string, { at: number; data: any }>();
+const explorerInflight = new Map<string, Promise<any>>();
+const walletActivityCache = new Map<string, { at: number; data: any }>();
+const walletActivityInflight = new Map<string, Promise<any>>();
+const priceInflight = new Map<string, Promise<number>>();
+
+function cloneValue<T>(value: T): T {
+    if (typeof structuredClone === 'function') return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+}
+
+function getFreshCache<T>(cache: Map<string, { at: number; data: T }>, key: string, ttlMs: number): T | null {
+    const hit = cache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.at > ttlMs) return null;
+    return cloneValue(hit.data);
+}
+
+function setCacheValue<T>(cache: Map<string, { at: number; data: T }>, key: string, data: T) {
+    cache.set(key, { at: Date.now(), data: cloneValue(data) });
+}
+
+function getStaleCache<T>(cache: Map<string, { at: number; data: T }>, key: string): T | null {
+    const hit = cache.get(key);
+    return hit ? cloneValue(hit.data) : null;
+}
+
+function buildKey(prefix: string, parts: Array<string | number>) {
+    return `${prefix}:${parts.join(':')}`;
+}
+
+function sortParams(params: Record<string, string>) {
+    return Object.entries(params).sort(([left], [right]) => left.localeCompare(right));
+}
+
+async function getOrCreateInflight<T>(
+    inflight: Map<string, Promise<T>>,
+    key: string,
+    loader: () => Promise<T>,
+): Promise<T> {
+    const existing = inflight.get(key);
+    if (existing) {
+        return existing;
+    }
+
+    const request = loader().finally(() => {
+        inflight.delete(key);
+    });
+
+    inflight.set(key, request);
+    return request;
+}
+
+function isTimeoutError(error: unknown) {
+    return error instanceof Error && (error.name === 'TimeoutError' || /timed out/i.test(error.message));
+}
+
+function logWhaleFetchIssue(scope: string, error: unknown) {
+    if (isTimeoutError(error)) {
+        console.warn(`[whale-api] ${scope}:`, error);
+        return;
+    }
+    console.error(`[whale-api] ${scope}:`, error);
+}
+
+function buildUnsupportedExplorerResponse(chain: ExplorerChain) {
+    return {
+        status: '0',
+        message: 'NOTOK',
+        result: [],
+        _note: `${chain} explorer proxy disabled in browser helper`,
+    };
+}
+
 async function fetchViaProxy(chain: ExplorerChain, params: Record<string, string>): Promise<any> {
+    if (!EXPLORER_SUPPORTED_PROXY_CHAINS.has(chain)) {
+        return buildUnsupportedExplorerResponse(chain);
+    }
+
     const chainId = CHAIN_CONFIG[chain].chainId;
-    const query = new URLSearchParams({ chainid: chainId, ...params });
-    const res = await fetch(`${ETHERSCAN_PROXY}?${query}`, { signal: AbortSignal.timeout(12_000) });
-    return res.json();
+    const cacheKey = buildKey('explorer', [chain, ...sortParams(params).flat()]);
+    const fresh = getFreshCache(explorerCache, cacheKey, EXPLORER_TTL_MS);
+    if (fresh) {
+        return fresh;
+    }
+
+    return getOrCreateInflight(explorerInflight, cacheKey, async () => {
+        try {
+            const query = new URLSearchParams({ chainid: chainId, ...params });
+            const res = await fetch(`${ETHERSCAN_PROXY}?${query}`, { signal: AbortSignal.timeout(12_000) });
+            const data = await res.json();
+            setCacheValue(explorerCache, cacheKey, data);
+            return cloneValue(data);
+        } catch (error) {
+            const stale = getStaleCache(explorerCache, cacheKey);
+            if (stale) {
+                return stale;
+            }
+            throw error;
+        }
+    });
+}
+
+async function runWalletActivityQuery<T>(cacheKey: string, loader: () => Promise<T>): Promise<T> {
+    const fresh = getFreshCache(walletActivityCache, cacheKey, WALLET_ACTIVITY_TTL_MS);
+    if (fresh) {
+        return fresh;
+    }
+
+    return getOrCreateInflight(walletActivityInflight, cacheKey, async () => {
+        try {
+            const data = await loader();
+            setCacheValue(walletActivityCache, cacheKey, data);
+            return cloneValue(data);
+        } catch (error) {
+            const stale = getStaleCache(walletActivityCache, cacheKey);
+            if (stale) {
+                return stale;
+            }
+            throw error;
+        }
+    });
 }
 
 /* ── Native price cache (60s TTL) ── */
@@ -37,16 +158,20 @@ const priceCache: Record<string, { price: number; at: number }> = {};
 export async function getNativePrice(chain: SupportedChain): Promise<number> {
     const cached = priceCache[chain];
     if (cached && Date.now() - cached.at < 60_000) return cached.price;
-    try {
-        const sym = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]].nativePriceSymbol;
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
-        const data = await res.json();
-        const price = parseFloat(data.price || '0');
-        priceCache[chain] = { price, at: Date.now() };
-        return price;
-    } catch {
-        return priceCache[chain]?.price || 300;
-    }
+    const inflightKey = buildKey('native-price', [chain]);
+
+    return getOrCreateInflight(priceInflight, inflightKey, async () => {
+        try {
+            const sym = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]].nativePriceSymbol;
+            const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
+            const data = await res.json();
+            const price = parseFloat(data.price || '0');
+            priceCache[chain] = { price, at: Date.now() };
+            return price;
+        } catch {
+            return priceCache[chain]?.price || 300;
+        }
+    });
 }
 
 /* ── Map Etherscan token tx row → WhaleTx ── */
@@ -91,72 +216,84 @@ function mapNativeTxRow(tx: any, walletAddress: string, chain: SupportedChain, n
 
 /* ── fetchWalletTxs — native coin txs ── */
 export async function fetchWalletTxs(address: string, chain: SupportedChain, limit = 20): Promise<WhaleTx[]> {
-    const nativePrice = await getNativePrice(chain);
-    const explorer = CHAIN_TO_EXPLORER[chain];
-    try {
-        const data = await fetchViaProxy(explorer, {
-            module: 'account', action: 'txlist',
-            address, startblock: '0', endblock: '99999999',
-            page: '1', offset: String(limit), sort: 'desc',
-        });
-        if (data.status !== '1') return [];
-        return (data.result as any[]).map(tx => mapNativeTxRow(tx, address, chain, nativePrice));
-    } catch (e) {
-        console.error('[whale-api] fetchWalletTxs:', e);
-        return [];
-    }
+    const cacheKey = buildKey('wallet-native', [address.toLowerCase(), chain, limit]);
+    return runWalletActivityQuery(cacheKey, async () => {
+        const nativePrice = await getNativePrice(chain);
+        const explorer = CHAIN_TO_EXPLORER[chain];
+        try {
+            const data = await fetchViaProxy(explorer, {
+                module: 'account', action: 'txlist',
+                address, startblock: '0', endblock: '99999999',
+                page: '1', offset: String(limit), sort: 'desc',
+            });
+            if (data.status !== '1') return [];
+            return (data.result as any[]).map(tx => mapNativeTxRow(tx, address, chain, nativePrice));
+        } catch (e) {
+            logWhaleFetchIssue('fetchWalletTxs', e);
+            return [];
+        }
+    });
 }
 
 /* ── fetchTokenTransfers — ERC20/BEP20 (all tokens) ── */
 export async function fetchTokenTransfers(address: string, chain: SupportedChain, limit = 20): Promise<WhaleTx[]> {
-    const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
-    const explorer = CHAIN_TO_EXPLORER[chain];
-    try {
-        const data = await fetchViaProxy(explorer, {
-            module: 'account', action: 'tokentx',
-            address, page: '1', offset: String(limit), sort: 'desc',
-        });
-        if (data.status !== '1') return [];
-        return (data.result as any[]).map(tx => mapTokenTxRow(tx, address, cfg.nativeSymbol));
-    } catch (e) {
-        console.error('[whale-api] fetchTokenTransfers:', e);
-        return [];
-    }
+    const cacheKey = buildKey('wallet-token-transfers', [address.toLowerCase(), chain, limit]);
+    return runWalletActivityQuery(cacheKey, async () => {
+        const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
+        const explorer = CHAIN_TO_EXPLORER[chain];
+        try {
+            const data = await fetchViaProxy(explorer, {
+                module: 'account', action: 'tokentx',
+                address, page: '1', offset: String(limit), sort: 'desc',
+            });
+            if (data.status !== '1') return [];
+            return (data.result as any[]).map(tx => mapTokenTxRow(tx, address, cfg.nativeSymbol));
+        } catch (e) {
+            logWhaleFetchIssue('fetchTokenTransfers', e);
+            return [];
+        }
+    });
 }
 
 /* ── fetchWalletTxsByToken — filter by specific token contract ── */
 export async function fetchWalletTxsByToken(
     address: string, chain: SupportedChain, tokenAddress: string, limit = 50
 ): Promise<WhaleTx[]> {
-    const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
-    const explorer = CHAIN_TO_EXPLORER[chain];
-    try {
-        const data = await fetchViaProxy(explorer, {
-            module: 'account', action: 'tokentx',
-            address, contractaddress: tokenAddress,
-            page: '1', offset: String(limit), sort: 'desc',
-        });
-        if (data.status !== '1') return [];
-        return (data.result as any[]).map(tx => mapTokenTxRow(tx, address, cfg.nativeSymbol));
-    } catch (e) {
-        console.error('[whale-api] fetchWalletTxsByToken:', e);
-        return [];
-    }
+    const cacheKey = buildKey('wallet-token-specific', [address.toLowerCase(), chain, tokenAddress.toLowerCase(), limit]);
+    return runWalletActivityQuery(cacheKey, async () => {
+        const cfg = EXPLORER_CONFIG[CHAIN_TO_EXPLORER[chain]];
+        const explorer = CHAIN_TO_EXPLORER[chain];
+        try {
+            const data = await fetchViaProxy(explorer, {
+                module: 'account', action: 'tokentx',
+                address, contractaddress: tokenAddress,
+                page: '1', offset: String(limit), sort: 'desc',
+            });
+            if (data.status !== '1') return [];
+            return (data.result as any[]).map(tx => mapTokenTxRow(tx, address, cfg.nativeSymbol));
+        } catch (e) {
+            logWhaleFetchIssue('fetchWalletTxsByToken', e);
+            return [];
+        }
+    });
 }
 
 /* ── fetchAllWalletActivity -— native + token, deduped ── */
 export async function fetchAllWalletActivity(address: string, chain: SupportedChain): Promise<WhaleTx[]> {
-    const [native, tokens] = await Promise.all([
-        fetchWalletTxs(address, chain, 15),
-        fetchTokenTransfers(address, chain, 15),
-    ]);
-    const seen = new Set<string>();
-    const all: WhaleTx[] = [];
-    for (const tx of [...native, ...tokens]) {
-        const key = tx.hash + tx.tokenSymbol;
-        if (!seen.has(key)) { seen.add(key); all.push(tx); }
-    }
-    return all.sort((a, b) => b.timestamp - a.timestamp).slice(0, 30);
+    const cacheKey = buildKey('wallet-all-activity', [address.toLowerCase(), chain]);
+    return runWalletActivityQuery(cacheKey, async () => {
+        const [native, tokens] = await Promise.all([
+            fetchWalletTxs(address, chain, 15),
+            fetchTokenTransfers(address, chain, 15),
+        ]);
+        const seen = new Set<string>();
+        const all: WhaleTx[] = [];
+        for (const tx of [...native, ...tokens]) {
+            const key = tx.hash + tx.tokenSymbol;
+            if (!seen.has(key)) { seen.add(key); all.push(tx); }
+        }
+        return all.sort((a, b) => b.timestamp - a.timestamp).slice(0, 30);
+    });
 }
 
 /* ── searchTokenPairs — DexScreener ── */
@@ -259,6 +396,18 @@ const GOPLUS_CHAIN_MAP: Record<SupportedChain, string> = {
 };
 
 const securityCache: Record<string, { data: GoPlusSecurityInfo; at: number }> = {};
+
+export function __resetWhaleApiCaches() {
+    Object.keys(priceCache).forEach((key) => delete priceCache[key]);
+    priceInflight.clear();
+    explorerCache.clear();
+    explorerInflight.clear();
+    walletActivityCache.clear();
+    walletActivityInflight.clear();
+    Object.keys(securityCache).forEach((key) => delete securityCache[key]);
+    trendingCache.data = [];
+    trendingCache.at = 0;
+}
 
 export async function fetchGoPlusSecurity(tokenAddress: string, chain: SupportedChain): Promise<GoPlusSecurityInfo | null> {
     const key = `${chain}:${tokenAddress}`;
