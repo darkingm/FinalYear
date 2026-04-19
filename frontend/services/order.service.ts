@@ -4,12 +4,7 @@
  */
 import { ordersApi } from '@/lib/api/orders';
 import { paymentsApi } from '@/lib/api/payments';
-import type {
-  Order,
-  CreateOrderPayload,
-  CryptoQuote,
-  PaymentMethod,
-} from '@/types';
+import type { Order, CreateOrderPayload, CryptoQuote } from '@/types';
 import { toast } from 'sonner';
 
 class OrderService {
@@ -71,18 +66,6 @@ class OrderService {
         toast.error(msg);
       }
       throw new Error(msg);
-    }
-  }
-
-  /** Submit crypto tx hash */
-  async submitCryptoTx(orderId: number, txHash: string): Promise<boolean> {
-    try {
-      await paymentsApi.crypto.submit(orderId, txHash);
-      toast.success('Giao dịch đã gửi. Đang chờ xác nhận...');
-      return true;
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Gửi giao dịch thất bại');
-      return false;
     }
   }
 

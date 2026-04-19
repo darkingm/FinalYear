@@ -9,8 +9,6 @@ import {
   getPaymentSessionStatus,
   getPaymentBatchSessionStatus,
   generateQuote,
-  generateQuoteBatch,
-  submitTransaction,
   getPaymentStatus,
   verifyTransaction,
   releaseFunds,
@@ -28,8 +26,6 @@ import {
   getPaymentSessionStatusSchema,
   getPaymentBatchSessionStatusSchema,
   generateQuoteSchema,
-  generateQuoteBatchSchema,
-  submitTransactionSchema,
   getPaymentStatusSchema,
   verifyTransactionSchema,
   releaseFundsSchema,
@@ -69,8 +65,6 @@ router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymen
 router.get('/session-batch/:sessionId/status', authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
-router.post('/quote-batch', authenticate, validateRequest(generateQuoteBatchSchema), generateQuoteBatch);
-router.post('/submit', authenticate, validateRequest(submitTransactionSchema), submitTransaction);
 router.get('/status/:orderId', authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);
 router.post('/verify/:txHash', authenticate, validateRequest(verifyTransactionSchema), verifyTransaction);
 
