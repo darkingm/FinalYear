@@ -19,6 +19,9 @@ import {
     updateToken,
     getAuditLogs,
     getEscrowOrders,
+    getPaymentReconciliationCases,
+    retryVerifyPayment,
+    repairOrderPaymentProjection,
     createProduct,
     updateProductDetail,
     getCategories,
@@ -93,5 +96,8 @@ router.get('/audit-logs', getAuditLogs);
 
 // Smart Contract / Escrow
 router.get('/escrow/orders', getEscrowOrders);
+router.get('/payments/reconciliation', getPaymentReconciliationCases);
+router.post('/payments/reconciliation/:id/retry-verify', retryVerifyPayment);
+router.post('/payments/reconciliation/:id/reconcile-order', repairOrderPaymentProjection);
 
 export default router;

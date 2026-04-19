@@ -12,6 +12,11 @@ import { PaymentEventService } from './payment-event.service';
 import { PAYMENT_EVENT_TYPES } from './payment-event.contract';
 import type { PaymentSessionRecord } from './payment-session.service';
 import type { PaymentBatchSessionRecord } from './payment-batch-session.service';
+import {
+  derivePaymentReconciliationCase,
+  type PaymentReconciliationCase,
+  type PaymentReconciliationRow,
+} from './payment-reconciliation.logic';
 
 const ESCROW_ABI = [
   // ERC-20 tokens: requires approve() first, then deposit()
@@ -884,6 +889,124 @@ export class CryptoPaymentService {
       verification_state: snapshot.payment.payment_status || 'unknown',
       required_confirmations: snapshot.payment.chain_id ? this.getRequiredConfirmations(snapshot.payment.chain_id) : null,
       last_verified_at: snapshot.payment.updated_at || null,
+    };
+  }
+
+  async getPaymentReconciliationCases(input: {
+    orderId?: number;
+    limit?: number;
+    problemsOnly?: boolean;
+  } = {}): Promise<PaymentReconciliationCase[]> {
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const orderParams: unknown[] = [];
+    let whereClause = `WHERE o.payment_method = 'crypto'`;
+
+    if (input.orderId) {
+      orderParams.push(input.orderId);
+      whereClause += ` AND o.order_id = $1`;
+    }
+
+    const orderRowsResult = await mainQuery(
+      `SELECT o.order_id,
+              o.order_number,
+              o.status AS order_status,
+              o.updated_at AS order_updated_at,
+              o.tx_hash AS order_tx_hash,
+              o.chain_id AS order_chain_id,
+              o.amount_token AS order_amount_token,
+              o.total_amount AS order_total_amount,
+              o.payment_projection_updated_at,
+              o.payment_projection_version,
+              buyer.username AS buyer_name,
+              buyer.email AS buyer_email
+       FROM orders o
+       LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
+       ${whereClause}
+       ORDER BY o.updated_at DESC
+       LIMIT ${limit}`,
+      orderParams
+    );
+
+    const orderIds = orderRowsResult.rows.map((row: any) => row.order_id);
+    if (orderIds.length === 0) {
+      return [];
+    }
+
+    const paymentRowsResult = await query(
+      `SELECT DISTINCT ON (p.order_id)
+              p.payment_id,
+              p.order_id,
+              p.status AS payment_status,
+              p.tx_hash AS payment_tx_hash,
+              p.chain_id AS payment_chain_id,
+              p.confirmations AS payment_confirmations,
+              p.updated_at AS payment_updated_at
+       FROM payments p
+       WHERE p.order_id = ANY($1::int[])
+       ORDER BY p.order_id, p.created_at DESC`,
+      [orderIds]
+    );
+
+    const paymentByOrderId = new Map<number, any>(
+      paymentRowsResult.rows.map((row: any) => [row.order_id, row])
+    );
+
+    const rows = orderRowsResult.rows.map((order: any) => {
+      const payment = paymentByOrderId.get(order.order_id);
+      const effectiveChainId = payment?.payment_chain_id ?? order.order_chain_id ?? null;
+      const row: PaymentReconciliationRow = {
+        order_id: order.order_id,
+        order_number: order.order_number ?? null,
+        buyer_name: order.buyer_name ?? null,
+        buyer_email: order.buyer_email ?? null,
+        order_status: order.order_status,
+        order_updated_at: order.order_updated_at ?? null,
+        order_tx_hash: order.order_tx_hash ?? null,
+        order_chain_id: order.order_chain_id ?? null,
+        order_amount_token: order.order_amount_token ?? null,
+        order_total_amount: order.order_total_amount ?? null,
+        payment_projection_updated_at: order.payment_projection_updated_at ?? null,
+        payment_projection_version: order.payment_projection_version ?? null,
+        payment_id: payment?.payment_id ?? null,
+        payment_status: payment?.payment_status ?? null,
+        payment_tx_hash: payment?.payment_tx_hash ?? null,
+        payment_chain_id: payment?.payment_chain_id ?? null,
+        payment_confirmations: payment?.payment_confirmations ?? null,
+        payment_required_confirmations: effectiveChainId ? this.getRequiredConfirmations(Number(effectiveChainId)) : null,
+        payment_updated_at: payment?.payment_updated_at ?? null,
+      };
+
+      return derivePaymentReconciliationCase(row, new Date());
+    });
+
+    return input.problemsOnly === false ? rows : rows.filter((row) => row.has_issue);
+  }
+
+  async retryVerifyOrderPayment(orderId: number) {
+    const paymentResult = await query(
+      `SELECT tx_hash
+       FROM payments
+       WHERE order_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId]
+    );
+
+    const txHash = paymentResult.rows[0]?.tx_hash;
+    if (!txHash) {
+      throw new AppError('No payment tx hash found for this order', 404);
+    }
+
+    const verification = await this.verifyTransaction(txHash);
+    const [snapshot] = await this.getPaymentReconciliationCases({
+      orderId,
+      limit: 1,
+      problemsOnly: false,
+    });
+
+    return {
+      verification,
+      snapshot: snapshot ?? null,
     };
   }
 

@@ -8,6 +8,8 @@ import {
   submitPaymentBatchSession,
   getPaymentSessionStatus,
   getPaymentBatchSessionStatus,
+  getPaymentReconciliationCases,
+  retryVerifyOrderPayment,
   generateQuote,
   getPaymentStatus,
   verifyTransaction,
@@ -25,6 +27,8 @@ import {
   submitPaymentBatchSessionSchema,
   getPaymentSessionStatusSchema,
   getPaymentBatchSessionStatusSchema,
+  getPaymentReconciliationCasesSchema,
+  retryVerifyOrderPaymentSchema,
   generateQuoteSchema,
   getPaymentStatusSchema,
   verifyTransactionSchema,
@@ -63,6 +67,8 @@ router.post('/session/:sessionId/submit', authenticate, validateRequest(submitPa
 router.post('/session-batch/:sessionId/submit', authenticate, validateRequest(submitPaymentBatchSessionSchema), submitPaymentBatchSession);
 router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
 router.get('/session-batch/:sessionId/status', authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
+router.get('/admin/reconciliation', authenticateOrInternalKey, validateRequest(getPaymentReconciliationCasesSchema), getPaymentReconciliationCases);
+router.post('/admin/reconciliation/:orderId/retry-verify', authenticateOrInternalKey, validateRequest(retryVerifyOrderPaymentSchema), retryVerifyOrderPayment);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
 router.get('/status/:orderId', authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);

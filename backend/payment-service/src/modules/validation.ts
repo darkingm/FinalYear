@@ -94,6 +94,20 @@ export const getPaymentBatchSessionStatusSchema = z.object({
   }),
 });
 
+export const getPaymentReconciliationCasesSchema = z.object({
+  query: z.object({
+    order_id: z.string().regex(/^\d+$/).optional(),
+    limit: z.string().regex(/^\d+$/).optional(),
+    problems_only: z.enum(['true', 'false']).optional(),
+  }),
+});
+
+export const retryVerifyOrderPaymentSchema = z.object({
+  params: z.object({
+    orderId: z.string().regex(/^\d+$/, 'orderId must be a number'),
+  }),
+});
+
 export const submitTransactionSchema = z.object({
   body: z.object({
     order_id: z.number().positive('order_id must be a positive number'),

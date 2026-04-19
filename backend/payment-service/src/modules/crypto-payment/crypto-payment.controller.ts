@@ -321,6 +321,43 @@ export async function getPaymentBatchSessionStatus(req: Request, res: Response, 
   }
 }
 
+export async function getPaymentReconciliationCases(req: Request, res: Response, next: NextFunction) {
+  try {
+    const orderId = req.query.order_id ? parseInt(String(req.query.order_id), 10) : undefined;
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+    const problemsOnly = req.query.problems_only !== 'false';
+
+    const cases = await cryptoPaymentService.getPaymentReconciliationCases({
+      orderId,
+      limit,
+      problemsOnly,
+    });
+
+    res.json({
+      success: true,
+      cases,
+    });
+  } catch (error: any) {
+    logger.error('Get payment reconciliation cases error:', error);
+    next(error);
+  }
+}
+
+export async function retryVerifyOrderPayment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const orderId = parseInt(req.params.orderId, 10);
+    const result = await cryptoPaymentService.retryVerifyOrderPayment(orderId);
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    logger.error('Retry verify order payment error:', error);
+    next(error);
+  }
+}
+
 export async function generateQuote(req: Request, res: Response, next: NextFunction) {
   try {
     const { order_id, token_symbol, preferred_chain_id, buyer_wallet } = req.body;

@@ -9,6 +9,7 @@ import {
     LayoutDashboard, ShoppingCart, Users, AlertTriangle, RefreshCcw,
     Package, Coins, FileText, ChevronLeft, ChevronRight, Shield, LogOut,
     Home, Zap, Tag, Bell, Menu, X, Fingerprint,
+    Activity,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import { useDisconnect } from 'wagmi';
@@ -22,6 +23,7 @@ const NAV_KEYS = [
     { href: '/admin/vouchers', labelKey: 'admin.vouchers', icon: Tag, badge: 'NEW' },
     { href: '/admin/disputes', labelKey: 'admin.disputes', icon: AlertTriangle, badge: null },
     { href: '/admin/refunds', labelKey: 'admin.refunds', icon: RefreshCcw, badge: null },
+    { href: '/admin/reconciliation', labelKey: 'admin.reconciliation', icon: Activity, badge: null },
     { href: '/admin/escrow', labelKey: 'admin.smartContract', icon: Zap, badge: null },
     { href: '/admin/tokens', labelKey: 'admin.tokens', icon: Coins, badge: null },
     { href: '/admin/kyc', labelKey: 'KYC', icon: Fingerprint, badge: 'NEW' },

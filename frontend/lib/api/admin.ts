@@ -67,4 +67,14 @@ export const adminApi = {
     escrow: {
         orders: () => apiClient.get('/api/admin/escrow/orders'),
     },
+
+    // Payment reconciliation
+    payments: {
+        reconciliation: (params?: { limit?: number; problems_only?: boolean; order_id?: number }) =>
+            apiClient.get('/api/admin/payments/reconciliation', { params }),
+        retryVerify: (orderId: number) =>
+            apiClient.post(`/api/admin/payments/reconciliation/${orderId}/retry-verify`),
+        reconcileOrder: (orderId: number) =>
+            apiClient.post(`/api/admin/payments/reconciliation/${orderId}/reconcile-order`),
+    },
 };
