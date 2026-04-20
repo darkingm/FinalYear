@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { ChunkErrorBoundary } from '@/components/error/ChunkErrorBoundary';
+import { NavigationErrorRecovery } from '@/components/error/NavigationErrorRecovery';
 import { ClientChrome } from '@/components/layout/ClientChrome';
 
 export const metadata: Metadata = {
@@ -125,6 +126,7 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
+          <NavigationErrorRecovery />
           <ChunkErrorBoundary>
             <ClientChrome />
             {children}

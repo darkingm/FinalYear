@@ -12,6 +12,24 @@ const nextConfig = {
 
   productionBrowserSourceMaps: false,
 
+  // ─── Disable Client Router Cache ─────────────────────────────────────
+  // Prevents stale RSC payload after deploy → fixes silent navigation failure
+  // when user has an old tab open and clicks <Link> to a page with new chunk hashes.
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
+    optimizePackageImports: [
+      'lucide-react',
+      '@rainbow-me/rainbowkit',
+      'wagmi',
+      '@paypal/react-paypal-js',
+      'framer-motion',
+      'viem',
+    ],
+  },
+
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cryptologos.cc' },
@@ -55,15 +73,35 @@ const nextConfig = {
     ];
   },
 
-  experimental: {
-    optimizePackageImports: [
-      'lucide-react',
-      '@rainbow-me/rainbowkit',
-      'wagmi',
-      '@paypal/react-paypal-js',
-      'framer-motion',
-      'viem',
-    ],
+  // ─── Cache-Control headers for HTML pages ──────────────────────────────
+  // Prevents browser from serving stale cached HTML after a new deployment.
+  async headers() {
+    return [
+      {
+        // All pages — no-cache HTML so browser always checks for updated bundles
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+        ],
+      },
+      {
+        // Static assets (_next/static) — immutable, long cache (hash in filename)
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
 
   webpack: (config, { isServer }) => {
