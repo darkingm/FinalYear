@@ -45,7 +45,7 @@ profitRouter.get('/:assetId/history', async (req: Request, res: Response) => {
     }
 });
 
-/** On-chain stats for asset (live) */
+/** On-chain stats merged with DB stats for asset */
 profitRouter.get('/:assetId/stats', async (req: Request, res: Response) => {
     try {
         const assetResult = await query(
@@ -55,7 +55,27 @@ profitRouter.get('/:assetId/stats', async (req: Request, res: Response) => {
         if (assetResult.rows.length === 0) return res.status(404).json({ error: 'Asset not found' });
         const { token_contract_address, distributor_contract_address } = assetResult.rows[0];
 
-        const stats = await getOnChainStats(token_contract_address, distributor_contract_address);
+        // Get on-chain stats
+        const onChainStats = await getOnChainStats(token_contract_address, distributor_contract_address);
+
+        // Get DB distribution count
+        const countResult = await query(
+            `SELECT COUNT(*) AS distribution_count FROM profit_distributions WHERE asset_id = $1`,
+            [req.params.assetId]
+        );
+
+        // Merge on-chain + DB stats into a unified response
+        const stats = {
+            totalSupply: onChainStats.totalSupply,
+            tokensAvailable: onChainStats.tokensAvailable,
+            tokensSold: onChainStats.tokensSold,
+            totalDepositedWei: onChainStats.totalDepositedWei,
+            totalDepositedEth: (Number(onChainStats.totalDepositedWei) / 1e18).toFixed(6),
+            totalClaimedWei: onChainStats.totalClaimedWei,
+            totalClaimedEth: (Number(onChainStats.totalClaimedWei) / 1e18).toFixed(6),
+            distributionCount: parseInt(countResult.rows[0].distribution_count, 10),
+        };
+
         res.json({ stats });
     } catch (err: any) {
         res.status(500).json({ error: err.message });

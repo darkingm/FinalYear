@@ -12,21 +12,22 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export default function DisputeDetailPage() {
   const router = useRouter();
   const params = useParams();
   const disputeId = parseInt(params.id as string);
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const [dispute, setDispute] = useState<Dispute | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login?callbackUrl=/disputes');
+      router.push(buildLoginRedirectUrl('/disputes', reauthRequired ? 'reauth_required' : undefined));
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, reauthRequired]);
 
   useEffect(() => {
     if (isAuthenticated && disputeId) {

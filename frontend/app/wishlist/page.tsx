@@ -13,19 +13,20 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export default function WishlistPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const { items, removeItem } = useWishlistStore();
   const { addItem: addToCart } = useCartStore();
   const [removing, setRemoving] = useState<number | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login?callbackUrl=/wishlist');
+      router.push(buildLoginRedirectUrl('/wishlist', reauthRequired ? 'reauth_required' : undefined));
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, reauthRequired]);
 
   const handleRemove = (productId: number) => {
     setRemoving(productId);

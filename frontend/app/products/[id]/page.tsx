@@ -47,6 +47,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+import { publicRequestConfig } from '@/lib/api/request-auth';
 
 interface Product {
   product_id: number;
@@ -89,7 +91,7 @@ export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, reauthRequired } = useAuth();
   const addItem = useCartStore((state) => state.addItem);
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -102,7 +104,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     const requestedTokenId = Number(searchParams.get('token'));
 
-    apiClient.get(`/api/products/${id}`)
+    apiClient.get(`/api/products/${id}`, publicRequestConfig)
       .then((response) => {
         const data = response.data;
         if (data.success && data.data) {
@@ -172,8 +174,10 @@ export default function ProductDetailPage() {
   const handleBuyNow = async () => {
     if (!product) return;
     if (!isAuthenticated) {
-      toast.error('Vui lòng đăng nhập để mua hàng');
-      router.push(`/login?redirect=/products/${id}`);
+      const query = searchParams?.toString();
+      const callbackUrl = `/products/${id}${query ? `?${query}` : ''}`;
+      toast.error(reauthRequired ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' : 'Vui lòng đăng nhập để mua hàng');
+      router.push(buildLoginRedirectUrl(callbackUrl, reauthRequired ? 'reauth_required' : undefined));
       return;
     }
 

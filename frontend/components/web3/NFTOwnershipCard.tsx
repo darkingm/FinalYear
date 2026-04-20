@@ -9,6 +9,7 @@ import {
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { publicRequestConfig } from '@/lib/api/request-auth';
 
 interface NFTInfo {
   nft_id?: number;
@@ -69,7 +70,7 @@ export function NFTOwnershipCard({ productId, productName, variant = 'full', cla
 
   const fetchNFT = async () => {
     try {
-      const res = await apiClient.get(`/api/nft/product/${productId}`);
+      const res = await apiClient.get(`/api/nft/product/${productId}`, publicRequestConfig);
       const data = res.data?.data ?? null;
       setNFT(data);
       if (data?.token_uri) {

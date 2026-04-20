@@ -8,7 +8,7 @@ import {
     FileText, Shield, Percent, Users, Coins, ArrowLeft,
     DollarSign, Wallet, Loader2, CheckCircle2, ExternalLink,
     Building, TrendingUp, Info, Lock, AlertCircle, RefreshCw,
-    TrendingDown, Gift,
+    TrendingDown, Gift, Vote, ArrowRight, Store, Gavel,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import type { RWAAsset } from '../page';
+import { getDemoRwaAssetById } from '@/lib/rwa/demo-assets';
 
 /* ── ABIs ───────────────────────────────────────────────────────────────── */
 const ERC20_ABI = parseAbi([
@@ -36,7 +37,12 @@ const RWA_TOKEN_ABI = parseAbi([
     'function balanceOf(address account) view returns (uint256)',
     'function tokensAvailable() view returns (uint256)',
     'function pricePerTokenUSD() view returns (uint256)',
+    'function totalSupply() view returns (uint256)',
+]);
+
+const DISTRIBUTOR_ABI = parseAbi([
     'function claimReward() external',
+    'function pendingReward(address investor) view returns (uint256)',
 ]);
 
 const TYPE_COLOR: Record<string, string> = {
@@ -67,7 +73,8 @@ function InvestPanel({ asset, kycStatus, onInvestSuccess }: {
     const [pendingReward, setPendingReward] = useState<string | null>(null);
 
     const totalCostUsd = tokenAmount * Number(asset.price_per_token_usd);
-    const tokenContractAddress = (asset as any).token_address as `0x${string}` | undefined;
+    const tokenContractAddress = asset.token_contract_address as `0x${string}` | undefined;
+    const distributorAddress = asset.distributor_contract_address as `0x${string}` | undefined;
 
     // Read user's RWA token balance
     const { data: userTokenBalance } = useReadContract({
@@ -111,18 +118,18 @@ function InvestPanel({ asset, kycStatus, onInvestSuccess }: {
     const { writeContractAsync, isPending: claimPending } = useWriteContract();
 
     const handleClaimReward = useCallback(async () => {
-        if (!tokenContractAddress || !address) return;
+        if (!distributorAddress || !address) return;
         try {
             await writeContractAsync({
-                address: tokenContractAddress,
-                abi: RWA_TOKEN_ABI,
+                address: distributorAddress,
+                abi: DISTRIBUTOR_ABI,
                 functionName: 'claimReward',
             });
             toast.success('Phần thưởng đã được chuyển về ví!');
         } catch (e: any) {
             toast.error(e.shortMessage || 'Không thể claim phần thưởng');
         }
-    }, [tokenContractAddress, address, writeContractAsync]);
+    }, [distributorAddress, address, writeContractAsync]);
 
     return (
         <motion.div
@@ -239,7 +246,7 @@ function InvestPanel({ asset, kycStatus, onInvestSuccess }: {
             </button>
 
             {/* Claim Reward button */}
-            {isConnected && tokenContractAddress && (
+            {isConnected && distributorAddress && (
                 <button
                     onClick={handleClaimReward}
                     disabled={claimPending}
@@ -272,15 +279,57 @@ export default function AssetDetailPage() {
     const [stats, setStats] = useState<any>(null);
     const [distributions, setDistributions] = useState<any[]>([]);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [holders, setHolders] = useState<any[]>([]);
+    const [concentration, setConcentration] = useState<any>(null);
 
     const fetchData = useCallback(() => {
         if (!id) return;
         setLoading(true);
+        const demoAsset = getDemoRwaAssetById(id as string);
         Promise.all([
-            rwaApi.assets.get(id as string).then(r => setAsset(r.data.asset)).catch(() => { }),
+            rwaApi.assets.get(id as string).then(r => setAsset(r.data.asset)).catch(() => {
+                if (demoAsset) setAsset(demoAsset as RWAAsset);
+            }),
             rwaApi.profit.stats(id as string).then(r => setStats(r.data.stats)).catch(() => { }),
             rwaApi.profit.history(id as string).then(r => setDistributions(r.data.distributions || [])).catch(() => { }),
-        ]).finally(() => setLoading(false));
+            rwaApi.holders.list(id as string, 5).then(r => setHolders(r.data.holders || [])).catch(() => { }),
+            rwaApi.holders.concentration(id as string).then(r => setConcentration(r.data.concentration)).catch(() => { }),
+        ]).finally(() => {
+            if (demoAsset) {
+                setStats((current: any) => current ?? {
+                    totalDepositedWei: '0',
+                    totalDepositedEth: '0',
+                    distributionCount: 2,
+                    totalClaimedWei: '0',
+                });
+                setDistributions((current) => current.length > 0 ? current : [
+                    {
+                        distribution_id: 'demo-dist-001',
+                        amount_eth: '0.80',
+                        description: 'Quarterly rental yield distribution',
+                        distributed_at: new Date().toISOString(),
+                    },
+                    {
+                        distribution_id: 'demo-dist-002',
+                        amount_eth: '0.65',
+                        description: 'Occupancy bonus distribution',
+                        distributed_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
+                    },
+                ]);
+                setHolders((current) => current.length > 0 ? current : [
+                    { wallet_address: '0x9f2a2D5c9c784D05f4B2E7C5E1A2d2c8f17E4A11', tokens_held: 600, ownership_percent: 12, is_largest_holder: true },
+                    { wallet_address: '0x70B2C3C4c112D9447D6f75d5cD1b5eCaA8a5F211', tokens_held: 420, ownership_percent: 8.4, is_largest_holder: false },
+                    { wallet_address: '0x4A31fB8D0b4766cD6f6e3Ab10e54D1d93fb6f144', tokens_held: 315, ownership_percent: 6.3, is_largest_holder: false },
+                ]);
+                setConcentration((current: any) => current ?? {
+                    largest_holder_percent: 12,
+                    top5_percent: 34.7,
+                    top10_percent: 48.2,
+                    herfindahl_index: 412,
+                });
+            }
+            setLoading(false);
+        });
     }, [id]);
 
     useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
@@ -394,6 +443,121 @@ export default function AssetDetailPage() {
                             </div>
                         )}
 
+                        {/* Top Holders */}
+                        {holders.length > 0 && (
+                            <div className="bg-card border border-border rounded-2xl p-6">
+                                <h2 className="font-bold mb-4 text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-blue-400" /> Top Holders
+                                </h2>
+                                {concentration && concentration.concentration_risk !== 'LOW' && (
+                                    <div className={`mb-4 text-xs p-3 rounded-xl border flex items-start gap-2 ${
+                                        concentration.concentration_risk === 'HIGH'
+                                            ? 'bg-red-400/10 border-red-400/20 text-red-400'
+                                            : 'bg-amber-400/10 border-amber-400/20 text-amber-400'
+                                    }`}>
+                                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                        {concentration.is_supermajority_controlled
+                                            ? `⚠️ Holder lớn nhất nắm ${concentration.largest_holder_percent}% — đủ quyền supermajority`
+                                            : `Holder lớn nhất nắm ${concentration.largest_holder_percent}% — gần ngưỡng kiểm soát`
+                                        }
+                                    </div>
+                                )}
+                                <div className="space-y-3">
+                                    {holders.map((h: any, i: number) => (
+                                        <div key={i} className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-muted-foreground w-5">#{h.rank}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-xs font-mono truncate text-muted-foreground">
+                                                        {h.wallet_address?.substring(0, 6)}...{h.wallet_address?.substring(38)}
+                                                    </span>
+                                                    <span className={`text-xs font-black ${h.is_largest_holder ? 'text-[#f0b90b]' : ''}`}>
+                                                        {Number(h.ownership_percent).toFixed(2)}%
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${h.is_largest_holder ? 'bg-[#f0b90b]' : 'bg-blue-400/60'}`}
+                                                        style={{ width: `${Math.min(Number(h.ownership_percent), 100)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                {Number(h.tokens_held).toLocaleString()} tokens
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {concentration && (
+                                    <div className="mt-4 pt-3 border-t border-border grid grid-cols-3 gap-3 text-center">
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase">Top 5</p>
+                                            <p className="text-sm font-black">{concentration.top5_percent}%</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase">Total Holders</p>
+                                            <p className="text-sm font-black">{concentration.total_holders}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase">HHI</p>
+                                            <p className="text-sm font-black">{concentration.herfindahl_index}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Governance link */}
+                        <Link href={`/assets/${id}/governance`}
+                            className="block bg-card border border-violet-500/20 rounded-2xl p-5 hover:border-violet-500/40 transition-all group">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-violet-500/10 rounded-xl">
+                                        <Vote className="w-5 h-5 text-violet-400" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm">Governance</p>
+                                        <p className="text-xs text-muted-foreground">Create proposals, vote on decisions</p>
+                                    </div>
+                                </div>
+                                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-violet-400 transition-colors" />
+                            </div>
+                        </Link>
+
+                        {/* Secondary Market link */}
+                        <Link href={`/assets/${id}/market`}
+                            className="block bg-card border border-emerald-500/20 rounded-2xl p-5 hover:border-emerald-500/40 transition-all group">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-emerald-500/10 rounded-xl">
+                                        <Store className="w-5 h-5 text-emerald-400" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm">Secondary Market</p>
+                                        <p className="text-xs text-muted-foreground">Buy & sell tokens P2P</p>
+                                    </div>
+                                </div>
+                                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                            </div>
+                        </Link>
+
+                        {/* Buyout link */}
+                        <Link href={`/assets/${id}/buyout`}
+                            className="block bg-card border border-red-500/20 rounded-2xl p-5 hover:border-red-500/40 transition-all group">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-red-500/10 rounded-xl">
+                                        <Gavel className="w-5 h-5 text-red-400" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm">Buyout</p>
+                                        <p className="text-xs text-muted-foreground">Asset buyout proposals & claims</p>
+                                    </div>
+                                </div>
+                                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-red-400 transition-colors" />
+                            </div>
+                        </Link>
+
                         {/* Profit stats */}
                         {stats && (
                             <div className="bg-card border border-border rounded-2xl p-6">
@@ -402,9 +566,9 @@ export default function AssetDetailPage() {
                                 </h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                     {[
-                                        { label: 'Tổng đã phân phối', value: `${Number(stats.total_distributed || 0).toFixed(4)} ETH`, green: true },
-                                        { label: 'Số lần phân phối', value: String(stats.distribution_count || 0) },
-                                        { label: 'Tổng giá trị (USD)', value: `$${Number(stats.total_distributed_usd || 0).toLocaleString()}`, gold: true },
+                                        { label: 'Tổng đã phân phối', value: `${(Number(stats.totalDepositedWei || 0) / 1e18).toFixed(4)} ETH`, green: true },
+                                        { label: 'Số lần phân phối', value: String(stats.distributionCount || 0) },
+                                        { label: 'Đã claim', value: `${(Number(stats.totalClaimedWei || 0) / 1e18).toFixed(4)} ETH`, gold: true },
                                     ].map(s => (
                                         <div key={s.label} className="bg-muted/50 rounded-xl p-3">
                                             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">{s.label}</p>

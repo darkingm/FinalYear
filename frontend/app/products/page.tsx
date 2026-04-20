@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
+import { publicRequestConfig } from '@/lib/api/request-auth';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
@@ -165,7 +166,7 @@ function ProductsPageContent() {
       const params = new URLSearchParams();
       if (category) params.append('category', category);
       if (search) params.append('search', search);
-      const res = await apiClient.get(`/api/products?${params}`);
+      const res = await apiClient.get(`/api/products?${params}`, publicRequestConfig);
       let data: ProductCardData[] = res.data.data ?? [];
       if (priceRange.min) data = data.filter(p => Number(p.base_price_usd) >= Number(priceRange.min));
       if (priceRange.max) data = data.filter(p => Number(p.base_price_usd) <= Number(priceRange.max));
@@ -180,7 +181,7 @@ function ProductsPageContent() {
   const fetchNFTProducts = useCallback(async () => {
     setNftLoading(true);
     try {
-      const res = await apiClient.get('/api/products?has_token=true&limit=50');
+      const res = await apiClient.get('/api/products?has_token=true&limit=50', publicRequestConfig);
       let data: TokenProduct[] = (res.data.data ?? []).filter(
         (p: any) => p.accepted_tokens?.length > 0
       );

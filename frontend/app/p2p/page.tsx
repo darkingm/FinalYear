@@ -13,6 +13,7 @@ import {
     User, Coins, DollarSign, Zap, RefreshCw, Info,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
+import { publicRequestConfig } from '@/lib/api/request-auth';
 
 interface P2POffer {
     offer_id: number; offer_type: 'BUY' | 'SELL'; creator_id: number;
@@ -68,7 +69,7 @@ export default function P2PPage() {
         if (amount) params.set('amount', amount);
 
         try {
-            const res = await apiClient.get(`/api/p2p/offers?${params}`);
+            const res = await apiClient.get(`/api/p2p/offers?${params}`, publicRequestConfig);
             const d = res.data;
             if (d.success) { setOffers(d.data); setTotal(d.pagination?.total || 0); }
         } catch { /* no offers */ }
@@ -78,7 +79,7 @@ export default function P2PPage() {
     useEffect(() => { fetchOffers(); }, [fetchOffers]);
 
     useEffect(() => {
-        apiClient.get('/api/products/tokens')
+        apiClient.get('/api/products/tokens', publicRequestConfig)
             .then(res => { if (res.data?.success) setTokens(res.data.data); })
             .catch(() => {});
     }, []);

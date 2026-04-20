@@ -3,15 +3,15 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./RWAToken.sol";
+import "./RWATokenV2.sol";
+import "./GovernanceRWA.sol";
 import "./ProfitDistributor.sol";
 import "./ComplianceRegistry.sol";
 
 /**
  * @title RWAFactory
  * @notice Deploy RWAToken + ProfitDistributor pairs for each tokenized asset.
- *
- * One call to createAsset() deploys both contracts, grants proper roles, and
- * emits an event the backend indexes to track all assets on-chain.
+ *         V2: Also deploys GovernanceRWA for assets with governance support.
  */
 contract RWAFactory is AccessControl {
     bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
@@ -26,8 +26,17 @@ contract RWAFactory is AccessControl {
         bool    active;
     }
 
+    struct AssetContractsV2 {
+        address token;
+        address distributor;
+        address governance;
+        uint256 createdAt;
+        bool    active;
+    }
+
     // assetId (UUID as bytes32) → deployed contracts
-    mapping(bytes32 => AssetContracts) public assets;
+    mapping(bytes32 => AssetContracts)   public assets;
+    mapping(bytes32 => AssetContractsV2) public assetsV2;
     bytes32[] public allAssetIds;
 
     event AssetCreated(
@@ -39,6 +48,13 @@ contract RWAFactory is AccessControl {
         uint256         totalValuationUSD,
         uint256         pricePerTokenUSD
     );
+    event AssetV2Created(
+        bytes32 indexed assetId,
+        address token,
+        address distributor,
+        address governance,
+        string  name
+    );
     event AssetDeactivated(bytes32 indexed assetId);
 
     constructor(address compliance_, address admin) {
@@ -49,15 +65,7 @@ contract RWAFactory is AccessControl {
     }
 
     /**
-     * @notice Deploy a new RWAToken + ProfitDistributor for a real-world asset.
-     * @param assetIdStr     UUID string from backend DB (e.g. "550e8400-e29b-41d4-a716-...")
-     * @param name           Token name (e.g. "Q1 HCM Tower - Apt 2101")
-     * @param symbol         Token symbol (e.g. "HCMT-2101")
-     * @param assetType      Enum: 0=REAL_ESTATE, 1=BOND, 2=EQUITY, 3=COMMODITY
-     * @param legalDocIPFS   IPFS CID of legal package
-     * @param totalVal       Total asset valuation in USD × 1e6
-     * @param pricePerToken  Price per token in USD × 1e6
-     * @param operator       Backend wallet that can mint and deposit profits
+     * @notice Deploy a new RWAToken + ProfitDistributor (V1, no governance).
      */
     function createAsset(
         string           calldata assetIdStr,
@@ -89,8 +97,6 @@ contract RWAFactory is AccessControl {
         distAddr = address(newDist);
 
         // ── 3. Wire token ↔ distributor ─────────────────────────────────
-        // RWAToken._update() calls distributor.settleOnTransfer() on every balance change.
-        // This must be set before renouncing factory's role (still holds OPERATOR_ROLE via admin).
         newToken.setDistributor(distAddr);
 
         // ── 4. Grant ISSUER+OPERATOR to operator, then renounce factory's admin ─────
@@ -117,6 +123,86 @@ contract RWAFactory is AccessControl {
         allAssetIds.push(assetId);
 
         emit AssetCreated(assetId, tokenAddr, distAddr, name, assetType, totalVal, pricePerToken);
+    }
+
+    /**
+     * @notice Deploy RWATokenV2 + ProfitDistributor + GovernanceRWA (V2, with governance).
+     * @param quorum_         Quorum % for simple proposals (e.g. 50)
+     * @param supermajority_  Required % for asset-sale proposals (e.g. 67)
+     * @param votingPeriod_   Voting window in seconds (e.g. 172800 = 48h)
+     */
+    function createAssetV2(
+        string            calldata assetIdStr,
+        string            calldata name,
+        string            calldata symbol,
+        RWATokenV2.AssetType       assetType,
+        string            calldata legalDocIPFS,
+        uint256                    totalVal,
+        uint256                    pricePerToken,
+        address                    operator,
+        uint256                    quorum_,
+        uint256                    supermajority_,
+        uint256                    votingPeriod_
+    ) external onlyRole(ISSUER_ROLE) returns (address tokenAddr, address distAddr, address govAddr) {
+        require(totalVal > 0 && pricePerToken > 0, "RWAFactory: invalid valuation");
+        require(pricePerToken <= totalVal, "RWAFactory: price > valuation");
+
+        bytes32 assetId = keccak256(abi.encodePacked(assetIdStr));
+        require(assetsV2[assetId].token == address(0) && assets[assetId].token == address(0),
+                "RWAFactory: asset already exists");
+
+        // ── 1. Deploy RWATokenV2 ─────────────────────────────────────
+        RWATokenV2 newToken = new RWATokenV2(
+            name, symbol, assetIdStr, assetType,
+            legalDocIPFS, totalVal, pricePerToken,
+            address(compliance), platformAdmin,
+            address(this)
+        );
+        tokenAddr = address(newToken);
+
+        // ── 2. Deploy ProfitDistributor ──────────────────────────────
+        ProfitDistributor newDist = new ProfitDistributor(tokenAddr, platformAdmin, address(this));
+        distAddr = address(newDist);
+
+        // ── 3. Deploy GovernanceRWA ──────────────────────────────────
+        GovernanceRWA newGov = new GovernanceRWA(
+            tokenAddr,
+            platformAdmin,
+            quorum_,
+            supermajority_,
+            votingPeriod_,
+            100  // 1% proposal threshold (100 basis points)
+        );
+        govAddr = address(newGov);
+
+        // ── 4. Wire contracts ────────────────────────────────────────
+        newToken.setDistributor(distAddr);
+
+        // ── 5. Grant roles ───────────────────────────────────────────
+        bytes32 ADMIN    = newToken.DEFAULT_ADMIN_ROLE();
+        bytes32 ISSUER_R = newToken.ISSUER_ROLE();
+        bytes32 OPER_R   = newToken.OPERATOR_ROLE();
+        bytes32 DIST_OP  = newDist.OPERATOR_ROLE();
+
+        newToken.grantRole(ISSUER_R, operator);
+        newToken.grantRole(OPER_R, operator);
+        newDist.grantRole(DIST_OP, operator);
+
+        // Renounce factory admin
+        newToken.renounceRole(ADMIN, address(this));
+        newDist.renounceRole(ADMIN, address(this));
+
+        // ── 6. Record ────────────────────────────────────────────────
+        assetsV2[assetId] = AssetContractsV2({
+            token:       tokenAddr,
+            distributor: distAddr,
+            governance:  govAddr,
+            createdAt:   block.timestamp,
+            active:      true
+        });
+        allAssetIds.push(assetId);
+
+        emit AssetV2Created(assetId, tokenAddr, distAddr, govAddr, name);
     }
 
     function deactivateAsset(bytes32 assetId) external onlyRole(DEFAULT_ADMIN_ROLE) {

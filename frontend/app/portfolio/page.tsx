@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 const DISTRIBUTOR_ABI = parseAbi([
     'function claimReward() external',
@@ -91,7 +92,7 @@ export default function PortfolioPage() {
                     <div className="flex flex-col items-center justify-center py-32 gap-4">
                         <Lock className="w-12 h-12 text-muted-foreground/30" />
                         <p className="text-muted-foreground">Đăng nhập để xem portfolio RWA của bạn</p>
-                        <Link href="/login?callbackUrl=/portfolio" className="px-5 py-2.5 bg-[#f0b90b] text-black font-bold rounded-xl text-sm">Đăng nhập</Link>
+                        <Link href={buildLoginRedirectUrl('/portfolio')} className="px-5 py-2.5 bg-[#f0b90b] text-black font-bold rounded-xl text-sm">Đăng nhập</Link>
                     </div>
                 )}
                 {session && (
@@ -154,7 +155,12 @@ export default function PortfolioPage() {
                                             <div className="text-3xl">{TYPE_ICON[h.asset_type] || '💼'}</div>
                                             <div className="flex-1 min-w-[200px]">
                                                 <p className="font-bold">{h.name}</p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">{h.asset_type} · {h.tokens_held.toLocaleString()} tokens</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                    {h.asset_type} · {h.tokens_held.toLocaleString()} tokens
+                                                    {h.ownership_percent && (
+                                                        <span className="ml-2 text-[#f0b90b] font-bold">({Number(h.ownership_percent).toFixed(2)}% ownership)</span>
+                                                    )}
+                                                </p>
                                                 <div className="flex gap-3 mt-2 text-xs">
                                                     <span className="text-muted-foreground">Cost: <strong className="text-foreground">${(h.avg_cost_usd * h.tokens_held).toLocaleString()}</strong></span>
                                                     <span className="text-muted-foreground">Value: <strong className="text-[#f0b90b]">${Number(h.current_value_usd).toLocaleString()}</strong></span>

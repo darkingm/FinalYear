@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Building, TrendingUp, Coins, Leaf, Search, Filter, RefreshCw, Percent, Users, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { apiClient } from '@/lib/api/client';
+import { rwaApi } from '@/lib/api/rwa';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { getDemoRwaAssets } from '@/lib/rwa/demo-assets';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 export interface RWAAsset {
@@ -21,9 +22,12 @@ export interface RWAAsset {
     price_per_token_usd: number;
     total_tokens: number;
     tokens_sold: number;
+    token_contract_address: string;
+    distributor_contract_address: string;
     legal_doc_ipfs: string;
     expected_apy: number | null;
     status: string;
+    chain_id?: number;
     holder_count?: number;
     total_distributed_usd?: number;
 }
@@ -119,26 +123,10 @@ export default function AssetsMarketplacePage() {
         const fetchAssets = async () => {
             setLoading(true);
             try {
-                const res = await apiClient.get('/api/rwa/assets');
+                const res = await rwaApi.assets.list();
                 setAssets(res.data.assets || []);
             } catch {
-                // Demo fallback
-                setAssets([{
-                    asset_id: 'demo-001',
-                    name: 'HCM Tower Unit 2101',
-                    symbol: 'HCMT-2101',
-                    asset_type: 'REAL_ESTATE',
-                    description: 'Luxury apartment in District 1, Ho Chi Minh City. Annual rental yield 8.5%.',
-                    location: 'District 1, Ho Chi Minh City',
-                    total_valuation_usd: 500000,
-                    price_per_token_usd: 100,
-                    total_tokens: 5000,
-                    tokens_sold: 1850,
-                    legal_doc_ipfs: '',
-                    expected_apy: 8.5,
-                    status: 'ACTIVE',
-                    holder_count: 23,
-                }]);
+                setAssets(getDemoRwaAssets() as RWAAsset[]);
             } finally { setLoading(false); }
         };
         fetchAssets();

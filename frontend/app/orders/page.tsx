@@ -22,6 +22,7 @@ import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { formatUSD } from '@/lib/utils/format-price';
 import { getOrderPricingDisplay, resolveOrderProductImage } from '@/lib/orders/presentation';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 /* ─── Types ───────────────────────────────────────────────────── */
 interface Order {
@@ -237,7 +238,7 @@ function StatCard({ value, label, icon: Icon, color }: { value: string; label: s
 
 /* ─── Main Page ───────────────────────────────────────────────── */
 export default function OrdersPage() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, reauthRequired } = useAuth();
   const router = useRouter();
   const { t } = useClientTranslation();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -246,9 +247,12 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) { router.push('/login?callbackUrl=/orders'); return; }
+    if (!isLoading && !isAuthenticated) {
+      router.push(buildLoginRedirectUrl('/orders', reauthRequired ? 'reauth_required' : undefined));
+      return;
+    }
     if (isAuthenticated) fetchOrders();
-  }, [isAuthenticated, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isLoading, reauthRequired, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchOrders = async () => {
     setLoading(true);

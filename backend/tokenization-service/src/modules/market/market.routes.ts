@@ -1,0 +1,120 @@
+import { Router, Request, Response } from 'express';
+import { query } from '../../db';
+
+export const marketRouter = Router();
+
+/** List active listings for an asset */
+marketRouter.get('/:assetId/listings', async (req: Request, res: Response) => {
+    try {
+        const statusFilter = req.query.status || 'ACTIVE';
+        const result = await query(`
+            SELECT l.*, a.name AS asset_name, a.symbol, a.price_per_token_usd AS current_price_usd
+            FROM rwa_listings l
+            JOIN rwa_assets a USING (asset_id)
+            WHERE l.asset_id = $1 AND l.status = $2
+            ORDER BY l.created_at DESC
+            LIMIT 50
+        `, [req.params.assetId, statusFilter]);
+        res.json({ listings: result.rows });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/** Get trade history for an asset */
+marketRouter.get('/:assetId/trades', async (req: Request, res: Response) => {
+    try {
+        const result = await query(`
+            SELECT t.*, l.seller_address, l.price_per_token_wei, l.price_per_token_usd,
+                   a.name AS asset_name, a.symbol
+            FROM rwa_trades t
+            JOIN rwa_listings l ON t.listing_id = l.id
+            JOIN rwa_assets a ON l.asset_id = a.asset_id
+            WHERE l.asset_id = $1
+            ORDER BY t.traded_at DESC
+            LIMIT 50
+        `, [req.params.assetId]);
+        res.json({ trades: result.rows });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/** Create a listing (record — on-chain escrow done by frontend) */
+marketRouter.post('/:assetId/list', async (req: Request, res: Response) => {
+    const { seller_address, seller_user_id, token_amount, price_per_token_wei, price_per_token_usd, onchain_listing_id, listing_tx_hash } = req.body;
+
+    if (!seller_address || !token_amount || !price_per_token_wei) {
+        return res.status(400).json({ error: 'seller_address, token_amount, and price_per_token_wei required' });
+    }
+
+    try {
+        const result = await query(`
+            INSERT INTO rwa_listings
+                (asset_id, seller_address, seller_user_id, token_amount,
+                 price_per_token_wei, price_per_token_usd, onchain_listing_id, listing_tx_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `, [
+            req.params.assetId, seller_address, seller_user_id || null,
+            token_amount, price_per_token_wei,
+            price_per_token_usd || null, onchain_listing_id || null,
+            listing_tx_hash || null,
+        ]);
+        res.status(201).json({ listing: result.rows[0] });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/** Cancel a listing */
+marketRouter.patch('/listings/:id/cancel', async (req: Request, res: Response) => {
+    try {
+        const result = await query(`
+            UPDATE rwa_listings SET status = 'CANCELLED' WHERE id = $1 AND status = 'ACTIVE' RETURNING *
+        `, [req.params.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Listing not found or already cancelled' });
+        res.json({ listing: result.rows[0] });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/** Record a trade (after on-chain buy completes) */
+marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
+    const { buyer_address, buyer_user_id, trade_tx_hash } = req.body;
+
+    if (!buyer_address) return res.status(400).json({ error: 'buyer_address required' });
+
+    try {
+        // Get listing
+        const listingResult = await query(
+            `SELECT * FROM rwa_listings WHERE id = $1 AND status = 'ACTIVE'`, [req.params.id]
+        );
+        if (listingResult.rows.length === 0) return res.status(404).json({ error: 'Listing not active' });
+
+        const listing = listingResult.rows[0];
+        const totalPriceWei = (BigInt(listing.price_per_token_wei) * BigInt(listing.token_amount) / BigInt(10 ** 18)).toString();
+
+        // Mark listing filled
+        await query(`UPDATE rwa_listings SET status = 'FILLED' WHERE id = $1`, [req.params.id]);
+
+        // Record trade
+        const tradeResult = await query(`
+            INSERT INTO rwa_trades
+                (listing_id, buyer_address, buyer_user_id, token_amount, total_price_wei,
+                 total_price_usd, trade_tx_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+        `, [
+            req.params.id, buyer_address, buyer_user_id || null,
+            listing.token_amount, totalPriceWei,
+            listing.price_per_token_usd ? listing.price_per_token_usd * listing.token_amount : null,
+            trade_tx_hash || null,
+        ]);
+
+        res.json({ trade: tradeResult.rows[0] });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});

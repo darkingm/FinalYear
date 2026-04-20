@@ -27,6 +27,7 @@ import { CHAIN_META, CHAIN_TOKENS } from '@/lib/web3/config';
 import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
 import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 type ProductImageLike = string | { url?: string; image_url?: string; is_primary?: boolean; sort_order?: number };
 
@@ -76,7 +77,7 @@ export default function OrderDetailPage() {
   const success = searchParams.get('success') === 'true';
   const cancelled = searchParams.get('cancelled') === 'true';
 
-  const { isAuthenticated, isLoading: authLoading, session } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, session, reauthRequired } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(false);
@@ -122,12 +123,12 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push(`/login?callbackUrl=${encodeURIComponent(`/orders/${id}`)}`);
+      router.push(buildLoginRedirectUrl(`/orders/${id}`, reauthRequired ? 'reauth_required' : undefined));
       return;
     }
     if (isAuthenticated && id) fetchOrder();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, authLoading, id]);
+  }, [isAuthenticated, authLoading, id, reauthRequired]);
 
   useEffect(() => {
     if (!order || !success || !order.paypal_order_id || capturing) return;

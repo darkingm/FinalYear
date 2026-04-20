@@ -13,11 +13,12 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { formatTokenAmountOnly } from '@/lib/products/pricing';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export default function CartPage() {
     const router = useRouter();
     const { items, removeItem, updateQuantity, getTotal, getTotalItems } = useCartStore();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, reauthRequired } = useAuth();
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -31,7 +32,7 @@ export default function CartPage() {
 
     const handleCheckout = () => {
         if (!isAuthenticated) {
-            router.push('/login?callbackUrl=/checkout/cart');
+            router.push(buildLoginRedirectUrl('/checkout/cart', reauthRequired ? 'reauth_required' : undefined));
         } else {
             router.push('/checkout/cart');
         }

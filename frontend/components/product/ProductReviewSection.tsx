@@ -7,6 +7,7 @@ import { Star, ThumbsUp, ChevronDown, Filter, SortAsc, Image as ImageIcon, Edit3
 import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { toast } from 'sonner';
+import { publicRequestConfig } from '@/lib/api/request-auth';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface Review {
@@ -275,7 +276,7 @@ export function ProductReviewSection({ productId, completedOrderId }: ProductRev
     try {
       const params = new URLSearchParams({ sort, page: String(page), limit: '5' });
       if (filterRating) params.set('rating', String(filterRating));
-      const res = await apiClient.get(`/api/reviews/product/${productId}?${params}`);
+      const res = await apiClient.get(`/api/reviews/product/${productId}?${params}`, publicRequestConfig);
       setReviews(res.data.reviews);
       setStats(res.data.stats);
       setTotalPages(res.data.pagination.pages);

@@ -37,6 +37,7 @@ import {
   type LockedCartPreviewItem,
 } from '@/lib/payments/cart-pricing';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
 interface CryptoQuoteBatch {
@@ -113,7 +114,7 @@ function Steps({ current }: { current: number }) {
 /* ─── Main Page ─────────────────────────────────────────────────────── */
 export default function CartCheckoutPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const { items, getTotal, getTotalItems, clearCart } = useCartStore();
   const { address, isConnected, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
@@ -143,10 +144,13 @@ export default function CartCheckoutPage() {
   // Guard: must be authenticated; if cart is empty, go back
   useEffect(() => {
     if (authLoading) return;
-    if (!isAuthenticated) { router.push('/login?callbackUrl=/checkout/cart'); return; }
+    if (!isAuthenticated) {
+      router.push(buildLoginRedirectUrl('/checkout/cart', reauthRequired ? 'reauth_required' : undefined));
+      return;
+    }
     if (items.length === 0 && createdOrderIds.length === 0) { router.push('/cart'); return; }
     setLoading(false);
-  }, [isAuthenticated, authLoading, items.length, createdOrderIds.length, router]);
+  }, [isAuthenticated, authLoading, items.length, createdOrderIds.length, router, reauthRequired]);
 
   // Quote countdown timer
   useEffect(() => {

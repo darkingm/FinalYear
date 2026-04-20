@@ -11,6 +11,7 @@ import {
   User,
   Wallet,
 } from 'lucide-react';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export interface HeaderNavItem {
   href: string;
@@ -99,5 +100,5 @@ export function resolveHeaderNavHref(item: HeaderNavItem, isAuthenticated: boole
     return item.href;
   }
 
-  return `/login?callbackUrl=${encodeURIComponent(item.href)}`;
+  return buildLoginRedirectUrl(item.href);
 }

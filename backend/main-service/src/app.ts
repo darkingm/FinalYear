@@ -19,6 +19,7 @@ import { nftRouter } from './modules/nft/nft.routes';
 import { reviewsRouter } from './modules/reviews/reviews.routes';
 import { sellerRouter } from './modules/seller/seller.routes';
 import onchainRoutes from './modules/onchain/onchain.routes';
+import rwaProxyRoutes from './modules/rwa/rwa-proxy.routes';
 
 
 const app = express();
@@ -156,6 +157,7 @@ app.use('/api/nft', nftRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/seller', sellerRouter);
 app.use('/api/onchain', onchainRoutes);
+app.use('/api/rwa', rwaProxyRoutes);
 
 
 app.use((_req, res) => {

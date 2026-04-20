@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Star } from 'lucide-react';
-import { apiClient } from '@/lib/api/client';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
+import { productsApi } from '@/lib/api/products';
 
 export function FeaturedProducts() {
   const { t } = useClientTranslation();
@@ -13,7 +13,7 @@ export function FeaturedProducts() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiClient.get('/api/products?limit=8').then(r => {
+    productsApi.list({ limit: 8 }).then(r => {
       const list = r.data?.data ?? [];
       setProducts(Array.isArray(list) ? list.slice(0, 8) : []);
     }).catch(() => setProducts([])).finally(() => setLoading(false));

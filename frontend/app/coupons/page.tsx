@@ -12,10 +12,11 @@ import { couponService, type CreateCouponPayload } from '@/services/coupon.servi
 import { useAuth } from '@/lib/hooks/useAuth';
 import { toast } from 'sonner';
 import type { Coupon } from '@/types';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export default function CouponsPage() {
   const router = useRouter();
-  const { user: rawUser, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user: rawUser, isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const user = rawUser as any;
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,13 +29,13 @@ export default function CouponsPage() {
   useEffect(() => {
     if (!authLoading) {
       if (!isAuthenticated) {
-        router.push('/login?callbackUrl=/coupons');
+        router.push(buildLoginRedirectUrl('/coupons', reauthRequired ? 'reauth_required' : undefined));
       } else if (user?.role !== 'seller' && user?.role !== 'admin') {
         toast.error('Only sellers can manage coupons');
         router.push('/');
       }
     }
-  }, [isAuthenticated, authLoading, user, router]);
+  }, [isAuthenticated, authLoading, user, router, reauthRequired]);
 
   useEffect(() => {
     if (isAuthenticated && (user?.role === 'seller' || user?.role === 'admin')) {

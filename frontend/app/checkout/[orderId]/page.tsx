@@ -41,6 +41,7 @@ import {
   hasSubmittedPaymentInFlight,
 } from '@/lib/payments/payment-session-guards';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 /* ─── Block Explorers per chain ─────────────────────────────────────────── */
 export const CHAIN_EXPLORERS: Record<number, { name: string; tx: string; address: string }> = {
@@ -202,7 +203,7 @@ export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
   const orderId = typeof params?.orderId === 'string' ? parseInt(params.orderId, 10) : 0;
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const { address, isConnected, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
   const { switchChainAsync } = useSwitchChain();
@@ -306,7 +307,10 @@ export default function CheckoutPage() {
 
   /* ─── Load order ─────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) { router.push(`/login?callbackUrl=${encodeURIComponent(`/checkout/${orderId}`)}`); return; }
+    if (!authLoading && !isAuthenticated) {
+      router.push(buildLoginRedirectUrl(`/checkout/${orderId}`, reauthRequired ? 'reauth_required' : undefined));
+      return;
+    }
     if (isAuthenticated && orderId) {
       apiClient.get(`/api/orders/${orderId}`)
         .then(res => {
@@ -339,7 +343,7 @@ export default function CheckoutPage() {
         .catch(() => toast.error('Không tìm thấy đơn hàng'))
         .finally(() => setLoading(false));
     } else if (!authLoading) setLoading(false);
-  }, [isAuthenticated, authLoading, orderId, router]);
+  }, [isAuthenticated, authLoading, orderId, router, reauthRequired]);
 
   /* ─── Get Quote ─────────────────────────────────────────────────────── */
   const handleGetQuote = async () => {

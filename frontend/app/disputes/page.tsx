@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 interface Dispute {
   dispute_id: number;
@@ -32,7 +33,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: any; bg
 
 export default function DisputesPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -42,9 +43,9 @@ export default function DisputesPage() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login?callbackUrl=/disputes');
+      router.push(buildLoginRedirectUrl('/disputes', reauthRequired ? 'reauth_required' : undefined));
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, reauthRequired]);
 
   useEffect(() => {
     if (isAuthenticated) fetchDisputes();

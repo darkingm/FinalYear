@@ -19,6 +19,7 @@ import {
   AlertCircle, Loader2, Shield, ArrowDownToLine, ExternalLink,
   Plus, Info,
 } from 'lucide-react';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface UserWallet {
@@ -89,7 +90,7 @@ function WalletBalanceDisplay({ address }: { address: string }) {
 /* ─── Main component ─────────────────────────────────────────────────────── */
 export default function WalletPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const { address, isConnected, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
@@ -104,9 +105,9 @@ export default function WalletPage() {
   /* ─── Auth guard ─────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login?redirect=/wallet');
+      router.push(buildLoginRedirectUrl('/wallet', reauthRequired ? 'reauth_required' : undefined));
     }
-  }, [authLoading, isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router, reauthRequired]);
 
   /* ─── Load data ──────────────────────────────────────────────────────── */
   const fetchData = useCallback(async () => {

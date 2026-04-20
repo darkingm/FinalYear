@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import {
   clearSessionAccessToken,
   ensureSessionAccessToken,
@@ -6,6 +6,8 @@ import {
   refreshSessionAccessToken,
 } from '@/lib/auth/session-token-manager';
 import { logAuthEvent } from '@/lib/auth/auth-log';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+import { getRequestAuthMode, type AuthAwareRequestConfig } from '@/lib/api/request-auth';
 
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_MAIN_API_URL || 'http://localhost:3001',
@@ -27,10 +29,13 @@ export const paymentClient = axios.create({
   withCredentials: true,
 });
 
+type AuthAwareAxiosConfig = InternalAxiosRequestConfig & AuthAwareRequestConfig & { _retried?: boolean };
+
 // ─── Request interceptors ─────────────────────────────────────────────────
 // Read from the local token cache first and only consult NextAuth when cold.
-async function attachToken(config: any) {
+async function attachToken(config: AuthAwareAxiosConfig) {
   if (typeof window === 'undefined') return config;
+  if (!getRequestAuthMode(config).attachToken) return config;
   const token = getStoredAccessToken() || await ensureSessionAccessToken();
 
   if (token) {
@@ -47,9 +52,12 @@ paymentClient.interceptors.request.use(attachToken, (e) => Promise.reject(e));
 // ─── Response interceptors ────────────────────────────────────────────────
 // On 401: invalidate the stale access token and let a single shared session
 // refresh serve all concurrent callers.
-async function handle401(error: any, client: any) {
+async function handle401(error: any, client: AxiosInstance) {
   if (error.response?.status === 401 && typeof window !== 'undefined') {
-    const original = error.config;
+    const original = (error.config ?? {}) as AuthAwareAxiosConfig;
+    if (!getRequestAuthMode(original).redirectOn401) {
+      return Promise.reject(error);
+    }
     if (!original._retried) {
       original._retried = true;
       try {
@@ -73,7 +81,7 @@ async function handle401(error: any, client: any) {
         path: window.location.pathname,
       });
       if (!window.location.pathname.includes('/login')) {
-        window.location.href = `/login?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=reauth_required`;
+        window.location.href = buildLoginRedirectUrl(callbackUrl, 'reauth_required');
       }
     }
   }

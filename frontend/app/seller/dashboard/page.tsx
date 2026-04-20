@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { getOrderPricingDisplay } from '@/lib/orders/presentation';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 interface DashboardStats {
   orders: {
@@ -44,7 +45,7 @@ interface DashboardStats {
 
 export default function SellerDashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const getPricingDisplay = (order: any) => getOrderPricingDisplay({
@@ -58,11 +59,11 @@ export default function SellerDashboardPage() {
   useEffect(() => {
     if (!authLoading) {
       if (!isAuthenticated) {
-        router.push('/login?callbackUrl=/seller/dashboard');
+        router.push(buildLoginRedirectUrl('/seller/dashboard', reauthRequired ? 'reauth_required' : undefined));
       }
       // No role check — any logged-in user can be a seller
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, reauthRequired]);
 
   useEffect(() => {
     if (isAuthenticated) {

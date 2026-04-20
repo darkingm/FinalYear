@@ -30,8 +30,10 @@ export interface RWAFactoryInterface extends Interface {
       | "ISSUER_ROLE"
       | "allAssetIds"
       | "assets"
+      | "assetsV2"
       | "compliance"
       | "createAsset"
+      | "createAssetV2"
       | "deactivateAsset"
       | "getRoleAdmin"
       | "grantRole"
@@ -47,6 +49,7 @@ export interface RWAFactoryInterface extends Interface {
     nameOrSignatureOrTopic:
       | "AssetCreated"
       | "AssetDeactivated"
+      | "AssetV2Created"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
@@ -65,6 +68,7 @@ export interface RWAFactoryInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "assets", values: [BytesLike]): string;
+  encodeFunctionData(functionFragment: "assetsV2", values: [BytesLike]): string;
   encodeFunctionData(
     functionFragment: "compliance",
     values?: undefined
@@ -80,6 +84,22 @@ export interface RWAFactoryInterface extends Interface {
       BigNumberish,
       BigNumberish,
       AddressLike
+    ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "createAssetV2",
+    values: [
+      string,
+      string,
+      string,
+      BigNumberish,
+      string,
+      BigNumberish,
+      BigNumberish,
+      AddressLike,
+      BigNumberish,
+      BigNumberish,
+      BigNumberish
     ]
   ): string;
   encodeFunctionData(
@@ -132,9 +152,14 @@ export interface RWAFactoryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "assets", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "assetsV2", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "compliance", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "createAsset",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "createAssetV2",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -205,6 +230,34 @@ export namespace AssetDeactivatedEvent {
   export type OutputTuple = [assetId: string];
   export interface OutputObject {
     assetId: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AssetV2CreatedEvent {
+  export type InputTuple = [
+    assetId: BytesLike,
+    token: AddressLike,
+    distributor: AddressLike,
+    governance: AddressLike,
+    name: string
+  ];
+  export type OutputTuple = [
+    assetId: string,
+    token: string,
+    distributor: string,
+    governance: string,
+    name: string
+  ];
+  export interface OutputObject {
+    assetId: string;
+    token: string;
+    distributor: string;
+    governance: string;
+    name: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -332,6 +385,20 @@ export interface RWAFactory extends BaseContract {
     "view"
   >;
 
+  assetsV2: TypedContractMethod<
+    [arg0: BytesLike],
+    [
+      [string, string, string, bigint, boolean] & {
+        token: string;
+        distributor: string;
+        governance: string;
+        createdAt: bigint;
+        active: boolean;
+      }
+    ],
+    "view"
+  >;
+
   compliance: TypedContractMethod<[], [string], "view">;
 
   createAsset: TypedContractMethod<
@@ -346,6 +413,30 @@ export interface RWAFactory extends BaseContract {
       operator: AddressLike
     ],
     [[string, string] & { tokenAddr: string; distAddr: string }],
+    "nonpayable"
+  >;
+
+  createAssetV2: TypedContractMethod<
+    [
+      assetIdStr: string,
+      name: string,
+      symbol: string,
+      assetType: BigNumberish,
+      legalDocIPFS: string,
+      totalVal: BigNumberish,
+      pricePerToken: BigNumberish,
+      operator: AddressLike,
+      quorum_: BigNumberish,
+      supermajority_: BigNumberish,
+      votingPeriod_: BigNumberish
+    ],
+    [
+      [string, string, string] & {
+        tokenAddr: string;
+        distAddr: string;
+        govAddr: string;
+      }
+    ],
     "nonpayable"
   >;
 
@@ -419,6 +510,21 @@ export interface RWAFactory extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "assetsV2"
+  ): TypedContractMethod<
+    [arg0: BytesLike],
+    [
+      [string, string, string, bigint, boolean] & {
+        token: string;
+        distributor: string;
+        governance: string;
+        createdAt: bigint;
+        active: boolean;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "compliance"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -435,6 +541,31 @@ export interface RWAFactory extends BaseContract {
       operator: AddressLike
     ],
     [[string, string] & { tokenAddr: string; distAddr: string }],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "createAssetV2"
+  ): TypedContractMethod<
+    [
+      assetIdStr: string,
+      name: string,
+      symbol: string,
+      assetType: BigNumberish,
+      legalDocIPFS: string,
+      totalVal: BigNumberish,
+      pricePerToken: BigNumberish,
+      operator: AddressLike,
+      quorum_: BigNumberish,
+      supermajority_: BigNumberish,
+      votingPeriod_: BigNumberish
+    ],
+    [
+      [string, string, string] & {
+        tokenAddr: string;
+        distAddr: string;
+        govAddr: string;
+      }
+    ],
     "nonpayable"
   >;
   getFunction(
@@ -496,6 +627,13 @@ export interface RWAFactory extends BaseContract {
     AssetDeactivatedEvent.OutputObject
   >;
   getEvent(
+    key: "AssetV2Created"
+  ): TypedContractEvent<
+    AssetV2CreatedEvent.InputTuple,
+    AssetV2CreatedEvent.OutputTuple,
+    AssetV2CreatedEvent.OutputObject
+  >;
+  getEvent(
     key: "RoleAdminChanged"
   ): TypedContractEvent<
     RoleAdminChangedEvent.InputTuple,
@@ -538,6 +676,17 @@ export interface RWAFactory extends BaseContract {
       AssetDeactivatedEvent.InputTuple,
       AssetDeactivatedEvent.OutputTuple,
       AssetDeactivatedEvent.OutputObject
+    >;
+
+    "AssetV2Created(bytes32,address,address,address,string)": TypedContractEvent<
+      AssetV2CreatedEvent.InputTuple,
+      AssetV2CreatedEvent.OutputTuple,
+      AssetV2CreatedEvent.OutputObject
+    >;
+    AssetV2Created: TypedContractEvent<
+      AssetV2CreatedEvent.InputTuple,
+      AssetV2CreatedEvent.OutputTuple,
+      AssetV2CreatedEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<

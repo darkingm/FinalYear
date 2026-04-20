@@ -96,6 +96,10 @@ contract RWAToken is ERC20, AccessControl, Pausable {
     /* ── Mint / Burn ────────────────────────────────────────────── */
     function mint(address to, uint256 amount) external onlyRole(ISSUER_ROLE) whenNotPaused {
         require(compliance.isVerified(to), "RWAToken: recipient not KYC verified");
+        require(
+            pricePerTokenUSD > 0 && totalSupply() + amount <= this.maxSupply(),
+            "RWAToken: would exceed max supply"
+        );
         _mint(to, amount);
         emit TokensMinted(to, amount);
     }

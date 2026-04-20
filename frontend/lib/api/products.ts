@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { publicRequestConfig } from './request-auth';
 import type { ProductUpsertPayload } from '@/lib/products/types';
 
 export interface ProductListParams {
@@ -13,8 +14,8 @@ export interface ProductListParams {
 
 export const productsApi = {
   list: (params?: ProductListParams) =>
-    apiClient.get('/api/products', { params }),
-  getById: (id: number) => apiClient.get(`/api/products/${id}`),
+    apiClient.get('/api/products', { params, ...publicRequestConfig }),
+  getById: (id: number) => apiClient.get(`/api/products/${id}`, publicRequestConfig),
   create: (data: ProductUpsertPayload) =>
     apiClient.post('/api/products', data),
   update: (id: number, data: ProductUpsertPayload) =>
@@ -23,9 +24,15 @@ export const productsApi = {
 
   /** Homepage: max 5 per coin, up to 20 total */
   homepage: (coins?: string) =>
-    apiClient.get('/api/products/homepage', { params: coins ? { coins } : undefined }),
+    apiClient.get('/api/products/homepage', {
+      params: coins ? { coins } : undefined,
+      ...publicRequestConfig,
+    }),
 
   /** Coin tab: products filtered by accepted token symbol */
   listByCoin: (symbol: string, limit = 5) =>
-    apiClient.get('/api/products', { params: { token_symbol: symbol, limit } }),
+    apiClient.get('/api/products', {
+      params: { token_symbol: symbol, limit },
+      ...publicRequestConfig,
+    }),
 };

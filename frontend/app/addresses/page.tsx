@@ -12,10 +12,11 @@ import { addressService } from '@/services';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { toast } from 'sonner';
 import type { Address } from '@/types';
+import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export default function AddressesPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -27,9 +28,9 @@ export default function AddressesPage() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login?callbackUrl=/addresses');
+      router.push(buildLoginRedirectUrl('/addresses', reauthRequired ? 'reauth_required' : undefined));
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, reauthRequired]);
 
   useEffect(() => {
     if (isAuthenticated) {
