@@ -29,7 +29,7 @@ export const paymentClient = axios.create({
   withCredentials: true,
 });
 
-type AuthAwareAxiosConfig = InternalAxiosRequestConfig & AuthAwareRequestConfig & { _retried?: boolean };
+type AuthAwareAxiosConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
 // ─── Request interceptors ─────────────────────────────────────────────────
 // Read from the local token cache first and only consult NextAuth when cold.
