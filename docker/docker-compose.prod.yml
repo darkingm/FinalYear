@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ============================================================
 # PRODUCTION — VPS dùng System Nginx (đã có SSL) + Docker containers
 # Containers bind port ra localhost, system nginx proxy vào

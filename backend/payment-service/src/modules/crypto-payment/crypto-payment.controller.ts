@@ -6,8 +6,10 @@ import { query, mainQuery } from '../../config/database';
 import { PaymentSessionService } from './payment-session.service';
 import { PaymentBatchSessionService } from './payment-batch-session.service';
 import { AppError } from '../../middleware/error-handler';
+import { PaymentOpsHealthService } from './payment-ops-health.service';
 
 const cryptoPaymentService = new CryptoPaymentService();
+const paymentOpsHealthService = new PaymentOpsHealthService();
 const paymentSessionService = new PaymentSessionService({
   paymentQuery: query,
   mainQuery,
@@ -317,6 +319,19 @@ export async function getPaymentBatchSessionStatus(req: Request, res: Response, 
     });
   } catch (error: any) {
     logger.error('Get batch payment session status error:', error);
+    next(error);
+  }
+}
+
+export async function getPaymentOpsHealth(req: Request, res: Response, next: NextFunction) {
+  try {
+    const health = await paymentOpsHealthService.getSnapshot();
+    res.json({
+      success: true,
+      health,
+    });
+  } catch (error: any) {
+    logger.error('Get payment ops health error:', error);
     next(error);
   }
 }

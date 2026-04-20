@@ -3,6 +3,8 @@
  *
  * Script Hardhat deploy EscrowCore + CreditScoreSBT lên localhost/VPS.
  * Sử dụng: npx hardhat run scripts/bootstrap-local.ts --network vps
+ * Nếu có LOCAL_METAMASK_PRIVATE_KEY trong contracts/.env.local, local Hardhat sẽ
+ * append ví MetaMask đó vào danh sách funded accounts để demo bằng chính ví người dùng.
  *
  * Thực hiện:
  *   1. Deploy EscrowCore (nếu chưa có hoặc bị reset sau node restart)

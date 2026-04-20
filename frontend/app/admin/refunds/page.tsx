@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCcw, Copy, Check, ExternalLink, ChevronLeft, ChevronRight, Clock, DollarSign } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 
 const statusColors: Record<string, string> = {
     pending: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
@@ -57,6 +59,14 @@ export default function AdminRefundsPage() {
         setCopied(label);
         setTimeout(() => setCopied(''), 2000);
     };
+
+    const getPricingDisplay = (refund: any) => getOrderPricingDisplay({
+        token_symbol: refund.token_symbol,
+        subtotal_token: refund.amount_token,
+        amount_token: refund.amount_token,
+        total_amount: refund.order_total,
+        price_usd: refund.order_total,
+    });
 
     return (
         <div className="space-y-6">
@@ -114,13 +124,31 @@ export default function AdminRefundsPage() {
                                         <div className="p-3 rounded-xl bg-gray-50">
                                             <div className="text-xs text-gray-500 mb-1">Amount</div>
                                             <div className="text-sm text-gray-900 font-bold flex items-center gap-1">
-                                                <DollarSign className="w-3.5 h-3.5 text-green-400" />
-                                                {parseFloat(refund.amount).toFixed(6)}
+                                                {refund.payment_method === 'crypto' && refund.token_symbol ? (
+                                                    <TokenAmountInline amount={refund.amount} symbol={refund.token_symbol} size="sm" amountClassName="text-gray-900" />
+                                                ) : (
+                                                    <>
+                                                        <DollarSign className="w-3.5 h-3.5 text-green-400" />
+                                                        {parseFloat(refund.amount).toFixed(2)}
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="p-3 rounded-xl bg-gray-50">
                                             <div className="text-xs text-gray-500 mb-1">Order Total</div>
-                                            <div className="text-sm text-gray-900">${parseFloat(refund.order_total).toFixed(2)}</div>
+                                            <div className="text-sm text-gray-900">
+                                                {(() => {
+                                                    const pricing = getPricingDisplay(refund);
+                                                    return pricing.mode === 'token' ? (
+                                                        <div className="space-y-1">
+                                                            <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="text-gray-900" />
+                                                            <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-500" />
+                                                        </div>
+                                                    ) : (
+                                                        <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-900" />
+                                                    );
+                                                })()}
+                                            </div>
                                         </div>
                                         <div className="p-3 rounded-xl bg-gray-50">
                                             <div className="text-xs text-gray-500 mb-1">Buyer</div>

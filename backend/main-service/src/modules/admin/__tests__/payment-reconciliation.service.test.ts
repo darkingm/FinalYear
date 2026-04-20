@@ -74,4 +74,47 @@ describe('PaymentReconciliationAdminService', () => {
     expect(result.next_status).toBe('PAID');
     expect(result.source_payment_status).toBe('confirmed');
   });
+
+  it('aggregates payment ops health with internal key header', async () => {
+    mockedAxios.get
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          health: {
+            rabbitmq: { status: 'connected' },
+            outbox: {
+              pending_count: 4,
+              retrying_count: 1,
+              oldest_pending_at: '2026-04-20T04:00:00.000Z',
+              last_published_at: '2026-04-20T04:05:00.000Z',
+            },
+          },
+        },
+      } as any);
+    query.mockResolvedValueOnce({
+      rows: [{
+        processed_24h: '12',
+        last_processed_at: new Date('2026-04-20T04:10:00.000Z'),
+      }],
+    });
+    query.mockResolvedValueOnce({
+      rows: [{
+        stale_projection_count: '2',
+      }],
+    });
+
+    const service = new PaymentReconciliationAdminService();
+    const health = await service.getOpsHealth();
+
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'http://payment-service:3002/api/payments/crypto/admin/ops-health',
+      expect.objectContaining({
+        headers: { 'X-Internal-Service-Key': 'internal-test-key' },
+        timeout: 15000,
+      })
+    );
+    expect(health.payment_service.outbox.pending_count).toBe(4);
+    expect(health.main_service.projection.processed_24h).toBe(12);
+    expect(health.main_service.projection.stale_projection_count).toBe(2);
+  });
 });

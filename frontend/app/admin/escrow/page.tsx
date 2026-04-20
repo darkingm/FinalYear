@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
     Zap, Copy, Check, ExternalLink, Shield, Play, RotateCcw,
@@ -11,12 +11,15 @@ import {
     CheckCircle2, XCircle, Loader2, Info,
 } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
-import { paymentClient } from '@/lib/api/client';
 import { toast } from 'sonner';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
-import { parseAbi, keccak256, toHex, formatEther } from 'viem';
-import { ESCROW_CONTRACTS } from '@/lib/web3/config';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseAbi, keccak256, toHex } from 'viem';
+import { ESCROW_CONTRACTS, getChainMetaOrFallback } from '@/lib/web3/config';
 import { CHAIN_EXPLORERS } from '@/app/checkout/[orderId]/page';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
+import { shapeContractOpsChains, type ContractOpsChainSnapshot } from '@/lib/admin/contract-ops';
+import { shapeEscrowOpsHealth, type EscrowOpsHealthSnapshot } from '@/lib/admin/escrow-health';
 
 /* ─── ABI ───────────────────────────────────────────────────────────────── */
 const ESCROW_ABI = parseAbi([
@@ -42,15 +45,6 @@ const STATUS_META: Record<string, { color: string; dot: string; label: string }>
     REFUNDED: { color: 'text-purple-400 bg-purple-400/10 border-purple-500/20', dot: 'bg-purple-400', label: 'Refunded' },
 };
 
-const CHAIN_NAMES: Record<number, string> = {
-    31337: 'Hardhat VPS',
-    80002: 'Polygon Amoy',
-    97: 'BNB Testnet',
-    137: 'Polygon',
-    42161: 'Arbitrum',
-    56: 'BSC',
-};
-
 function StatusBadge({ status }: { status: string }) {
     const meta = STATUS_META[status] || { color: 'text-gray-400 bg-gray-400/10 border-gray-400/20', dot: 'bg-gray-400', label: status };
     return (
@@ -62,7 +56,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function StatCard({ icon, title, value, sub, color = 'emerald' }: {
-    icon: React.ReactNode; title: string; value: string | number; sub?: string; color?: string;
+    icon: ReactNode; title: string; value: string | number; sub?: string; color?: string;
 }) {
     const colors: Record<string, string> = {
         emerald: 'text-emerald-400 bg-emerald-400/10',
@@ -87,116 +81,113 @@ function StatCard({ icon, title, value, sub, color = 'emerald' }: {
 
 /* ─── Main ───────────────────────────────────────────────────────────────── */
 export default function AdminEscrowPage() {
-    const { address, isConnected, chainId } = useAccount();
-    const publicClient = usePublicClient();
+    const { isConnected, chainId } = useAccount();
 
     const [orders, setOrders] = useState<any[]>([]);
+    const [contractChains, setContractChains] = useState<ContractOpsChainSnapshot[]>([]);
+    const [opsHealth, setOpsHealth] = useState<EscrowOpsHealthSnapshot | null>(null);
     const [loading, setLoading] = useState(true);
     const [copied, setCopied] = useState('');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [chainStats, setChainStats] = useState<Record<number, {
-        balance: string; blockNumber: number; isPaused: boolean; fee: string; status: 'ok' | 'error' | 'loading';
-    }>>({});
     const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
     const [resolveModal, setResolveModal] = useState<{ order: any; type: 'release' | 'refund' } | null>(null);
+    const [activeTxHash, setActiveTxHash] = useState<`0x${string}` | undefined>();
+    const [pendingChainAction, setPendingChainAction] = useState<{
+        orderId: number;
+        nextStatus: 'COMPLETED' | 'REFUNDED';
+        notes: string;
+    } | null>(null);
 
-    const { writeContract, data: txData, isPending: txPending } = useWriteContract();
-    const { isLoading: txConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txData });
+    const { writeContractAsync, isPending: txPending } = useWriteContract();
+    const { isLoading: txConfirming, isSuccess: txSuccess, isError: txFailed, error: txError } = useWaitForTransactionReceipt({ hash: activeTxHash });
 
     /* ─── Fetch data ── */
     const fetchOrders = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await adminApi.escrow.orders();
-            setOrders(res.data.orders || []);
+            const [ordersRes, contractsRes, healthRes] = await Promise.all([
+                adminApi.escrow.orders(),
+                adminApi.escrow.contracts(),
+                adminApi.escrow.health(),
+            ]);
+            setOrders(ordersRes.data.orders || []);
+            setContractChains(contractsRes.data.chains || []);
+            setOpsHealth(healthRes.data.health || null);
         } catch {
-            toast.error('Failed to load escrow orders');
+            toast.error('Failed to load escrow dashboard');
         } finally { setLoading(false); }
     }, []);
 
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
     useEffect(() => {
-        if (txSuccess) {
-            toast.success('On-chain transaction confirmed! ✅');
-            setActionLoading(null);
-            setResolveModal(null);
-            fetchOrders();
+        if (!txSuccess || !pendingChainAction) {
+            return;
         }
-    }, [txSuccess, fetchOrders]);
 
-    /* ─── Fetch live chain stats ── */
-    const fetchChainStat = useCallback(async (cid: number, addr: `0x${string}`) => {
-        setChainStats(prev => ({ ...prev, [cid]: { ...prev[cid], status: 'loading' } as any }));
-        try {
-            // Use the backend RPC to query, not MetaMask (we want all chains, not just connected one)
-            const rpc = {
-                31337: 'http://103.20.96.79:8545',
-                80002: 'https://rpc-amoy.polygon.technology',
-                97: 'https://data-seed-prebsc-1-s1.binance.org:8545',
-            } as Record<number, string>;
+        let cancelled = false;
+        void (async () => {
+            try {
+                await adminApi.orders.updateStatus(
+                    pendingChainAction.orderId,
+                    pendingChainAction.nextStatus,
+                    pendingChainAction.notes,
+                );
+                if (!cancelled) {
+                    toast.success('On-chain transaction confirmed! ✅');
+                    setActionLoading(null);
+                    setResolveModal(null);
+                    setPendingChainAction(null);
+                    setActiveTxHash(undefined);
+                    fetchOrders();
+                }
+            } catch (error: any) {
+                if (!cancelled) {
+                    toast.error(error?.response?.data?.message || 'Failed to sync confirmed on-chain action');
+                    setActionLoading(null);
+                }
+            }
+        })();
 
-            const rpcUrl = rpc[cid];
-            if (!rpcUrl) return;
-
-            const call = async (method: string, params: any[]) => {
-                const r = await fetch(rpcUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-                });
-                return (await r.json()).result;
-            };
-
-            const [rawBal, rawBlock, rawPaused, rawFee] = await Promise.all([
-                call('eth_getBalance', [addr, 'latest']),
-                call('eth_blockNumber', []),
-                // Call paused() function: selector 0x5c975abb
-                call('eth_call', [{ to: addr, data: '0x5c975abb' }, 'latest']),
-                // Call platformFeePercent(): selector 0x4d146cd8
-                call('eth_call', [{ to: addr, data: '0x4d146cd8' }, 'latest']),
-            ]);
-
-            const balEth = rawBal ? (parseInt(rawBal, 16) / 1e18).toFixed(6) : '?';
-            const block = rawBlock ? parseInt(rawBlock, 16) : 0;
-            const isPaused = rawPaused ? rawPaused !== '0x' + '0'.repeat(64) : false;
-            const fee = rawFee ? (parseInt(rawFee, 16) / 100).toFixed(2) : '1.50';
-
-            setChainStats(prev => ({
-                ...prev,
-                [cid]: { balance: balEth, blockNumber: block, isPaused, fee, status: 'ok' },
-            }));
-        } catch {
-            setChainStats(prev => ({ ...prev, [cid]: { ...prev[cid], status: 'error' } as any }));
-        }
-    }, []);
+        return () => {
+            cancelled = true;
+        };
+    }, [txSuccess, pendingChainAction, fetchOrders]);
 
     useEffect(() => {
-        Object.entries(ESCROW_CONTRACTS).forEach(([cid, addr]) => {
-            const chainIdNum = parseInt(cid);
-            if (addr && addr !== '0x0000000000000000000000000000000000000000') {
-                fetchChainStat(chainIdNum, addr as `0x${string}`);
-            }
-        });
-    }, [fetchChainStat]);
+        if (!txFailed) {
+            return;
+        }
+
+        toast.error(txError?.message || 'On-chain transaction failed');
+        setActionLoading(null);
+        setPendingChainAction(null);
+        setActiveTxHash(undefined);
+    }, [txFailed, txError]);
 
     /* ─── Actions ── */
-    const getEscrowAddr = (cid: number): `0x${string}` | undefined => {
-        const a = ESCROW_CONTRACTS[cid];
+    const getEscrowAddr = (cid: number, orderEscrowAddress?: string | null): `0x${string}` | undefined => {
+        const liveAddress = contractChains.find((chain) => chain.chain_id === cid)?.escrow_contract;
+        const a = liveAddress || orderEscrowAddress || ESCROW_CONTRACTS[cid];
         return a && a !== '0x0000000000000000000000000000000000000000' ? a as `0x${string}` : undefined;
     };
 
     const handleRelease = async (order: any) => {
-        const addr = getEscrowAddr(order.chain_id);
+        const addr = getEscrowAddr(order.chain_id, order.escrow_contract);
         if (!addr) return toast.error('Escrow not configured for this chain');
         if (!isConnected) return toast.error('Connect wallet first');
         setActionLoading(`release-${order.order_id}`);
         try {
-            writeContract({
+            const txHash = await writeContractAsync({
                 address: addr, abi: ESCROW_ABI, functionName: 'releasePayment',
                 args: [keccak256(toHex(order.internal_order_id))]
             });
-            await adminApi.orders.updateStatus(order.order_id, 'COMPLETED', 'Admin released via escrow dashboard');
+            setActiveTxHash(txHash);
+            setPendingChainAction({
+                orderId: order.order_id,
+                nextStatus: 'COMPLETED',
+                notes: 'Admin released via escrow dashboard',
+            });
             toast.info('Release TX sent — waiting for confirmation...');
         } catch (e: any) {
             toast.error(e.message || 'Failed'); setActionLoading(null);
@@ -204,16 +195,21 @@ export default function AdminEscrowPage() {
     };
 
     const handleRefund = async (order: any) => {
-        const addr = getEscrowAddr(order.chain_id);
+        const addr = getEscrowAddr(order.chain_id, order.escrow_contract);
         if (!addr) return toast.error('Escrow not configured for this chain');
         if (!isConnected) return toast.error('Connect wallet first');
         setActionLoading(`refund-${order.order_id}`);
         try {
-            writeContract({
+            const txHash = await writeContractAsync({
                 address: addr, abi: ESCROW_ABI, functionName: 'refund',
                 args: [keccak256(toHex(order.internal_order_id))]
             });
-            await adminApi.orders.updateStatus(order.order_id, 'REFUNDED', 'Admin refunded via escrow dashboard');
+            setActiveTxHash(txHash);
+            setPendingChainAction({
+                orderId: order.order_id,
+                nextStatus: 'REFUNDED',
+                notes: 'Admin refunded via escrow dashboard',
+            });
             toast.info('Refund TX sent — waiting for confirmation...');
         } catch (e: any) {
             toast.error(e.message || 'Failed'); setActionLoading(null);
@@ -245,16 +241,22 @@ export default function AdminEscrowPage() {
         setCopied(key); setTimeout(() => setCopied(''), 2000);
     };
 
+    const getPricingDisplay = (order: any) => getOrderPricingDisplay({
+        token_symbol: order.token_symbol,
+        subtotal_token: order.amount_token,
+        amount_token: order.amount_token,
+        total_amount: order.total_amount,
+        price_usd: order.total_amount,
+    });
+
     /* ─── Computed stats ── */
     const totalLocked = orders.filter(o => ['PAID', 'ONCHAIN_CONFIRMED', 'DISPUTED', 'DELIVERING'].includes(o.status)).length;
     const totalDisputed = orders.filter(o => o.status === 'DISPUTED').length;
     const totalCompleted = orders.filter(o => o.status === 'COMPLETED').length;
     const totalRefunded = orders.filter(o => o.status === 'REFUNDED').length;
 
-    /* ─── Active chains to display ── */
-    const activeChains = Object.entries(ESCROW_CONTRACTS)
-        .filter(([, addr]) => addr && addr !== '0x0000000000000000000000000000000000000000')
-        .map(([cid, addr]) => ({ chainId: parseInt(cid), address: addr! }));
+    const contractOpsCards = shapeContractOpsChains(contractChains);
+    const opsHealthCards = opsHealth ? shapeEscrowOpsHealth(opsHealth) : [];
 
     return (
         <div className="space-y-6">
@@ -280,76 +282,113 @@ export default function AdminEscrowPage() {
                 <StatCard icon={<RotateCcw className="w-5 h-5" />} title="Refunded" value={totalRefunded} sub="returned to buyers" color="purple" />
             </div>
 
+            {opsHealthCards.length > 0 && (
+                <div>
+                    <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Activity className="w-4 h-4" /> Queue / Projection Health
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        {opsHealthCards.map((card) => (
+                            <div key={card.title} className="bg-card border border-border rounded-2xl p-5 space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{card.title}</span>
+                                    <span className={`inline-flex w-2.5 h-2.5 rounded-full ${card.tone === 'emerald' ? 'bg-emerald-400' : card.tone === 'amber' ? 'bg-amber-400' : 'bg-slate-400'}`} />
+                                </div>
+                                <div className="text-2xl font-black">{card.value}</div>
+                                <p className={`text-xs ${card.tone === 'amber' ? 'text-amber-400' : 'text-muted-foreground'}`}>{card.detail}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Chain Status Cards */}
             <div>
                 <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                     <Activity className="w-4 h-4" /> Live Contract Status
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {activeChains.map(({ chainId: cid, address: addr }) => {
-                        const stat = chainStats[cid];
-                        const explorer = CHAIN_EXPLORERS[cid];
+                    {contractOpsCards.map((card) => {
+                        const explorer = CHAIN_EXPLORERS[card.chainId];
                         return (
-                            <motion.div key={cid} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
+                            <motion.div key={card.chainId} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
                                 className="bg-card border border-border rounded-2xl p-5 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <div className={`w-2.5 h-2.5 rounded-full ${stat?.status === 'ok' ? 'bg-emerald-400 animate-pulse' : stat?.status === 'error' ? 'bg-red-500' : 'bg-yellow-400 animate-pulse'}`} />
-                                        <span className="font-bold text-sm">{CHAIN_NAMES[cid] || `Chain ${cid}`}</span>
-                                        <span className="text-xs text-muted-foreground">#{cid}</span>
+                                        <div className={`w-2.5 h-2.5 rounded-full ${card.statusTone === 'emerald' ? 'bg-emerald-400 animate-pulse' : card.statusTone === 'amber' ? 'bg-amber-400' : 'bg-slate-400'}`} />
+                                        <span className="font-bold text-sm">{card.title}</span>
+                                        <span className="text-xs text-muted-foreground">#{card.chainId}</span>
                                     </div>
-                                    {stat?.isPaused !== undefined && (
-                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stat.isPaused ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'}`}>
-                                            {stat.isPaused ? '⏸ PAUSED' : '▶ ACTIVE'}
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${card.statusTone === 'emerald' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : card.statusTone === 'amber' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'bg-slate-500/15 text-slate-300 border border-slate-500/30'}`}>
+                                        {card.statusLabel}
+                                    </span>
+                                </div>
+
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between gap-3">
+                                        <span className="text-muted-foreground text-xs">Balance locked</span>
+                                        <span className="font-bold text-[#f0b90b] text-right">{card.nativeBalanceLabel}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <span className="text-muted-foreground text-xs">Platform fee</span>
+                                        <span className="text-xs">{card.platformFeeLabel || '—'}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <span className="text-muted-foreground text-xs">Contract state</span>
+                                        <span className={`text-xs ${card.paused === null ? 'text-muted-foreground' : card.paused ? 'text-red-400' : 'text-emerald-400'}`}>
+                                            {card.paused === null ? '—' : card.paused ? 'Paused' : 'Active'}
                                         </span>
+                                    </div>
+                                    {card.tokenBalanceLabels.length > 0 && (
+                                        <div className="space-y-1 pt-1">
+                                            <span className="text-muted-foreground text-xs">Token balances</span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {card.tokenBalanceLabels.map((label) => (
+                                                    <span key={label} className="text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-foreground/80">
+                                                        {label}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {card.healthSummary && (
+                                        <p className={`text-xs flex items-center gap-1 ${card.statusTone === 'amber' ? 'text-amber-400' : 'text-muted-foreground'}`}>
+                                            {card.statusTone === 'amber' ? <XCircle className="w-3 h-3" /> : <Info className="w-3 h-3" />}
+                                            {card.healthSummary}
+                                        </p>
                                     )}
                                 </div>
 
-                                {stat?.status === 'loading' ? (
-                                    <div className="space-y-2">
-                                        {[1, 2, 3].map(i => <div key={i} className="h-4 bg-muted rounded animate-pulse" />)}
-                                    </div>
-                                ) : stat?.status === 'error' ? (
-                                    <p className="text-xs text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" /> RPC unreachable</p>
-                                ) : stat ? (
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground text-xs">Balance locked</span>
-                                            <span className="font-bold text-[#f0b90b]">{stat.balance} ETH</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground text-xs">Block height</span>
-                                            <span className="font-mono text-xs">{stat.blockNumber.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground text-xs">Platform fee</span>
-                                            <span className="text-xs">{stat.fee}%</span>
-                                        </div>
-                                    </div>
-                                ) : null}
-
                                 <div className="pt-2 border-t border-border">
-                                    <div className="flex items-center gap-2">
-                                        <code className="text-[10px] font-mono text-muted-foreground flex-1 truncate">{addr}</code>
-                                        <button onClick={() => copyText(addr, `addr-${cid}`)} className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors">
-                                            {copied === `addr-${cid}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                        </button>
-                                        {explorer?.address && (
-                                            <a href={`${explorer.address}${addr}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-muted-foreground hover:text-[#f0b90b] transition-colors">
-                                                <ExternalLink className="w-3 h-3" />
-                                            </a>
-                                        )}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <code className="text-[10px] font-mono text-muted-foreground flex-1 truncate">{card.contractAddress || 'Not deployed'}</code>
+                                            {card.contractAddress && (
+                                                <button onClick={() => copyText(card.contractAddress!, `addr-${card.chainId}`)} className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                                                    {copied === `addr-${card.chainId}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                </button>
+                                            )}
+                                            {card.contractAddress && explorer?.address && (
+                                                <a href={`${explorer.address}${card.contractAddress}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-muted-foreground hover:text-[#f0b90b] transition-colors">
+                                                    <ExternalLink className="w-3 h-3" />
+                                                </a>
+                                            )}
+                                        </div>
+                                        <div className="space-y-1 text-[10px] text-muted-foreground">
+                                            <p>Operator: {card.operatorAddress || '—'}</p>
+                                            <p>Fee vault: {card.feeVaultAddress || '—'}</p>
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* Chain controls */}
-                                {isConnected && chainId === cid && (
+                                {card.contractAddress && isConnected && chainId === card.chainId && (
                                     <div className="flex gap-2 pt-1">
-                                        <button onClick={() => writeContract({ address: addr as `0x${string}`, abi: ESCROW_ABI, functionName: 'pause' })}
+                                        <button onClick={() => writeContractAsync({ address: card.contractAddress as `0x${string}`, abi: ESCROW_ABI, functionName: 'pause' })}
                                             disabled={txPending} className="flex-1 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg transition-colors disabled:opacity-40">
                                             ⏸ Pause
                                         </button>
-                                        <button onClick={() => writeContract({ address: addr as `0x${string}`, abi: ESCROW_ABI, functionName: 'unpause' })}
+                                        <button onClick={() => writeContractAsync({ address: card.contractAddress as `0x${string}`, abi: ESCROW_ABI, functionName: 'unpause' })}
                                             disabled={txPending} className="flex-1 py-1.5 text-xs font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors disabled:opacity-40">
                                             ▶ Unpause
                                         </button>
@@ -368,7 +407,7 @@ export default function AdminEscrowPage() {
                     <Loader2 className="w-5 h-5 text-[#f0b90b] animate-spin flex-shrink-0" />
                     <div>
                         <p className="text-sm font-bold text-[#f0b90b]">{txPending ? 'Waiting for wallet signature...' : 'Transaction confirming on-chain...'}</p>
-                        {txData && <p className="text-xs text-muted-foreground mt-0.5 font-mono">{txData.slice(0, 20)}...</p>}
+                        {activeTxHash && <p className="text-xs text-muted-foreground mt-0.5 font-mono">{activeTxHash.slice(0, 20)}...</p>}
                     </div>
                 </motion.div>
             )}
@@ -404,6 +443,7 @@ export default function AdminEscrowPage() {
                             const isDisputed = order.status === 'DISPUTED';
                             const canRelease = ['ONCHAIN_CONFIRMED', 'PAID', 'DELIVERING', 'DISPUTED'].includes(order.status);
                             const canRefund = ['ONCHAIN_CONFIRMED', 'PAID', 'DISPUTED'].includes(order.status);
+                            const chainMeta = getChainMetaOrFallback(order.chain_id);
 
                             return (
                                 <motion.div key={order.order_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -417,7 +457,7 @@ export default function AdminEscrowPage() {
                                                 <span className="text-sm font-bold">{order.order_number}</span>
                                                 <StatusBadge status={order.status} />
                                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
-                                                    {CHAIN_NAMES[order.chain_id] || `Chain ${order.chain_id}`}
+                                                    {chainMeta.shortName}
                                                 </span>
                                                 {isDisputed && <span className="animate-pulse text-xs text-orange-400 font-bold">⚠ NEEDS RESOLUTION</span>}
                                             </div>
@@ -425,8 +465,17 @@ export default function AdminEscrowPage() {
                                                 <span>👤 {order.buyer_name}</span>
                                                 <span>→</span>
                                                 <span>🏪 {order.seller_name}</span>
-                                                <span className="font-bold text-foreground">${parseFloat(order.total_amount || 0).toFixed(2)}</span>
-                                                {order.amount_token && <span className="text-[#f0b90b]">{parseFloat(order.amount_token).toFixed(6)} tokens</span>}
+                                                {(() => {
+                                                    const pricing = getPricingDisplay(order);
+                                                    return pricing.mode === 'token' ? (
+                                                        <span className="inline-flex items-center gap-3 flex-wrap">
+                                                            <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="text-[#f0b90b]" />
+                                                            <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-foreground" />
+                                                        </span>
+                                                    ) : (
+                                                        <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-foreground" />
+                                                    );
+                                                })()}
                                             </div>
                                             {order.tx_hash && (
                                                 <div className="flex items-center gap-1.5 text-xs">
@@ -527,7 +576,7 @@ export default function AdminEscrowPage() {
                         <p className="font-bold text-blue-400 text-sm">Hai cách resolve dispute:</p>
                         <p>🔵 <strong>Refund/Release Buyer/Seller (sidebar buttons)</strong>: Backend dùng ADMIN_PRIVATE_KEY gọi contract — không cần MetaMask. Hoạt động từ server.</p>
                         <p>🟠 <strong>MM Release/Refund</strong>: MetaMask của admin trực tiếp gọi contract — cần wallet có OPERATOR_ROLE và đúng chain.</p>
-                        <p>⚠ ADMIN_PRIVATE_KEY wallet là <code className="text-blue-400">0xC9F9052095481DE14a2f54c1103203328578C683</code> — đã được cấp OPERATOR_ROLE và 15 ETH khi deploy.</p>
+                        <p>⚠ Ví operator backend và fee vault được đọc từ cấu hình server. Xem các card trạng thái phía trên để kiểm tra địa chỉ đang active trên từng chain.</p>
                     </div>
                 </div>
             </div>

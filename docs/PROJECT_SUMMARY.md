@@ -513,9 +513,9 @@ npm run dev
 - [ ] WalletConnect Project ID
 
 ### Blockchain:
-- [ ] Deploy EscrowCore.sol lên Polygon Mumbai (testnet)
-- [ ] Verify contract trên PolygonScan
-- [ ] Update contract address vào .env
+- [ ] Deploy EscrowCore.sol lên Hardhat demo hoặc Base Sepolia (testnet-lite)
+- [ ] Verify contract trên BaseScan hoặc Amoy PolygonScan nếu dùng public testnet
+- [ ] Update contract address vào .env và frontend env
 - [ ] Grant OPERATOR_ROLE cho backend wallet
 - [ ] Test deposit/release functions
 

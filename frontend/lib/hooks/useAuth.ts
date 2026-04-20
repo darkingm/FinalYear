@@ -1,8 +1,9 @@
 'use client';
 
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import { clearSessionAccessToken, setSessionAccessToken } from '@/lib/auth/session-token-manager';
+import { logAuthEvent } from '@/lib/auth/auth-log';
 
 export function useAuth() {
   const { data: session, status } = useSession();
@@ -19,13 +20,18 @@ export function useAuth() {
     }
   }, [session, status]);
 
-  // Auto sign-out when refresh token expires / is rejected by backend
-  // This happens when JWT_REFRESH_SECRET changes or session is too old
+  // Refresh token expiry means the session is no longer usable for protected APIs,
+  // but we do not hard-sign-out immediately. We clear local access state and let
+  // guarded pages redirect to re-auth with the current callback URL.
   useEffect(() => {
     if ((session as any)?.error === 'RefreshTokenExpired') {
       localStorage.removeItem('auth_token');
       clearSessionAccessToken();
-      signOut({ callbackUrl: '/login?reason=session_expired' });
+      logAuthEvent('session_reauth_required', {
+        eventSource: 'useAuth',
+        reasonCode: 'refresh_token_expired',
+        path: typeof window !== 'undefined' ? window.location.pathname : undefined,
+      });
     }
   }, [session]);
 
@@ -36,5 +42,6 @@ export function useAuth() {
     accessToken: session?.accessToken as string | undefined,
     isAuthenticated: status === 'authenticated' && !(session as any)?.error,
     isLoading: status === 'loading',
+    reauthRequired: (session as any)?.error === 'RefreshTokenExpired',
   };
 }

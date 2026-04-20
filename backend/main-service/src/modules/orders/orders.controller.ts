@@ -222,7 +222,7 @@ export async function getOrders(req: AuthRequest, res: Response, next: NextFunct
            COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
          FROM orders o
          JOIN products p ON o.product_id = p.product_id
-         LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+         LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
          LEFT JOIN LATERAL (
            SELECT image_url FROM product_images
            WHERE product_id = p.product_id
@@ -270,7 +270,7 @@ export async function getOrder(req: AuthRequest, res: Response, next: NextFuncti
          COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
        LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
        LEFT JOIN users seller_u ON o.seller_id = seller_u.user_id
        LEFT JOIN LATERAL (
@@ -303,7 +303,7 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
               COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
-       LEFT JOIN token_whitelist tw ON p.token_id = tw.token_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
         LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
         LEFT JOIN users seller_u ON o.seller_id = seller_u.user_id
        LEFT JOIN LATERAL (

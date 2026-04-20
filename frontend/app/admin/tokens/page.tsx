@@ -7,12 +7,13 @@ import { motion } from 'framer-motion';
 import { Coins, ToggleLeft, ToggleRight, Layers, Hash } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
+import { TESTNET_LITE_CHAIN_LABELS } from '@/lib/web3/testnet-lite';
 
 const chainNames: Record<number, string> = {
-    31337: 'Localhost',
+    ...TESTNET_LITE_CHAIN_LABELS,
     137: 'Polygon',
-    80001: 'Mumbai',
     42161: 'Arbitrum',
+    1: 'Ethereum',
 };
 
 export default function AdminTokensPage() {

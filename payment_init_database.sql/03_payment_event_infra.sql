@@ -35,13 +35,25 @@ CREATE TABLE IF NOT EXISTS payment_outbox (
     event_type      VARCHAR(64)     NOT NULL,
     payload         JSONB           NOT NULL,
     published_at    TIMESTAMP,
+    locked_at       TIMESTAMP,
+    locked_by       VARCHAR(128),
     retry_count     INT             NOT NULL DEFAULT 0,
     last_error      TEXT,
     created_at      TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE payment_outbox
+    ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP;
+
+ALTER TABLE payment_outbox
+    ADD COLUMN IF NOT EXISTS locked_by VARCHAR(128);
+
 CREATE INDEX IF NOT EXISTS idx_payment_outbox_pending
     ON payment_outbox(created_at)
+    WHERE published_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_payment_outbox_locked
+    ON payment_outbox(locked_at)
     WHERE published_at IS NULL;
 
 DROP TRIGGER IF EXISTS trg_payment_sessions_upd ON payment_sessions;

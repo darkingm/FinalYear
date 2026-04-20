@@ -66,6 +66,8 @@ export const adminApi = {
     // Escrow
     escrow: {
         orders: () => apiClient.get('/api/admin/escrow/orders'),
+        contracts: () => apiClient.get('/api/admin/escrow/contracts'),
+        health: () => apiClient.get('/api/admin/escrow/health'),
     },
 
     // Payment reconciliation

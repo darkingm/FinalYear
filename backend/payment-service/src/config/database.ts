@@ -1,5 +1,6 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
 import { logger } from '../utils/logger';
+import { ensurePaymentEventInfrastructure } from './ensure-payment-schema';
 import 'dotenv/config';
 
 // Primary DB for payment service (payment_db)
@@ -30,6 +31,7 @@ export async function connectDatabase() {
   try {
     const client = await pool.connect();
     logger.info('Payment service database connected (payment_db)');
+    await ensurePaymentEventInfrastructure(client);
     client.release();
 
     // marketplace_db is secondary — don't block startup if it's slow

@@ -2,6 +2,16 @@
 
 Complete deployment guide for the Crypto Marketplace platform on Windows 11.
 
+## Docker Hub account switch
+
+If you change the Docker Hub account used by CI/CD, update these values together:
+
+1. GitHub repository secret `DOCKERHUB_USERNAME`
+2. GitHub repository secret `DOCKERHUB_TOKEN`
+3. VPS runtime file `/root/services/FinalYear/docker/.env` field `DOCKERHUB_USERNAME` if you still do manual `docker compose` work outside GitHub Actions
+
+The workflow builds and pushes images under `${DOCKERHUB_USERNAME}/marketplace-*`, so the username and token must belong to the same Docker Hub account.
+
 ## Prerequisites
 
 ### Required Software
@@ -160,8 +170,9 @@ PAYPAL_MODE=sandbox
 
 # Blockchain (after deploying contracts)
 ESCROW_CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
-POLYGON_RPC_URL=https://polygon-rpc.com
-POLYGON_MUMBAI_RPC_URL=https://rpc-mumbai.maticvigil.com
+ESCROW_CONTRACT_BASE_SEPOLIA=0x0000000000000000000000000000000000000000
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+POLYGON_AMOY_RPC_URL=https://rpc-amoy.polygon.technology
 
 # Moralis (get from https://admin.moralis.io/)
 MORALIS_API_KEY=your_moralis_api_key
@@ -194,20 +205,29 @@ docker exec -i marketplace-postgres psql -U marketplace -d marketplace_db < ..\i
 psql -h localhost -U marketplace -d marketplace_db -f ..\init_database.sql
 ```
 
-### 6. Deploy Smart Contracts (Optional for Development)
+### 6. Deploy Smart Contracts
 
 ```bash
 cd contracts
 
 # Create .env file
 echo "PRIVATE_KEY=your_private_key" > .env
-echo "POLYGONSCAN_API_KEY=your_api_key" >> .env
+echo "BASESCAN_API_KEY=your_api_key" >> .env
 
-# Deploy to Mumbai testnet
-npx hardhat run scripts/deploy.ts --network polygonMumbai
+# Demo mode: local Hardhat
+npx hardhat run scripts/bootstrap-local.ts --network localhost
 
-# Copy contract address to backend .env
-# Update ESCROW_CONTRACT_ADDRESS in payment-service/.env
+# Public testnet-lite mode: Base Sepolia
+npx hardhat run scripts/deploy-base-sepolia.ts --network baseSepolia
+
+# Optional secondary testnet: Polygon Amoy
+npx hardhat run scripts/deploy-amoy.ts --network amoy
+
+# Optional mock stablecoin on Base Sepolia
+npx hardhat run scripts/deploy-mock-usdt-base-sepolia.ts --network baseSepolia
+
+# Copy resulting contract addresses to backend/frontend env
+# Update ESCROW_CONTRACT_LOCALHOST, ESCROW_CONTRACT_BASE_SEPOLIA, or ESCROW_CONTRACT_POLYGON_AMOY as needed
 ```
 
 ### 7. Download Cryptocurrency Logos

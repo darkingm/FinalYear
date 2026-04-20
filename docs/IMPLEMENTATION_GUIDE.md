@@ -321,8 +321,12 @@ import "@nomicfoundation/hardhat-toolbox";
 const config: HardhatUserConfig = {
   solidity: "0.8.20",
   networks: {
-    polygonMumbai: {
-      url: "https://rpc-mumbai.maticvigil.com",
+    baseSepolia: {
+      url: "https://sepolia.base.org",
+      accounts: [process.env.PRIVATE_KEY!],
+    },
+    amoy: {
+      url: "https://rpc-amoy.polygon.technology",
       accounts: [process.env.PRIVATE_KEY!],
     },
     polygon: {
@@ -531,8 +535,17 @@ cd backend/payment-service && npm run dev
 ```bash
 cd contracts
 npx hardhat compile
-npx hardhat run scripts/deploy.ts --network polygonMumbai
-# Save contract addresses to backend .env files
+
+# Demo mode
+npx hardhat run scripts/bootstrap-local.ts --network localhost
+
+# Public testnet-lite mode
+npx hardhat run scripts/deploy-base-sepolia.ts --network baseSepolia
+
+# Optional secondary testnet
+npx hardhat run scripts/deploy-amoy.ts --network amoy
+
+# Save contract addresses to backend/frontend .env files
 ```
 
 ### 6. Download Coin Logos

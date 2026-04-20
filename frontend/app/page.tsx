@@ -25,6 +25,7 @@ import { AIChatButton } from '@/components/ui/ai-chat-button';
 import { usePriceStore } from '@/store';
 import { productsApi } from '@/lib/api/products';
 import { CoinPriceStrip } from '@/components/home/CoinPriceStrip';
+import { paymentPageTheme } from '@/lib/payments/payment-page-theme';
 import {
   Laptop, Shirt, Home as HomeIcon, Dumbbell, BookOpen, Gamepad2, Car, Diamond, Sparkles,
 } from 'lucide-react';
@@ -129,7 +130,7 @@ function CoinHeroCard({ coinInfo, prices: cardPrices, index }: {
       whileHover={{ y: -4, transition: { duration: 0.25 } }}
     >
       <Link href={`/trading/${coinInfo.symbol}`}>
-        <div className="group relative bg-card/60 backdrop-blur-xl border border-border/50 rounded-2xl p-5 hover:border-border transition-all duration-300 cursor-pointer overflow-hidden">
+        <div className={`group relative rounded-2xl p-5 transition-all duration-300 cursor-pointer overflow-hidden ${paymentPageTheme.secondarySurface} dark:border-violet-500/30 dark:hover:border-violet-400/60`}>
           {/* Glow */}
           <div
             className="absolute -inset-1 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl pointer-events-none"
@@ -182,7 +183,7 @@ function CoinHeroCard({ coinInfo, prices: cardPrices, index }: {
                 ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             ) : (
-              <div className="h-8 w-36 bg-muted/50 rounded-lg animate-pulse" />
+              <div className="h-8 w-36 bg-slate-100 dark:bg-white/8 rounded-lg animate-pulse" />
             )}
           </div>
 
@@ -210,7 +211,7 @@ function CoinHeroCard({ coinInfo, prices: cardPrices, index }: {
                 </text>
               </svg>
             ) : (
-              <div className="w-full h-full bg-muted/30 rounded animate-pulse" />
+              <div className="w-full h-full bg-slate-100 dark:bg-white/6 rounded animate-pulse" />
             )}
           </div>
 
@@ -322,13 +323,13 @@ function WalletBalanceSection() {
   const { t } = useClientTranslation();
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+    <div className={`${paymentPageTheme.secondarySurface} overflow-hidden dark:border-violet-500/25`}>
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Wallet className="w-5 h-5 text-[#f0b90b]" />
           <h2 className="text-foreground font-bold">{t('home.myWallet')}</h2>
         </div>
-        <button onClick={refetch} disabled={isLoading} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={refetch} disabled={isLoading} className={`p-1.5 rounded-lg transition-colors ${paymentPageTheme.ghostButton}`}>
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
@@ -365,10 +366,10 @@ function WalletBalanceSection() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted border border-border/50 hover:border-border transition-all cursor-pointer"
+                  className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer ${paymentPageTheme.subSurface} hover:bg-slate-50 dark:hover:bg-white/8 dark:border-violet-500/20`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-muted p-1 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/6 p-1 flex-shrink-0 flex items-center justify-center">
                       <CoinImage symbol={token.symbol} size={28} className="rounded-full" />
                     </div>
                     <div>
@@ -421,7 +422,7 @@ function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof
     return (
       <tr className="border-b border-border/50">
         {[1, 2, 3, 4, 5, 6].map(j => (
-          <td key={j} className="px-5 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></td>
+          <td key={j} className="px-5 py-3.5"><div className="h-4 bg-slate-100 dark:bg-white/8 rounded animate-pulse" /></td>
         ))}
       </tr>
     );
@@ -433,7 +434,7 @@ function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ delay: idx * 0.03 }}
-      className="border-b border-border/50 hover:bg-muted/50 transition-colors group cursor-pointer"
+      className="border-b border-border/50 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group cursor-pointer"
     >
       <td className="px-5 py-3.5">
         <Link href={`/trading/${symbol}`} className="flex items-center gap-3">
@@ -492,7 +493,7 @@ function MarketTable({ symbols, search }: { symbols: string[]; search: string })
   );
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+    <div className={`${paymentPageTheme.secondarySurface} overflow-hidden dark:border-violet-500/25`}>
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity className="w-5 h-5 text-[#f0b90b]" />
@@ -683,7 +684,7 @@ export default function HomePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-transparent">
         <div className="text-center">
           <div className="w-12 h-12 rounded-full border-2 border-[#f0b90b] border-t-transparent animate-spin mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">Đang tải...</p>
@@ -693,13 +694,13 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-transparent">
       <Header />
       <AIChatButton />
 
       <main>
         {/* ── Hero Section ── */}
-        <section className="relative overflow-hidden bg-background py-16 md:py-24 border-b border-border">
+        <section className="relative overflow-hidden bg-transparent py-16 md:py-24 border-b border-border">
           {/* ── Premium Background Decorations ── */}
           <div className="absolute inset-0 pointer-events-none">
             {/* Animated gradient orbs */}
@@ -774,7 +775,7 @@ export default function HomePage() {
                     </Button>
                   </Link>
                   <Link href="/trading/BTCUSDT">
-                    <Button size="lg" variant="outline" className="border-border bg-card text-foreground hover:bg-accent font-semibold px-8">
+                    <Button size="lg" variant="outline" className={`font-semibold px-8 ${paymentPageTheme.ghostButton}`}>
                       <BarChart3 className="w-5 h-5 mr-2" />
                       Xem thị trường
                     </Button>
@@ -794,7 +795,7 @@ export default function HomePage() {
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.6 + i * 0.1 }}
-                      className="text-center px-4 py-2.5 rounded-xl bg-card/50 border border-border/50 backdrop-blur-sm"
+                      className="text-center px-4 py-2.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-[0_10px_24px_rgba(15,23,42,0.06)] dark:bg-slate-950/40 dark:border-violet-500/25 dark:backdrop-blur-sm"
                     >
                       <p className="text-lg font-bold text-foreground">{s.icon} {s.value}</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{s.label}</p>
@@ -819,7 +820,7 @@ export default function HomePage() {
         </section>
 
         {/* ── Sản phẩm nổi bật — 12 sản phẩm cố định, lọc theo danh mục + coin ── */}
-        <section className="relative py-12 bg-background overflow-hidden">
+        <section className="relative py-12 bg-transparent overflow-hidden">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -bottom-20 -left-20 w-[350px] h-[350px] bg-gradient-to-tr from-[#f0b90b]/4 to-transparent rounded-full blur-3xl" />
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#f0b90b]/15 to-transparent" />
@@ -870,8 +871,8 @@ export default function HomePage() {
                         isActive
                           ? 'text-black shadow-md'
                           : isBorrowed
-                            ? 'bg-card border-amber-500/50 text-foreground ring-1 ring-amber-500/40'
-                            : 'bg-card border-border text-foreground hover:border-primary/40 hover:bg-muted',
+                            ? 'bg-white border-amber-500/50 text-foreground ring-1 ring-amber-500/40 dark:bg-slate-950/45 dark:border-amber-500/50 dark:backdrop-blur-xl'
+                            : 'bg-white border-slate-200 text-foreground hover:border-primary/40 hover:bg-slate-50 dark:bg-slate-950/45 dark:border-violet-500/25 dark:hover:border-violet-400/55 dark:hover:bg-white/5 dark:backdrop-blur-xl',
                       ].join(' ')}
                       style={isActive ? { backgroundColor: cat.color, borderColor: cat.color } : {}}
                     >
@@ -897,7 +898,7 @@ export default function HomePage() {
                 onClick={() => setActiveCoinFilter(null)}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${activeCoinFilter === null
                   ? 'bg-foreground text-background border-foreground shadow-sm'
-                  : 'bg-card border-border text-muted-foreground hover:border-primary/40 hover:bg-muted'
+                  : 'bg-white border-slate-200 text-muted-foreground hover:border-primary/40 hover:bg-slate-50 dark:bg-slate-950/45 dark:border-violet-500/25 dark:text-foreground dark:hover:border-violet-400/55 dark:hover:bg-white/5 dark:backdrop-blur-xl'
                   }`}
               >
                 Tất cả
@@ -912,7 +913,7 @@ export default function HomePage() {
                     onClick={() => setActiveCoinFilter(isActive ? null : tab.symbol)}
                     className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${isActive
                       ? 'text-black shadow-sm'
-                      : 'bg-card border-border text-foreground hover:border-primary/40 hover:bg-muted'
+                      : 'bg-white border-slate-200 text-foreground hover:border-primary/40 hover:bg-slate-50 dark:bg-slate-950/45 dark:border-violet-500/25 dark:hover:border-violet-400/55 dark:hover:bg-white/5 dark:backdrop-blur-xl'
                       }`}
                     style={isActive ? { backgroundColor: tab.color, borderColor: tab.color } : {}}
                   >
@@ -950,12 +951,12 @@ export default function HomePage() {
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                     {Array.from({ length: TARGET_COUNT }).map((_, i) => (
-                      <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border animate-pulse">
-                        <div className="h-44 bg-muted" />
+                      <div key={i} className="bg-white rounded-2xl overflow-hidden border border-slate-200 dark:bg-slate-950/45 dark:border-violet-500/25 dark:backdrop-blur-xl animate-pulse">
+                        <div className="h-44 bg-slate-100 dark:bg-white/8" />
                         <div className="p-4 space-y-2">
-                          <div className="h-3 bg-muted rounded w-3/4" />
-                          <div className="h-4 bg-muted rounded w-1/2" />
-                          <div className="h-8 bg-muted rounded mt-4" />
+                          <div className="h-3 bg-slate-100 dark:bg-white/8 rounded w-3/4" />
+                          <div className="h-4 bg-slate-100 dark:bg-white/8 rounded w-1/2" />
+                          <div className="h-8 bg-slate-100 dark:bg-white/8 rounded mt-4" />
                         </div>
                       </div>
                     ))}
@@ -966,7 +967,7 @@ export default function HomePage() {
               if (displayList.length === 0) {
                 return (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="text-center py-20 bg-card rounded-2xl border border-border">
+                    className="text-center py-20 bg-white rounded-2xl border border-slate-200 dark:bg-slate-950/45 dark:border-violet-500/25 dark:backdrop-blur-xl">
                     {activeCoinFilter
                       ? <CoinImage symbol={activeCoinFilter} size={48} className="opacity-30 mx-auto mb-3" />
                       : <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />}
@@ -1029,7 +1030,7 @@ export default function HomePage() {
         </section>
 
         {/* ── Market + Wallet Section ── */}
-        <section className="relative py-10 bg-background border-b border-border transition-colors duration-300 overflow-hidden">
+        <section className="relative py-10 bg-transparent border-b border-border transition-colors duration-300 overflow-hidden">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#f0b90b]/15 to-transparent" />
             <div className="absolute -top-32 right-0 w-[300px] h-[300px] bg-gradient-to-bl from-[#f0b90b]/3 to-transparent rounded-full blur-3xl" />
@@ -1040,9 +1041,9 @@ export default function HomePage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input type="text" placeholder={t('home.searchCoin')} value={coinSearch}
                   onChange={e => setCoinSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-xl text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary transition-all" />
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary transition-all dark:bg-slate-950/45 dark:border-violet-500/25 dark:backdrop-blur-xl" />
               </div>
-              <div className="flex items-center gap-1 p-1 bg-muted border border-border rounded-xl">
+              <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-xl dark:bg-slate-950/45 dark:border-violet-500/25 dark:backdrop-blur-xl">
                 {['all', 'gainers', 'losers'].map(tab => (
                   <button key={tab} onClick={() => setActiveCategory(tab)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeCategory === tab ? 'bg-[#f0b90b] text-black' : 'text-muted-foreground hover:text-foreground'
@@ -1074,7 +1075,7 @@ export default function HomePage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.1 }}
-                  className="group relative overflow-hidden rounded-[28px] border border-border/80 bg-card/95 px-6 py-7 text-left shadow-[0_18px_40px_rgba(0,0,0,0.16)] transition-all duration-300 hover:-translate-y-1 hover:border-white/15 hover:shadow-[0_24px_55px_rgba(0,0,0,0.22)]"
+                  className="group relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/96 px-6 py-7 text-left shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-1 hover:border-slate-300/90 hover:shadow-[0_24px_55px_rgba(15,23,42,0.12)] dark:border-violet-500/22 dark:bg-slate-950/45 dark:backdrop-blur-xl dark:shadow-[0_18px_40px_rgba(0,0,0,0.16)] dark:hover:border-violet-400/50 dark:hover:shadow-[0_24px_55px_rgba(0,0,0,0.22)]"
                 >
                   <div className={`absolute left-6 right-6 top-0 h-px bg-gradient-to-r ${item.divider}`} />
                   <div className="mb-5 flex items-start justify-between gap-4">
@@ -1105,7 +1106,7 @@ export default function HomePage() {
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="relative bg-gradient-to-br from-[#1a1d26] to-[#131722] border border-[#f0b90b]/20 rounded-3xl p-10 text-center overflow-hidden"
+                className="relative rounded-3xl border border-slate-200/80 bg-white/96 p-10 text-center overflow-hidden shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:border-[#f0b90b]/20 dark:bg-slate-950/45 dark:backdrop-blur-xl dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]"
               >
                 <div className="absolute inset-0">
                   <div className="absolute top-0 left-1/3 w-64 h-64 bg-[#f0b90b]/5 rounded-full blur-3xl" />
@@ -1115,8 +1116,8 @@ export default function HomePage() {
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#f0b90b] to-[#e6a800] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-yellow-500/20">
                     <Zap className="w-8 h-8 text-black fill-black" />
                   </div>
-                  <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">{t('home.readyToStart')}</h2>
-                  <p className="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
+                  <h2 className="text-3xl md:text-4xl font-bold text-slate-950 dark:text-white mb-4">{t('home.readyToStart')}</h2>
+                  <p className="text-slate-600 dark:text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
                     {t('home.readyToStartDesc')}
                   </p>
                   <div className="flex justify-center gap-4">
@@ -1126,7 +1127,7 @@ export default function HomePage() {
                       </Button>
                     </Link>
                     <Link href="/products">
-                      <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/5 font-semibold px-10">
+                      <Button size="lg" variant="outline" className="font-semibold px-10 border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/5">
                         {t('home.explore')}
                       </Button>
                     </Link>

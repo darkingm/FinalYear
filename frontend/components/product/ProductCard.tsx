@@ -11,6 +11,7 @@ import { ProductQuickActions } from '@/components/product/ProductQuickActions';
 import { ProductTokenPricing } from '@/components/product/ProductTokenPricing';
 import { getPrimaryProductImage, normalizeProductImages } from '@/lib/products/images';
 import type { ProductAcceptedTokenView, ProductGalleryImage } from '@/lib/products/types';
+import { paymentPageTheme } from '@/lib/payments/payment-page-theme';
 
 const FALLBACK = '/placeholder-product.svg';
 
@@ -156,8 +157,8 @@ export const ProductCard = memo(function ProductCard({
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3, delay: index * 0.03 }}
       >
-        <div className="group flex gap-4 rounded-2xl border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-lg">
-          <Link href={productHref} className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-muted">
+        <div className={`group flex gap-4 rounded-2xl p-4 transition-all hover:shadow-lg ${paymentPageTheme.secondarySurface} dark:border-violet-500/30 dark:hover:border-violet-400/60`}>
+          <Link href={productHref} className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-white/5">
             {product.category ? (
               <div className="absolute left-3 top-3 z-10">
                 <span className="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-bold capitalize text-white backdrop-blur-sm">
@@ -200,11 +201,11 @@ export const ProductCard = memo(function ProductCard({
     >
       <div
         className={[
-          'group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-black/10',
+          `group flex h-full flex-col overflow-hidden rounded-2xl transition-all duration-300 ${paymentPageTheme.secondarySurface} dark:border-violet-500/30 dark:hover:border-violet-400/60 hover:shadow-xl hover:shadow-black/10`,
           isFeatured ? 'ring-1 ring-[#f0b90b]/0 hover:ring-[#f0b90b]/20' : '',
         ].join(' ')}
       >
-        <Link href={productHref} className={`relative block overflow-hidden bg-muted ${isFeatured ? 'h-52' : 'h-44'}`}>
+        <Link href={productHref} className={`relative block overflow-hidden bg-slate-100 dark:bg-white/5 ${isFeatured ? 'h-52' : 'h-44'}`}>
           <Image
             src={imgSrc}
             alt={product.name}

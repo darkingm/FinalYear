@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Search, Eye, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 
 const statusColors: Record<string, string> = {
     open: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
@@ -59,6 +61,14 @@ export default function AdminDisputesPage() {
             toast.error(err.response?.data?.message || 'Failed to resolve dispute');
         }
     };
+
+    const getPricingDisplay = (dispute: any) => getOrderPricingDisplay({
+        token_symbol: dispute.token_symbol,
+        subtotal_token: dispute.amount_token,
+        amount_token: dispute.amount_token,
+        total_amount: dispute.total_amount,
+        price_usd: dispute.total_amount,
+    });
 
     return (
         <div className="space-y-6">
@@ -141,7 +151,20 @@ export default function AdminDisputesPage() {
                                     )}
                                     <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
                                         <span><Clock className="w-3 h-3 inline mr-1" />{new Date(dispute.created_at).toLocaleString()}</span>
-                                        <span>Order total: <strong className="text-gray-900">${parseFloat(dispute.total_amount).toFixed(2)}</strong></span>
+                                        <span className="flex items-center gap-2">
+                                            <span>Order total:</span>
+                                            {(() => {
+                                                const pricing = getPricingDisplay(dispute);
+                                                return pricing.mode === 'token' ? (
+                                                    <span className="inline-flex items-center gap-2">
+                                                        <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="text-gray-900" />
+                                                        <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-900" />
+                                                    </span>
+                                                ) : (
+                                                    <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-900" />
+                                                );
+                                            })()}
+                                        </span>
                                         <span>Payment: <span className="text-gray-300">{dispute.payment_method}</span></span>
                                         {dispute.tx_hash && <code className="text-blue-400 font-mono">TX: {dispute.tx_hash.slice(0, 10)}...</code>}
                                     </div>

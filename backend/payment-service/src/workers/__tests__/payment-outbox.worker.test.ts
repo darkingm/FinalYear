@@ -53,4 +53,28 @@ describe('PaymentOutboxWorker', () => {
       expect.arrayContaining(['mq down', 'evt-1'])
     );
   });
+
+  it('claims unpublished outbox rows with row locking before publishing', async () => {
+    const paymentQuery = jest.fn()
+      .mockResolvedValueOnce({
+        rows: [{
+          event_id: 'evt-1',
+          event_type: 'payment.confirmed',
+          payload: { order_id: 42 },
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    const publish = jest.fn().mockResolvedValue(undefined);
+
+    const worker = new PaymentOutboxWorker({
+      paymentQuery,
+      publish,
+      now: () => new Date('2026-04-20T02:10:00.000Z'),
+    });
+
+    await worker.runOnce();
+
+    expect(String(paymentQuery.mock.calls[0][0])).toContain('FOR UPDATE SKIP LOCKED');
+    expect(String(paymentQuery.mock.calls[0][0])).toContain('locked_at');
+  });
 });

@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 
 const statusColors: Record<string, string> = {
     UNPAID: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
@@ -106,6 +108,14 @@ export default function AdminOrdersPage() {
         setTimeout(() => setCopied(''), 2000);
     };
 
+    const getPricingDisplay = (order: any) => getOrderPricingDisplay({
+        token_symbol: order.token_symbol,
+        subtotal_token: order.amount_token,
+        amount_token: order.amount_token,
+        total_amount: order.total_amount,
+        price_usd: order.total_amount ?? order.price_usd,
+    });
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -187,7 +197,19 @@ export default function AdminOrdersPage() {
                                         </td>
                                         <td className="px-5 py-4 text-sm text-gray-300">{order.buyer_name || order.buyer_email || '-'}</td>
                                         <td className="px-5 py-4 text-sm text-gray-400 max-w-[150px] truncate">{order.product_name || '-'}</td>
-                                        <td className="px-5 py-4 text-sm font-medium text-gray-900">${parseFloat(order.total_amount).toFixed(2)}</td>
+                                        <td className="px-5 py-4 text-sm font-medium text-gray-900">
+                                            {(() => {
+                                                const pricing = getPricingDisplay(order);
+                                                return pricing.mode === 'token' ? (
+                                                    <div className="space-y-1">
+                                                        <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="text-gray-900" />
+                                                        <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-500" />
+                                                    </div>
+                                                ) : (
+                                                    <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-900" />
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="px-5 py-4">
                                             <span className={`text-xs font-medium px-2 py-1 rounded-md border ${statusColors[order.status] || 'text-gray-400 bg-gray-400/10 border-gray-400/20'}`}>
                                                 {order.status}
@@ -247,25 +269,34 @@ export default function AdminOrdersPage() {
                             <div className="p-6 space-y-6">
                                 {/* Order Info Grid */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    {[
-                                        { label: 'Status', value: selectedOrder.status, tag: true },
-                                        { label: 'Payment', value: selectedOrder.payment_method },
-                                        { label: 'Amount', value: `$${parseFloat(selectedOrder.total_amount).toFixed(2)}` },
-                                        { label: 'Token Amount', value: selectedOrder.amount_token ? `${parseFloat(selectedOrder.amount_token).toFixed(6)} tokens` : 'N/A' },
-                                        { label: 'Buyer', value: selectedOrder.buyer_name || selectedOrder.buyer_email },
-                                        { label: 'Seller', value: selectedOrder.seller_name || selectedOrder.seller_username },
-                                        { label: 'Product', value: selectedOrder.product_name },
-                                        { label: 'Chain ID', value: selectedOrder.chain_id || 'N/A' },
-                                    ].map(item => (
-                                        <div key={item.label} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                                            <div className="text-xs text-gray-500 mb-1">{item.label}</div>
-                                            {item.tag ? (
-                                                <span className={`text-xs font-medium px-2 py-1 rounded-md ${statusColors[item.value] || 'text-gray-400 bg-gray-400/10'}`}>{item.value}</span>
-                                            ) : (
-                                                <div className="text-sm text-gray-900 font-medium">{item.value || '-'}</div>
-                                            )}
-                                        </div>
-                                    ))}
+                                        {[
+                                            { label: 'Status', value: selectedOrder.status, tag: true },
+                                            { label: 'Payment', value: selectedOrder.payment_method },
+                                            { label: 'Amount', value: 'pricing-usd' },
+                                            { label: 'Token Amount', value: 'pricing-token' },
+                                            { label: 'Buyer', value: selectedOrder.buyer_name || selectedOrder.buyer_email },
+                                            { label: 'Seller', value: selectedOrder.seller_name || selectedOrder.seller_username },
+                                            { label: 'Product', value: selectedOrder.product_name },
+                                            { label: 'Chain ID', value: selectedOrder.chain_id || 'N/A' },
+                                        ].map(item => {
+                                            const pricing = getPricingDisplay(selectedOrder);
+                                            return (
+                                                <div key={item.label} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-xs text-gray-500 mb-1">{item.label}</div>
+                                                    {item.tag ? (
+                                                        <span className={`text-xs font-medium px-2 py-1 rounded-md ${statusColors[item.value] || 'text-gray-400 bg-gray-400/10'}`}>{item.value}</span>
+                                                    ) : item.value === 'pricing-usd' ? (
+                                                        <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-900 font-medium" />
+                                                    ) : item.value === 'pricing-token' ? (
+                                                        pricing.mode === 'token'
+                                                            ? <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="text-gray-900 font-medium" />
+                                                            : <div className="text-sm text-gray-900 font-medium">N/A</div>
+                                                    ) : (
+                                                        <div className="text-sm text-gray-900 font-medium">{item.value || '-'}</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                 </div>
 
                                 {/* Wallet / TX Info */}

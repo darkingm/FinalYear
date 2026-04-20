@@ -23,9 +23,10 @@ import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseAbi, keccak256, toBytes } from 'viem';
-import { CHAIN_META } from '@/lib/web3/config';
+import { CHAIN_META, CHAIN_TOKENS } from '@/lib/web3/config';
 import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
 import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
+import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
 
 type ProductImageLike = string | { url?: string; image_url?: string; is_primary?: boolean; sort_order?: number };
 
@@ -38,6 +39,7 @@ interface Order {
   primary_image?: string | null;
   quantity: number;
   price_usd: number;
+  total_amount?: number | string;
   pricing_mode?: string;
   subtotal_token?: number | string;
   token_symbol?: string | null;
@@ -120,7 +122,7 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login');
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/orders/${id}`)}`);
       return;
     }
     if (isAuthenticated && id) fetchOrder();
@@ -319,6 +321,7 @@ export default function OrderDetailPage() {
   const statusMeta = order ? getOrderStatusMeta(order.status, paymentSnapshot) : null;
   const pricingDisplay = order ? getOrderPricingDisplay(order) : null;
   const orderImage = order ? resolveOrderProductImage(order) : null;
+  const orderTokenSymbol = order?.token_symbol ?? (order?.chain_id ? CHAIN_TOKENS[order.chain_id]?.[0] : null) ?? null;
   const showEscrowPanel = Boolean(order?.payment_method === 'crypto' && order.escrow_contract);
   const showTrackingCard = Boolean(order && ['SHIPPED', 'DELIVERED', 'COMPLETED'].includes(order.status));
   const showPaymentCta = Boolean(order && isBuyer && ['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status));
@@ -364,10 +367,10 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden selection:bg-[#f0b90b] selection:text-black text-foreground">
+    <div className={paymentPageTheme.pageShell}>
       {/* Ambient Backgrounds */}
-      <div className="fixed top-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#f0b90b]/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="fixed bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className={paymentPageTheme.darkAmbientTop} />
+      <div className={paymentPageTheme.darkAmbientBottom} />
 
       <Header />
       <main className="flex-1 py-12 px-4 relative z-10">
@@ -375,7 +378,7 @@ export default function OrderDetailPage() {
           {/* Header Action */}
           <div className="flex items-center gap-4 mb-8">
             <Link href="/orders">
-              <button className="p-2.5 rounded-full bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all hover:-translate-x-1 group">
+              <button className={`p-2.5 rounded-full transition-all hover:-translate-x-1 group ${paymentPageTheme.ghostButton}`}>
                 <ArrowLeft className="w-5 h-5 group-hover:scale-110 transition-transform" />
               </button>
             </Link>
@@ -387,22 +390,22 @@ export default function OrderDetailPage() {
 
           {/* ONCHAIN_CONFIRMED = escrow releasing funds */}
           {order.status === 'ONCHAIN_CONFIRMED' && (
-            <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3">
+            <div className={`${getPaymentAccentPanelClass('amber')} mb-4 p-4 rounded-xl flex items-center gap-3`}>
               <Loader2 className="w-5 h-5 text-amber-400 animate-spin flex-shrink-0" />
               <div>
-                <p className="font-semibold text-amber-300 text-sm">Đang đồng bộ thanh toán on-chain...</p>
-                <p className="text-xs text-amber-400/70 mt-0.5">{statusMeta?.escrowCopy}</p>
+                <p className="font-semibold text-amber-700 dark:text-amber-300 text-sm">Đang đồng bộ thanh toán on-chain...</p>
+                <p className="text-xs text-amber-700/80 dark:text-amber-400/70 mt-0.5">{statusMeta?.escrowCopy}</p>
               </div>
             </div>
           )}
 
           {/* TX_FAILED banner */}
           {order.status === 'TX_FAILED' && (
-            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3">
+            <div className={`${getPaymentAccentPanelClass('red')} mb-4 p-4 rounded-xl flex items-center gap-3`}>
               <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
               <div>
-                <p className="font-semibold text-red-300 text-sm">Giao dịch thất bại trên blockchain</p>
-                <p className="text-xs text-red-400/70 mt-0.5">Tiền chưa bị trừ. Vui lòng thử thanh toán lại.</p>
+                <p className="font-semibold text-red-700 dark:text-red-300 text-sm">Giao dịch thất bại trên blockchain</p>
+                <p className="text-xs text-red-700/80 dark:text-red-400/70 mt-0.5">Tiền chưa bị trừ. Vui lòng thử thanh toán lại.</p>
               </div>
             </div>
           )}
@@ -426,7 +429,7 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          <div className="bg-card/95 border border-border rounded-3xl p-6 mb-6 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
+          <div className={`${paymentPageTheme.primarySurface} p-6 mb-6`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-white/5 pb-6">
               <div className="space-y-3">
                 <OrderStatusIndicator status={order.status} />
@@ -441,7 +444,7 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-6 mb-8">
-              <div className="relative w-32 h-32 rounded-2xl overflow-hidden bg-muted border border-border flex-shrink-0 group">
+              <div className="relative w-32 h-32 rounded-2xl overflow-hidden bg-slate-100 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 flex-shrink-0 group">
                 {orderImage ? (
                   <Image
                     src={orderImage}
@@ -460,7 +463,7 @@ export default function OrderDetailPage() {
 
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <h2 className="font-bold text-xl text-foreground mb-2 leading-tight">{order.product_name}</h2>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg border border-border w-fit mb-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200/70 rounded-lg dark:bg-white/5 dark:border-white/10 w-fit mb-3">
                   <span className="text-xs text-muted-foreground">Số lượng:</span>
                   <span className="text-sm font-bold text-foreground">x{order.quantity}</span>
                 </div>
@@ -495,29 +498,29 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div className="p-5 bg-muted/50 rounded-2xl border border-border mb-8">
+            <div className={`${paymentPageTheme.mutedSurface} p-5 mb-8`}>
               <OrderStepper currentStatus={order.status} className="py-2" />
             </div>
 
             <OrderTrackingSnapshot status={order.status} verification={paymentSnapshot} className="mb-8" />
 
             {order.payment_method === 'crypto' && ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(order.status) && (
-              <div className="mb-8 rounded-2xl border border-amber-500/20 bg-amber-500/8 p-4">
+              <div className={`${getPaymentAccentPanelClass('amber')} mb-8 p-4`}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
-                    <p className="text-sm font-bold text-amber-300">Theo dõi xác nhận blockchain</p>
-                    <p className="text-xs text-amber-400/90">
+                    <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Theo dõi xác nhận blockchain</p>
+                    <p className="text-xs text-amber-700/90 dark:text-amber-400/90">
                       {paymentSnapshot?.verificationMessage || statusMeta?.escrowCopy}
                     </p>
                     {typeof paymentSnapshot?.confirmations === 'number' && typeof paymentSnapshot?.requiredConfirmations === 'number' && (
-                      <p className="text-[11px] font-mono text-amber-300/90">
+                      <p className="text-[11px] font-mono text-amber-700/90 dark:text-amber-300/90">
                         {paymentSnapshot.confirmations}/{paymentSnapshot.requiredConfirmations} block xác nhận
                       </p>
                     )}
                   </div>
                   <button
                     onClick={() => refreshBlockchainStatus(true)}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
+                    className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold ${paymentPageTheme.ghostButton}`}
                   >
                     {paymentSnapshotLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                     Kiểm tra lại blockchain
@@ -527,19 +530,19 @@ export default function OrderDetailPage() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+              <div className={`${paymentPageTheme.mutedSurface} p-4 rounded-xl`}>
                 <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
                   Người mua {isBuyer && <span className="text-blue-400 normal-case font-medium tracking-normal">(Bạn)</span>}
                 </dt>
                 <dd className="font-medium text-sm text-foreground truncate">{order.buyer_name}</dd>
               </div>
-              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+              <div className={`${paymentPageTheme.mutedSurface} p-4 rounded-xl`}>
                 <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
                   Trợ lý / Bán {isSeller && <span className="text-emerald-400 normal-case font-medium tracking-normal">(Bạn)</span>}
                 </dt>
                 <dd className="font-medium text-sm text-foreground truncate">{order.seller_name}</dd>
               </div>
-              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+              <div className={`${paymentPageTheme.mutedSurface} p-4 rounded-xl`}>
                 <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5">Phương thức</dt>
                 <dd className="font-medium text-sm text-foreground uppercase flex items-center gap-1.5">
                   {order.payment_method === 'crypto' ? (
@@ -551,9 +554,9 @@ export default function OrderDetailPage() {
                   )}
                 </dd>
               </div>
-              <div className="p-4 bg-muted/50 rounded-xl border border-border">
+              <div className={`${paymentPageTheme.mutedSurface} p-4 rounded-xl`}>
                 <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5">Mã Invoice</dt>
-                <dd className="font-mono text-xs text-gray-400 bg-black/30 px-2 py-1 rounded inline-block">
+                <dd className={`${paymentPageTheme.codePill}`}>
                   {order.internal_order_id.split('-')[0].toUpperCase()}
                 </dd>
               </div>
@@ -562,11 +565,11 @@ export default function OrderDetailPage() {
 
           {/* ── ESCROW CONTRACT TRACKING PANEL ─── */}
           {showEscrowPanel && (
-            <div className="p-5 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl mb-6 space-y-4">
+            <div className={`${getPaymentAccentPanelClass('emerald')} p-5 mb-6 space-y-4`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Shield className="w-5 h-5 text-emerald-400" />
-                  <p className="font-semibold text-emerald-300 text-sm">Smart Contract Escrow</p>
+                  <p className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">Smart Contract Escrow</p>
                 </div>
                 {order.chain_id && CHAIN_META[order.chain_id] && (
                   <span className="text-[10px] px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full font-bold text-emerald-400">
@@ -590,17 +593,17 @@ export default function OrderDetailPage() {
                 ].map((step, i, arr) => (
                   <div key={step.label} className="flex items-center flex-1">
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                      step.done ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/30'
+                      step.done ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400 dark:bg-white/10 dark:text-white/30'
                     }`}>
                       {step.done ? <Check className="w-3 h-3" /> : <span>{i + 1}</span>}
                     </div>
                     {i < arr.length - 1 && (
-                      <div className={`flex-1 h-0.5 mx-1 transition-all ${step.done ? 'bg-emerald-500/60' : 'bg-white/10'}`} />
+                      <div className={`flex-1 h-0.5 mx-1 transition-all ${step.done ? 'bg-emerald-500/60' : 'bg-slate-200 dark:bg-white/10'}`} />
                     )}
                   </div>
                 ))}
               </div>
-              <div className="flex text-[8px] text-white/30 font-semibold">
+              <div className="flex text-[8px] text-slate-400 dark:text-white/30 font-semibold">
                 <span className="flex-1 text-center">Đã gửi</span>
                 <span className="flex-1 text-center">Xác nhận</span>
                 <span className="flex-1 text-center">Đang khóa</span>
@@ -609,9 +612,9 @@ export default function OrderDetailPage() {
 
               {/* Contract address */}
               <div className="space-y-1">
-                <p className="text-[10px] text-gray-500">Escrow Contract</p>
-                <div className="flex items-center gap-2 p-2.5 bg-black/20 rounded-lg">
-                  <p className="font-mono text-[11px] text-emerald-300/80 flex-1 break-all">{order.escrow_contract}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-gray-500">Escrow Contract</p>
+                  <div className={`${paymentPageTheme.subSurface} flex items-center gap-2 p-2.5`}>
+                    <p className="font-mono text-[11px] text-emerald-700 dark:text-emerald-300/80 flex-1 break-all">{order.escrow_contract}</p>
                   <button
                     onClick={() => { navigator.clipboard.writeText(order.escrow_contract!); toast.success('Đã copy địa chỉ contract'); }}
                     className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-emerald-400/60 hover:text-emerald-400 transition-colors"
@@ -634,9 +637,9 @@ export default function OrderDetailPage() {
               {/* TX Hash */}
               {order.tx_hash && (
                 <div className="space-y-1">
-                  <p className="text-[10px] text-gray-500">Transaction Hash</p>
-                  <div className="flex items-center gap-2 p-2.5 bg-black/20 rounded-lg">
-                    <p className="font-mono text-[11px] text-blue-300/80 flex-1 truncate">{order.tx_hash}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-gray-500">Transaction Hash</p>
+                  <div className={`${paymentPageTheme.subSurface} flex items-center gap-2 p-2.5`}>
+                    <p className="font-mono text-[11px] text-blue-700 dark:text-blue-300/80 flex-1 truncate">{order.tx_hash}</p>
                     <button
                       onClick={() => { navigator.clipboard.writeText(order.tx_hash!); toast.success('Đã copy TX hash'); }}
                       className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-blue-400/60 hover:text-blue-400 transition-colors"
@@ -659,12 +662,12 @@ export default function OrderDetailPage() {
 
               {/* Amount locked */}
               {hasPositiveAmount(order.amount_token) && (
-                <div className="flex items-center justify-between text-xs p-2.5 bg-black/20 rounded-lg">
-                  <span className="text-gray-500">Số tiền khóa trong escrow</span>
-                  {order.token_symbol ? (
+                <div className={`${paymentPageTheme.subSurface} flex items-center justify-between text-xs p-2.5`}>
+                  <span className="text-slate-500 dark:text-gray-500">Số tiền khóa trong escrow</span>
+                  {orderTokenSymbol ? (
                     <TokenAmountInline
                       amount={formatEscrowAmount(order.amount_token)}
-                      symbol={order.token_symbol}
+                      symbol={orderTokenSymbol}
                       size="sm"
                       className="text-emerald-400"
                       amountClassName="text-emerald-400"
@@ -679,7 +682,7 @@ export default function OrderDetailPage() {
 
           {/* ── TRACKING INFO CARD (SHIPPED) ─── */}
           {showTrackingCard && (
-            <div className="p-5 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl mb-6">
+            <div className={`${getPaymentAccentPanelClass('indigo')} p-5 mb-6`}>
               <div className="flex items-center gap-2 mb-2">
                 <Truck className="w-4 h-4 text-indigo-400" />
                 <p className="font-semibold text-indigo-300 text-sm">{trackingTitle}</p>
@@ -705,20 +708,20 @@ export default function OrderDetailPage() {
 
           {/* ── SELLER: Mark SHIPPED ─── */}
           {isSeller && (order.status === 'PAID' || order.status === 'ONCHAIN_CONFIRMED') && (
-            <div className="p-6 bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-3xl shadow-lg shadow-blue-500/5 mb-6 border border-blue-500/20 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-3xl rounded-full" />
+            <div className={`${getPaymentAccentPanelClass('blue')} p-6 rounded-3xl shadow-lg shadow-blue-500/5 mb-6 relative overflow-hidden dark:bg-gradient-to-br dark:from-blue-500/10 dark:to-blue-600/5`}>
+              <div className="absolute top-0 right-0 hidden w-32 h-32 bg-blue-500/20 blur-3xl rounded-full dark:block" />
               <div className="relative z-10">
-                <h3 className="font-bold text-lg mb-2 text-blue-400 flex items-center gap-2">
+                <h3 className="font-bold text-lg mb-2 text-blue-600 dark:text-blue-400 flex items-center gap-2">
                   <Package className="w-5 h-5" /> Thao tác dành cho người bán
                 </h3>
-                <p className="text-sm text-blue-200/70 mb-4">Người mua đã thanh toán. Tiền đang khóa trong escrow cho đến khi giao hàng xong.</p>
+                <p className="text-sm text-blue-700/80 dark:text-blue-200/70 mb-4">Người mua đã thanh toán. Tiền đang khóa trong escrow cho đến khi giao hàng xong.</p>
                 <div className="mb-4">
-                  <label className="text-xs text-blue-300/70 font-semibold mb-1.5 block">Mã vận đơn (tùy chọn)</label>
+                  <label className="text-xs text-blue-700/80 dark:text-blue-300/70 font-semibold mb-1.5 block">Mã vận đơn (tùy chọn)</label>
                   <input
                     value={trackingInput}
                     onChange={e => setTrackingInput(e.target.value)}
                     placeholder="VD: VN123456789..."
-                    className="w-full px-3 py-2.5 bg-blue-900/20 border border-blue-500/20 rounded-xl text-sm text-white placeholder-blue-400/40 focus:outline-none focus:border-blue-400/50"
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:border-blue-400/50 ${paymentPageTheme.inputSurface} dark:bg-blue-950/25 dark:text-white dark:placeholder:text-blue-300/40 dark:border-blue-500/20`}
                   />
                 </div>
                 <button
@@ -736,25 +739,25 @@ export default function OrderDetailPage() {
           {/* ── BUYER: Confirm Delivery (on-chain) ─── */}
           {/* Show when SHIPPED, or when PAID and buyer hasn't received goods after a while */}
           {isBuyer && (order.status === 'SHIPPED' || order.status === 'PAID') && (
-            <div className="p-6 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 rounded-3xl shadow-lg shadow-emerald-500/5 mb-6 border border-emerald-500/20 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
+            <div className={`${getPaymentAccentPanelClass('emerald')} p-6 rounded-3xl shadow-lg shadow-emerald-500/5 mb-6 relative overflow-hidden dark:bg-gradient-to-br dark:from-emerald-500/10 dark:to-emerald-600/5`}>
+              <div className="absolute top-0 right-0 hidden w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full dark:block" />
               <div className="relative z-10">
-                <h3 className="font-bold text-lg mb-2 text-emerald-400 flex items-center gap-2">
+                <h3 className="font-bold text-lg mb-2 text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5" /> Xác nhận nhận hàng
                 </h3>
                 {order.status === 'PAID' && (
-                  <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                    <p className="text-xs text-amber-300">⚠️ Người bán chưa cập nhật trạng thái giao hàng. Nếu bạn đã nhận được hàng, bạn vẫn có thể xác nhận để giải ngân cho người bán.</p>
+                  <div className={`${getPaymentAccentPanelClass('amber')} mb-3 p-3 rounded-xl`}>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">⚠️ Người bán chưa cập nhật trạng thái giao hàng. Nếu bạn đã nhận được hàng, bạn vẫn có thể xác nhận để giải ngân cho người bán.</p>
                   </div>
                 )}
-                <p className="text-sm text-emerald-200/70 mb-2 leading-relaxed">
+                <p className="text-sm text-emerald-700/80 dark:text-emerald-200/70 mb-2 leading-relaxed">
                   Bạn đã nhận được sản phẩm? Nhấn xác nhận để hợp đồng thông minh tự động giải ngân cho người bán.
                 </p>
-                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                  <p className="text-xs text-red-300 font-semibold">⚠️ Lưu ý quan trọng: Sau khi xác nhận, tiền sẽ chuyển thẳng cho người bán và KHÔNG THỂ hoàn lại. Chỉ nhấn khi bạn đã nhận hàng và hài lòng.</p>
+                <div className={`${getPaymentAccentPanelClass('red')} mb-4 p-3 rounded-xl`}>
+                  <p className="text-xs text-red-700 dark:text-red-300 font-semibold">⚠️ Lưu ý quan trọng: Sau khi xác nhận, tiền sẽ chuyển thẳng cho người bán và KHÔNG THỂ hoàn lại. Chỉ nhấn khi bạn đã nhận hàng và hài lòng.</p>
                 </div>
                 {!isConnected && order.payment_method === 'crypto' && (
-                  <p className="text-xs text-yellow-400/80 mb-3">&#9888; Kết nối MetaMask để xác nhận trustlessly on-chain.</p>
+                  <p className="text-xs text-amber-700 dark:text-yellow-400/80 mb-3">&#9888; Kết nối MetaMask để xác nhận trustlessly on-chain.</p>
                 )}
                 <div className="flex flex-col sm:flex-row gap-3">
                   {/* Dispute button */}
@@ -778,22 +781,22 @@ export default function OrderDetailPage() {
 
                 {/* Dispute form */}
                 {showDisputeForm && (
-                  <div className="mt-4 p-5 bg-red-950/40 border border-red-500/20 rounded-2xl space-y-4">
+                  <div className={`${getPaymentAccentPanelClass('red')} mt-4 p-5 space-y-4`}>
                     <div className="flex items-start gap-3">
                       <div className="w-9 h-9 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
                         <FileText className="w-4 h-4 text-red-400" />
                       </div>
                       <div>
-                        <p className="font-bold text-red-300 text-sm">Gửi khiếu nại</p>
-                        <p className="text-xs text-red-400/70 mt-0.5">Tiền sẽ tiếp tục đóng băng trong escrow cho đến khi Admin phán quyết.</p>
+                        <p className="font-bold text-red-700 dark:text-red-300 text-sm">Gửi khiếu nại</p>
+                        <p className="text-xs text-red-700/75 dark:text-red-400/70 mt-0.5">Tiền sẽ tiếp tục đóng băng trong escrow cho đến khi Admin phán quyết.</p>
                       </div>
                     </div>
-                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <div className={`${getPaymentAccentPanelClass('amber')} p-3 rounded-xl`}>
                       <div className="flex items-start gap-2">
                         <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                          <p className="text-xs font-semibold text-amber-300">Lưu ý về tính minh bạch</p>
-                          <ul className="text-xs text-amber-400/80 space-y-1 list-disc list-inside">
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Lưu ý về tính minh bạch</p>
+                          <ul className="text-xs text-amber-700/80 dark:text-amber-400/80 space-y-1 list-disc list-inside">
                             <li>Mọi khiếu nại đều được ghi lại trên hệ thống vĩnh viễn</li>
                             <li>Admin có thể xem toàn bộ lịch sử giao dịch blockchain</li>
                             <li>Khiếu nại gian lận sẽ bị ghi vào Credit Score và có thể bị khóa tài khoản</li>
@@ -803,7 +806,7 @@ export default function OrderDetailPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs text-red-300 font-semibold mb-2 flex items-center gap-1.5">
+                      <label className="text-xs text-red-700 dark:text-red-300 font-semibold mb-2 flex items-center gap-1.5">
                         <FileText className="w-3.5 h-3.5" />Mô tả vấn đề <span className="text-red-500">*</span>
                       </label>
                       <textarea
@@ -811,17 +814,17 @@ export default function OrderDetailPage() {
                         onChange={e => setDisputeReason(e.target.value)}
                         placeholder="Mô tả chi tiết: hàng không đúng mô tả, hàng hỏng, không nhận được hàng..."
                         rows={4}
-                        className="w-full px-3 py-2.5 bg-red-900/20 border border-red-500/20 rounded-xl text-sm text-white placeholder-red-400/40 focus:outline-none focus:border-red-400/50 resize-none"
+                        className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:border-red-400/50 resize-none ${paymentPageTheme.inputSurface} dark:bg-red-950/25 dark:text-white dark:placeholder:text-red-300/40 dark:border-red-500/20`}
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-red-300 font-semibold mb-2 flex items-center gap-1.5">
-                        <ImagePlus className="w-3.5 h-3.5" />Ảnh bằng chứng (tối đa 5) — <span className="text-red-400/70 font-normal">Khuyến khích để tăng tính thuyết phục</span>
+                      <label className="text-xs text-red-700 dark:text-red-300 font-semibold mb-2 flex items-center gap-1.5">
+                        <ImagePlus className="w-3.5 h-3.5" />Ảnh bằng chứng (tối đa 5) — <span className="text-red-600/70 dark:text-red-400/70 font-normal">Khuyến khích để tăng tính thuyết phục</span>
                       </label>
                       {disputeImages.length > 0 && (
                         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
                           {disputeImages.map((url, idx) => (
-                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-red-500/20 bg-black/30 group">
+                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-red-500/20 bg-slate-100 dark:bg-black/30 group">
                               <img src={url} alt={`Bằng chứng ${idx + 1}`} className="w-full h-full object-cover" />
                               <button onClick={() => setDisputeImages(prev => prev.filter((_, i) => i !== idx))}
                                 className="absolute top-1 right-1 w-5 h-5 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -844,8 +847,8 @@ export default function OrderDetailPage() {
                         </>
                       )}
                     </div>
-                    <div className="p-3 bg-white/3 border border-white/5 rounded-xl">
-                      <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Quy trình xử lý</p>
+                    <div className={`${paymentPageTheme.subSurface} p-3`}>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Quy trình xử lý</p>
                       <div className="space-y-1.5">
                         {[
                           { n: '1', t: 'Bạn gửi khiếu nại + ảnh bằng chứng', c: 'text-red-400' },
@@ -855,14 +858,14 @@ export default function OrderDetailPage() {
                         ].map(({ n, t, c }) => (
                           <div key={n} className="flex items-start gap-2">
                             <span className={`text-xs font-bold ${c} flex-shrink-0 w-4`}>{n}.</span>
-                            <span className="text-xs text-gray-500">{t}</span>
+                            <span className="text-xs text-slate-600 dark:text-gray-500">{t}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                     <div className="flex gap-2 pt-1">
                       <button onClick={() => { setShowDisputeForm(false); setDisputeReason(''); setDisputeImages([]); }}
-                        className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 text-sm hover:bg-white/5 transition-all">
+                        className={`flex-1 py-2.5 rounded-xl text-sm transition-all ${paymentPageTheme.ghostButton}`}>
                         Hủy
                       </button>
                       <button onClick={handleDispute} disabled={actionLoading || !disputeReason.trim()}

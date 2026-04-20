@@ -122,7 +122,7 @@ FAILED_COUNT=0
 while IFS= read -r filepath; do
   filename=$(basename "$filepath")
   # Extract version: first 3 digits from filename (e.g. "001" from "001_payment_fixes.sql")
-  version=$(echo "$filename" | grep -oP '^\d+' || echo "")
+  version=$(echo "$filename" | sed -nE 's/^([0-9]+).*/\1/p')
   name=$(echo "$filename" | sed -E 's/^[0-9]+_//; s/\.sql$//')
 
   if [[ -z "$version" ]]; then

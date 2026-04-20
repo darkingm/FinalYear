@@ -382,12 +382,6 @@ jobs:
               set +a
             }
 
-            load_runtime_env() {
-              set -a
-              [ -f ".env" ] && . "./.env"
-              set +a
-            }
-
             # ── Step 1: Pull ONLY changed images ─────────────────────
             echo ""
             echo "[1/3] Pulling changed Docker images..."
@@ -443,7 +437,6 @@ jobs:
 
               echo ""
               echo "=== Applying payment_db migrations ==="
-              load_runtime_env
               PAYMENT_DB_CONTAINER="marketplace-payment-postgres"
               PAYMENT_DB_NAME="payment_db"
               PAYMENT_MIGRATIONS="
@@ -460,8 +453,7 @@ jobs:
 
                 echo "  → Applying $(basename "$f") to ${PAYMENT_DB_NAME}"
                 docker exec -i "$PAYMENT_DB_CONTAINER" \
-                  env PGPASSWORD="${POSTGRES_PASSWORD}" \
-                  psql -U "${POSTGRES_USER:-postgres}" -d "${PAYMENT_DB_NAME}" -v ON_ERROR_STOP=1 \
+                  sh -lc "PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U \"\${POSTGRES_USER:-postgres}\" -d \"${PAYMENT_DB_NAME}\" -v ON_ERROR_STOP=1" \
                   < "$f"
               done
               echo "=== payment_db migrations complete ==="

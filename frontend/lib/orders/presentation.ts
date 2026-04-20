@@ -12,6 +12,7 @@ interface OrderPresentationSource {
   subtotal_token?: number | string | null;
   amount_token?: number | string | null;
   price_usd?: number | string | null;
+  total_amount?: number | string | null;
   product_metadata?: {
     images?: RawImage[] | null;
   } | null;
@@ -40,13 +41,21 @@ export interface OrderVerificationContext {
   requiredConfirmations?: number | null;
 }
 
-export interface OrderPricingDisplay {
-  mode: 'usd' | 'token';
-  usdAmount: number;
-  tokenSymbol: string | null;
-  tokenAmount: number | null;
-  tokenAmountLabel: string | null;
-}
+export type OrderPricingDisplay =
+  | {
+      mode: 'usd';
+      usdAmount: number;
+      tokenSymbol: null;
+      tokenAmount: null;
+      tokenAmountLabel: null;
+    }
+  | {
+      mode: 'token';
+      usdAmount: number;
+      tokenSymbol: string;
+      tokenAmount: number;
+      tokenAmountLabel: string;
+    };
 
 const ORDER_STATUS_META: Record<string, OrderStatusMeta> = {
   UNPAID: {
@@ -235,7 +244,8 @@ export function getOrderPricingDisplay(order: OrderPresentationSource): OrderPri
   const tokenSymbol = normalizeSymbol(order.token_symbol);
   const subtotalToken = toNumericAmount(order.subtotal_token);
   const amountToken = toNumericAmount(order.amount_token);
-  const usdAmount = toNumericAmount(order.price_usd);
+  const totalAmount = toNumericAmount(order.total_amount);
+  const usdAmount = totalAmount > 0 ? totalAmount : toNumericAmount(order.price_usd);
 
   if (tokenSymbol && (subtotalToken > 0 || amountToken > 0)) {
     const tokenAmount = subtotalToken > 0 ? subtotalToken : amountToken;
@@ -251,7 +261,7 @@ export function getOrderPricingDisplay(order: OrderPresentationSource): OrderPri
   return {
     mode: 'usd',
     usdAmount,
-    tokenSymbol: tokenSymbol ?? null,
+    tokenSymbol: null,
     tokenAmount: null,
     tokenAmountLabel: null,
   };

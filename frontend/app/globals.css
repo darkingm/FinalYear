@@ -13,9 +13,9 @@
     --popover-foreground: 215 25% 12%;
     --primary: 210 100% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 30% 95%;
+    --secondary: 210 35% 97%;
     --secondary-foreground: 210 100% 35%;
-    --muted: 210 20% 96%;
+    --muted: 210 32% 97%;
     --muted-foreground: 215 15% 40%;
     --accent: 199 89% 48%;
     --accent-foreground: 0 0% 100%;
@@ -25,30 +25,26 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --border: 210 20% 85%;
-    --input: 210 20% 92%;
+    --border: 214 26% 86%;
+    --input: 214 28% 93%;
     --ring: 210 100% 50%;
     --radius: 0.75rem;
   }
 
   .dark {
-    /* Dark theme — Purple NFT Web3 */
+    /* Dark theme — Purple glass Web3 */
     --background: 225 12% 7%;
-    /* #0c0e14 */
     --foreground: 210 20% 90%;
-    /* near white */
-    --card: 225 12% 12%;
-    /* #1a1d26 */
+    --card: 228 30% 13% / 0.04;
     --card-foreground: 210 15% 85%;
-    --popover: 225 12% 12%;
+    --popover: 228 28% 10% / 0.05;
     --popover-foreground: 210 15% 85%;
     --primary: 270 68% 56%;
-    /* #8247e5 purple */
     --primary-foreground: 0 0% 100%;
-    --secondary: 225 10% 18%;
-    --secondary-foreground: 210 15% 70%;
-    --muted: 225 10% 16%;
-    --muted-foreground: 215 10% 55%;
+    --secondary: 228 22% 18% / 0.04;
+    --secondary-foreground: 210 18% 80%;
+    --muted: 228 20% 15% / 0.035;
+    --muted-foreground: 215 18% 74%;
     --accent: 270 68% 56%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 55%;
@@ -57,8 +53,8 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 0%;
-    --border: 225 10% 18%;
-    --input: 225 10% 16%;
+    --border: 266 72% 64% / 0.22;
+    --input: 228 24% 15% / 0.04;
     --ring: 270 68% 56%;
   }
 }
@@ -92,9 +88,13 @@ body {
   background-color: transparent !important;
 }
 
-/* ② ALL bg-background elements → transparent (canvas provides bg) */
-.bg-background {
-  background-color: transparent;
+/* ② Page wrappers stay transparent so globe/background remains visible */
+.min-h-screen,
+main,
+main>div,
+main>section,
+main>div>section {
+  background-color: transparent !important;
 }
 
 /* ③ Restore floating UI backgrounds (dialogs, dropdowns, menus) */
@@ -110,55 +110,311 @@ body {
 }
 
 /* ④ Full-page wrappers */
-.min-h-screen {
-  background-color: transparent !important;
-}
-
 /* ⑤ Sections in main — transparent + hover glow */
 main>section,
 main>div>section {
-  background-color: transparent !important;
   transition: background-color 0.35s ease;
 }
 
 main>section:hover,
 main>div>section:hover {
-  background-color: rgba(128, 128, 128, 0.04);
+  background-color: transparent;
 }
 
 main>div:not([class*="bg-card"]):not([class*="bg-muted"]):not([class*="rounded"]) {
   background-color: transparent;
 }
 
-/* ⑥ Header glass — adapts to light/dark */
+/* ⑥ Shared surface treatment */
+:where(
+    [class~="bg-card"],
+    [class*="bg-card/"],
+    [class~="bg-popover"],
+    [class*="bg-popover/"],
+    [class~="bg-secondary"],
+    [class*="bg-secondary/"],
+    [class~="bg-muted"],
+    [class*="bg-muted/"],
+    [class~="bg-background"][class*="border"],
+    [class*="bg-background/"][class*="border"]
+  ) {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+html:not(.dark) :where(
+    [class~="bg-card"],
+    [class*="bg-card/"],
+    [class~="bg-popover"],
+    [class*="bg-popover/"],
+    [class~="bg-secondary"],
+    [class*="bg-secondary/"],
+    [class~="bg-muted"],
+    [class*="bg-muted/"],
+    [class~="bg-background"][class*="border"],
+    [class*="bg-background/"][class*="border"]
+  ) {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(203, 213, 225, 0.82) !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+}
+
+.dark :where(
+    [class~="bg-card"],
+    [class*="bg-card/"],
+    [class~="bg-popover"],
+    [class*="bg-popover/"],
+    [class~="bg-secondary"],
+    [class*="bg-secondary/"],
+    [class~="bg-muted"],
+    [class*="bg-muted/"],
+    [class~="bg-background"][class*="border"],
+    [class*="bg-background/"][class*="border"]
+  ) {
+  backdrop-filter: blur(2px) saturate(112%);
+  -webkit-backdrop-filter: blur(2px) saturate(112%);
+  background-color: rgba(8, 14, 28, 0.006) !important;
+  border-color: rgba(196, 181, 253, 0.22) !important;
+  box-shadow:
+    0 0 0 1px rgba(196, 181, 253, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ⑥b Legacy hardcoded surfaces normalized into the same theme system */
+:where(
+    [class*="bg-[#1a1d26]"],
+    [class*="bg-[#12121e]"],
+    [class*="bg-[#11141c]"],
+    [class*="bg-[#0d0d15]"],
+    [class*="bg-[#0c0e14]"],
+    [class*="bg-white/[0.02]"],
+    [class*="bg-white/[0.03]"],
+    [class*="bg-white/[0.04]"],
+    [class*="bg-white/5"],
+    [class*="bg-white/8"],
+    [class*="bg-black/20"][class*="border"],
+    [class*="bg-black/10"][class*="border"],
+    [class*="bg-black/30"][class*="border"]
+  ) {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    color 0.25s ease;
+}
+
+html:not(.dark) :where(
+    [class*="bg-[#1a1d26]"],
+    [class*="bg-[#12121e]"],
+    [class*="bg-[#11141c]"],
+    [class*="bg-[#0d0d15]"],
+    [class*="bg-[#0c0e14]"],
+    [class*="bg-white/[0.02]"],
+    [class*="bg-white/[0.03]"],
+    [class*="bg-white/[0.04]"],
+    [class*="bg-white/5"],
+    [class*="bg-white/8"],
+    [class*="bg-black/20"][class*="border"],
+    [class*="bg-black/10"][class*="border"],
+    [class*="bg-black/30"][class*="border"]
+  ) {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.8) !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+}
+
+.dark :where(
+    [class*="bg-[#1a1d26]"],
+    [class*="bg-[#12121e]"],
+    [class*="bg-[#11141c]"],
+    [class*="bg-[#0d0d15]"],
+    [class*="bg-[#0c0e14]"],
+    [class*="dark:bg-[#181a20]"],
+    [class*="dark:bg-[#0b0e11]"],
+    [class*="dark:bg-[#2b3139]"],
+    [class*="bg-white/[0.02]"],
+    [class*="bg-white/[0.03]"],
+    [class*="bg-white/[0.04]"],
+    [class*="bg-white/5"],
+    [class*="bg-white/8"],
+    [class*="bg-black/20"][class*="border"],
+    [class*="bg-black/10"][class*="border"],
+    [class*="bg-black/30"][class*="border"]
+  ) {
+  backdrop-filter: blur(2px) saturate(112%);
+  -webkit-backdrop-filter: blur(2px) saturate(112%);
+  background-color: rgba(8, 14, 28, 0.006) !important;
+  border-color: rgba(196, 181, 253, 0.22) !important;
+  box-shadow:
+    0 0 0 1px rgba(196, 181, 253, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dark :where(
+    [class*="bg-white"][class*="border"],
+    [class*="bg-slate-100"][class*="border"],
+    [class*="bg-slate-50"][class*="border"],
+    [class*="bg-gray-100"][class*="border"],
+    [class*="bg-gray-50"][class*="border"]
+  ) {
+  backdrop-filter: blur(2px) saturate(112%);
+  -webkit-backdrop-filter: blur(2px) saturate(112%);
+  background-color: rgba(8, 14, 28, 0.006) !important;
+  border-color: rgba(196, 181, 253, 0.22) !important;
+  box-shadow:
+    0 0 0 1px rgba(196, 181, 253, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html:not(.dark) :where(
+    [class*="bg-[#1a1d26]"],
+    [class*="bg-[#12121e]"],
+    [class*="bg-[#11141c]"],
+    [class*="bg-[#0d0d15]"],
+    [class*="bg-[#0c0e14]"],
+    [class*="bg-white/[0.02]"],
+    [class*="bg-white/[0.03]"],
+    [class*="bg-white/[0.04]"],
+    [class*="bg-white/5"],
+    [class*="bg-white/8"]
+  ) :where(
+    [class~="text-white"],
+    [class*="text-white/"],
+    [class*="text-gray-300"],
+    [class*="text-gray-400"],
+    [class*="text-gray-500"],
+    [class*="text-gray-600"]
+  ) {
+  color: rgb(51 65 85) !important;
+}
+
+html:not(.dark) :where(
+    [class*="bg-[#1a1d26]"],
+    [class*="bg-[#12121e]"],
+    [class*="bg-[#11141c]"],
+    [class*="bg-[#0d0d15]"],
+    [class*="bg-[#0c0e14]"],
+    [class*="bg-white/[0.02]"],
+    [class*="bg-white/[0.03]"],
+    [class*="bg-white/[0.04]"],
+    [class*="bg-white/5"],
+    [class*="bg-white/8"]
+  ) :is(input, textarea, select) {
+  color: hsl(var(--foreground)) !important;
+}
+
+html:not(.dark) :where(input, textarea, select)::placeholder {
+  color: rgb(100 116 139);
+  opacity: 1;
+}
+
+html:not(.dark) :where(
+    [class*="border-white/10"],
+    [class*="border-white/8"],
+    [class*="border-white/5"],
+    [class*="border-white/[0.04]"],
+    [class*="border-white/[0.06]"],
+    [class*="border-white/[0.08]"]
+  ) {
+  border-color: rgba(203, 213, 225, 0.8) !important;
+}
+
+.dark :where(
+    [class*="border-white/10"],
+    [class*="border-white/8"],
+    [class*="border-white/5"],
+    [class*="border-white/[0.04]"],
+    [class*="border-white/[0.06]"],
+    [class*="border-white/[0.08]"]
+  ) {
+  border-color: rgba(196, 181, 253, 0.16) !important;
+}
+
+/* Normalize remaining dark utility surfaces that are still too opaque */
+.dark :where(
+    [class*="dark:bg-slate-950/55"],
+    [class*="dark:bg-slate-950/45"],
+    [class*="dark:bg-slate-950/40"],
+    [class*="dark:bg-slate-950/26"],
+    [class*="dark:bg-slate-950/24"]
+  ) {
+  background-color: rgba(2, 6, 23, 0.006) !important;
+  backdrop-filter: blur(2px) saturate(112%);
+  -webkit-backdrop-filter: blur(2px) saturate(112%);
+}
+
+.dark :where(
+    [class~="bg-background"],
+    [class*="bg-background/"],
+    [class*="bg-background/95"],
+    [class*="bg-background/90"],
+    [class*="bg-background/85"],
+    [class*="bg-background/80"],
+    [class*="bg-background/75"],
+    [class*="bg-background/70"],
+    [class*="bg-background/65"],
+    [class*="dark:bg-background/"],
+    [class*="dark:bg-popover/"],
+    [class*="dark:bg-card/"],
+    [class*="dark:bg-secondary/"],
+    [class*="dark:bg-muted/"]
+  ) {
+  background-color: rgba(2, 6, 23, 0.004) !important;
+  backdrop-filter: blur(2px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(2px) saturate(108%) !important;
+}
+
+.dark :where(
+    [class*="dark:border-violet-500/25"],
+    [class*="dark:border-violet-500/30"],
+    [class*="dark:border-violet-500/22"],
+    [class*="dark:border-violet-300/18"],
+    [class*="dark:border-white/20"],
+    [class*="dark:border-white/14"],
+    [class*="dark:border-white/10"]
+  ) {
+  border-color: rgba(196, 181, 253, 0.16) !important;
+}
+
+.dark :where(
+    [class*="dark:hover:bg-white/5"],
+    [class*="dark:hover:bg-white/8"]
+  ):hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ⑦ Header glass — adapts to light/dark */
 .dark header {
-  background-color: rgba(5, 9, 20, 0.68) !important;
-  backdrop-filter: blur(18px) saturate(160%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background-color: rgba(7, 10, 20, 0.012) !important;
+  backdrop-filter: blur(4px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(4px) saturate(112%) !important;
+  border-bottom: 1px solid rgba(196, 181, 253, 0.2) !important;
 }
 
 html:not(.dark) header {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(245, 250, 255, 0.58)) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 251, 255, 0.76)) !important;
   backdrop-filter: blur(18px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
   border-bottom: 1px solid rgba(128, 178, 236, 0.28) !important;
 }
 
-/* ⑦ Footer glass */
+/* ⑧ Footer glass */
 .dark footer {
-  background-color: rgba(5, 9, 20, 0.72) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
+  background-color: rgba(5, 9, 20, 0.01) !important;
+  backdrop-filter: blur(3px) !important;
+  -webkit-backdrop-filter: blur(3px) !important;
+  border-top: 1px solid rgba(196, 181, 253, 0.18) !important;
 }
 
 html:not(.dark) footer {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(242, 248, 255, 0.64)) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(242, 248, 255, 0.78)) !important;
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
 }
 
-/* ⑧ Gradient stops from/to background → transparent */
+/* ⑨ Gradient stops from/to background → transparent */
 [class*="from-background"] {
   --tw-gradient-from: transparent var(--tw-gradient-from-position);
 }
@@ -188,7 +444,8 @@ html:not(.dark) footer {
 }
 
 .dark .glass {
-  @apply bg-black/40 border-white/10;
+  background-color: rgba(2, 6, 23, 0.004);
+  border-color: rgba(196, 181, 253, 0.22);
 }
 
 .glass-strong {
@@ -196,7 +453,8 @@ html:not(.dark) footer {
 }
 
 .dark .glass-strong {
-  @apply bg-black/60 border-white/10;
+  background-color: rgba(2, 6, 23, 0.008);
+  border-color: rgba(196, 181, 253, 0.24);
 }
 
 /* ── Animations ── */
@@ -444,7 +702,7 @@ html:not(.dark) footer {
 
 /* ── Dark card styles ── */
 .dark-card {
-  @apply bg-card border border-border rounded-xl;
+  @apply bg-card border border-border rounded-xl backdrop-blur-xl;
 }
 
 /* ── Yellow glow ── */

@@ -27,6 +27,18 @@ describe('order presentation helpers', () => {
     expect(pricing.usdAmount).toBe(75);
   });
 
+  it('prefers final order total over legacy price_usd when rendering historical order usd snapshots', () => {
+    const pricing = getOrderPricingDisplay({
+      token_symbol: 'ETH',
+      amount_token: '0.031435',
+      price_usd: 70,
+      total_amount: 75,
+    });
+
+    expect(pricing.mode).toBe('token');
+    expect(pricing.usdAmount).toBe(75);
+  });
+
   it('maps raw statuses into human-readable tracking guidance', () => {
     const status = getOrderStatusMeta('TX_SUBMITTED');
 

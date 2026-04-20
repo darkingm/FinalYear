@@ -4,6 +4,8 @@ dotenv.config({ path: '../docker/.env' });
 
 /**
  * Deploy EscrowCore to Polygon Amoy Testnet.
+ * Amoy remains supported as a secondary testnet path.
+ * Base Sepolia is the primary public testnet for testnet-lite demos.
  *
  * Prerequisites:
  *   1. Set POLYGON_AMOY_RPC_URL in .env (e.g. from Alchemy/Infura)

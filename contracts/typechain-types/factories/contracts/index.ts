@@ -5,6 +5,7 @@ export * as escrowCoreSol from "./EscrowCore.sol";
 export * as rwaTokenSol from "./RWAToken.sol";
 export { ComplianceRegistry__factory } from "./ComplianceRegistry__factory";
 export { CreditScoreSBT__factory } from "./CreditScoreSBT__factory";
+export { MockUSDT__factory } from "./MockUSDT__factory";
 export { ProductNFT__factory } from "./ProductNFT__factory";
 export { ProfitDistributor__factory } from "./ProfitDistributor__factory";
 export { RWAFactory__factory } from "./RWAFactory__factory";

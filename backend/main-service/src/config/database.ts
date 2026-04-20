@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { logger } from '../utils/logger';
 import 'dotenv/config';
+import { ensureMainPaymentProjectionInfrastructure } from './ensure-main-schema';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -16,6 +17,7 @@ pool.on('error', (err: Error) => {
 export async function connectDatabase() {
   try {
     const client = await pool.connect();
+    await ensureMainPaymentProjectionInfrastructure(client);
     logger.info('Database connected successfully');
     client.release();
     return pool;

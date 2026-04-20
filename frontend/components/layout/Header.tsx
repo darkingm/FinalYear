@@ -104,7 +104,7 @@ const TickerBar = memo(function TickerBar() {
   const items = [...TICKER_SYMBOLS, ...TICKER_SYMBOLS];
 
   return (
-    <div className="bg-background border-b border-border text-muted-foreground text-xs py-1.5 overflow-hidden hidden md:block">
+    <div className="border-b border-border text-muted-foreground text-xs py-1.5 overflow-hidden hidden md:block bg-white/82 dark:bg-slate-950/[0.03] dark:backdrop-blur-sm">
       <div className="flex items-center gap-8 animate-marquee whitespace-nowrap w-max pr-8">
         {items.map((short, idx) => (
           <TickerCoin key={`${short}-${idx}`} short={short} />
@@ -151,8 +151,8 @@ export function Header() {
   const userInitials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U';
 
   const headerBg = scrolled
-    ? 'bg-background/95 backdrop-blur-md shadow-sm shadow-black/5'
-    : 'bg-background';
+    ? 'bg-white/84 backdrop-blur-md shadow-sm shadow-black/5 dark:bg-slate-950/[0.04] dark:backdrop-blur-sm dark:shadow-none'
+    : 'bg-white/68 backdrop-blur-md dark:bg-slate-950/[0.025] dark:backdrop-blur-sm';
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -481,7 +481,7 @@ export function Header() {
 
           {/* Mobile Menu */}
           {mobileMenuOpen && (
-            <div className="lg:hidden border-t border-border bg-background animate-fade-in">
+            <div className="lg:hidden border-t border-border bg-white/88 backdrop-blur-md dark:bg-slate-950/12 dark:backdrop-blur-md animate-fade-in">
               <div className="container mx-auto px-4 py-4 space-y-3">
                 <nav className="flex flex-col gap-1">
                   <Link

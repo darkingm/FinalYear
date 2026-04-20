@@ -110,4 +110,32 @@ describe('PaymentBatchSessionService', () => {
       statusCode: 409,
     });
   });
+
+  it('returns a submitted-payment conflict when one of the orders already has an on-chain payment in flight', async () => {
+    const mainQuery = jest.fn().mockResolvedValueOnce({
+      rows: [
+        { order_id: 42, buyer_id: 7, status: 'UNPAID' },
+        { order_id: 43, buyer_id: 7, status: 'TX_SUBMITTED' },
+      ],
+    });
+
+    const service = new PaymentBatchSessionService({
+      paymentQuery: jest.fn(),
+      mainQuery,
+      quoteResolver: jest.fn(),
+      now: () => now,
+    });
+
+    await expect(
+      service.createSession({
+        userId: 7,
+        orderIds: [42, 43],
+        tokenSymbol: 'USDT',
+        chainId: 31337,
+      })
+    ).rejects.toMatchObject({
+      message: 'Order 43 already has a submitted payment',
+      statusCode: 409,
+    });
+  });
 });

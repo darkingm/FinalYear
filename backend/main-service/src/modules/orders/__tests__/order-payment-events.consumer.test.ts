@@ -14,7 +14,11 @@ describe('OrderPaymentEventsConsumer', () => {
 
     expect(subscribe).toHaveBeenCalledWith(
       expect.arrayContaining(PAYMENT_EVENT_TOPICS),
-      expect.any(Function)
+      expect.any(Function),
+      expect.objectContaining({
+        queueName: 'main-service.payment-projection',
+        durable: true,
+      })
     );
 
     const callback = subscribe.mock.calls[0][1] as (payload: unknown) => Promise<void>;

@@ -25,10 +25,10 @@ async function main() {
   console.log("\nUpdate your .env files with:");
   console.log(`ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
   console.log("\n=== Next Steps ===");
-  console.log("1. Verify contract on PolygonScan:");
-  console.log(`   npx hardhat verify --network polygonMumbai ${escrowAddress} ${feeVault}`);
-  console.log("2. Update backend .env files with the contract address");
-  console.log("3. Grant OPERATOR_ROLE to backend service address");
+  console.log("1. Use scripts/deploy-base-sepolia.ts for public testnet deployments");
+  console.log("2. Use scripts/bootstrap-local.ts for Hardhat demo deployments");
+  console.log("3. Update backend .env files with the contract address");
+  console.log("4. Grant OPERATOR_ROLE to backend service address");
 }
 
 main()

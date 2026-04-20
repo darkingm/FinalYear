@@ -13,6 +13,8 @@ import { adminApi } from '@/lib/api/admin';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 
 interface DashboardData {
     totalUsers: number;
@@ -38,6 +40,13 @@ export default function AdminDashboard() {
     const { t } = useClientTranslation();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
+    const getPricingDisplay = (order: any) => getOrderPricingDisplay({
+        token_symbol: order.token_symbol,
+        subtotal_token: order.amount_token,
+        amount_token: order.amount_token,
+        total_amount: order.total_amount,
+        price_usd: order.total_amount,
+    });
     const [refreshing, setRefreshing] = useState(false);
 
     const fetchData = async () => {
@@ -227,7 +236,19 @@ export default function AdminDashboard() {
                                         </Link>
                                     </td>
                                     <td className="px-5 py-3 text-sm text-gray-400">{order.buyer_name || '—'}</td>
-                                    <td className="px-5 py-3 text-sm font-semibold text-white">${Number(order.total_amount || 0).toFixed(2)}</td>
+                                    <td className="px-5 py-3 text-sm font-semibold text-white">
+                                        {(() => {
+                                            const pricing = getPricingDisplay(order);
+                                            return pricing.mode === 'token' ? (
+                                                <div className="space-y-1">
+                                                    <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="text-white" />
+                                                    <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-gray-400" />
+                                                </div>
+                                            ) : (
+                                                <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="text-white" />
+                                            );
+                                        })()}
+                                    </td>
                                     <td className="px-5 py-3">
                                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[order.status] || 'text-gray-400 bg-gray-500/10 border-gray-500/20'}`}>
                                             {order.status}

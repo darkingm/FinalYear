@@ -4,10 +4,12 @@ import { AdminService } from './admin.service';
 import { P2PService } from '../p2p/p2p.service';
 import { logger } from '../../utils/logger';
 import { PaymentReconciliationAdminService } from './payment-reconciliation.service';
+import { ContractOpsService } from './contract-ops.service';
 
 const adminService = new AdminService();
 const p2pService = new P2PService();
 const paymentReconciliationAdminService = new PaymentReconciliationAdminService();
+const contractOpsService = new ContractOpsService();
 
 // ─── Dashboard ───────────────────────────────────────────────────
 
@@ -258,6 +260,26 @@ export async function getEscrowOrders(req: AuthRequest, res: Response, next: Nex
         res.json({ success: true, orders });
     } catch (error: any) {
         logger.error('Admin get escrow orders error:', error);
+        next(error);
+    }
+}
+
+export async function getEscrowContractSnapshots(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const chains = await contractOpsService.listSnapshots();
+        res.json({ success: true, chains });
+    } catch (error: any) {
+        logger.error('Admin get escrow contract snapshots error:', error);
+        next(error);
+    }
+}
+
+export async function getEscrowOpsHealth(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const health = await paymentReconciliationAdminService.getOpsHealth();
+        res.json({ success: true, health });
+    } catch (error: any) {
+        logger.error('Admin get escrow ops health error:', error);
         next(error);
     }
 }

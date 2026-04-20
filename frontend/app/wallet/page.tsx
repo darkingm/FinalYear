@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
+import { getRecommendedCheckoutChainMetas } from '@/lib/web3/testnet-lite';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { toast } from 'sonner';
@@ -43,44 +44,24 @@ interface Deposit {
 }
 
 /* ─── Testnet network definitions ────────────────────────────────────────── */
-const TESTNET_NETWORKS = [
-  {
-    chainId: 31337,
-    name: 'Hardhat VPS (Test)',
-    symbol: 'ETH',
-    icon: '🖥️',
-    rpcUrl: 'http://103.20.96.79:8545',
-    color: '#22c55e',
-    badge: 'MIỄN PHÍ',
-    tokens: ['ETH'],
-    note: 'Mạng thử nghiệm nội bộ — ETH miễn phí, không cần faucet',
-    faucet: null,
-  },
-  {
-    chainId: 80002,
-    name: 'Polygon Amoy',
-    symbol: 'MATIC',
-    icon: '🔷',
-    rpcUrl: 'https://rpc-amoy.polygon.technology',
-    color: '#8247e5',
-    badge: 'TESTNET',
-    tokens: ['MATIC', 'USDT'],
-    note: 'Cần MATIC testnet từ faucet',
-    faucet: 'https://faucet.polygon.technology/',
-  },
-  {
-    chainId: 97,
-    name: 'BNB Testnet',
-    symbol: 'tBNB',
-    icon: '🟡',
-    rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545',
-    color: '#f0b90b',
-    badge: 'TESTNET',
-    tokens: ['BNB'],
-    note: 'Cần tBNB từ faucet',
-    faucet: 'https://testnet.bnbchain.org/faucet-smart',
-  },
-];
+const TESTNET_NETWORKS = getRecommendedCheckoutChainMetas().map((network) => ({
+  chainId: network.chainId,
+  name: network.name,
+  symbol: network.nativeSymbol,
+  icon: network.icon,
+  rpcUrl: network.rpcUrl || '',
+  color: network.mode === 'demo'
+    ? '#22c55e'
+    : network.mode === 'primary'
+      ? '#3b82f6'
+      : network.mode === 'secondary'
+        ? '#8247e5'
+        : '#f0b90b',
+  badge: network.badge,
+  tokens: [network.nativeSymbol],
+  note: network.description,
+  faucet: network.faucetUrl,
+}));
 
 function copyText(text: string, label: string) {
   navigator.clipboard.writeText(text);

@@ -7,6 +7,7 @@ import type * as rwaTokenSol from "./RWAToken.sol";
 export type { rwaTokenSol };
 export type { ComplianceRegistry } from "./ComplianceRegistry";
 export type { CreditScoreSBT } from "./CreditScoreSBT";
+export type { MockUSDT } from "./MockUSDT";
 export type { ProductNFT } from "./ProductNFT";
 export type { ProfitDistributor } from "./ProfitDistributor";
 export type { RWAFactory } from "./RWAFactory";

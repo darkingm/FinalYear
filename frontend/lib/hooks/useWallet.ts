@@ -4,6 +4,7 @@ import { useAccount, useBalance, useChainId } from 'wagmi';
 import { useEffect, useState } from 'react';
 import { ethers } from 'ethers';
 import { useCryptoPrice } from './useCryptoPrice';
+import { getDeprecatedChainIds } from '@/lib/web3/testnet-lite';
 
 export interface TokenBalance {
   symbol: string;
@@ -22,6 +23,9 @@ const POLYGON_TOKENS = {
   WETH: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
   WBTC: '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6',
 };
+
+const DEPRECATED_CHAIN_IDS = new Set(getDeprecatedChainIds());
+const POLYGON_FAMILY_CHAIN_IDS = new Set([137, 80002, ...Array.from(DEPRECATED_CHAIN_IDS)]);
 
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
@@ -92,7 +96,7 @@ function useWalletInner() {
         });
       }
 
-      if (chainId === 137 || chainId === 80001 || chainId === 80002) {
+      if (POLYGON_FAMILY_CHAIN_IDS.has(chainId)) {
         for (const [symbol, tokenAddress] of Object.entries(POLYGON_TOKENS)) {
           try {
             const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);

@@ -230,6 +230,7 @@ export default function LoginPage() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authHint, setAuthHint] = useState<string | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || '';
 
   const ERROR_MESSAGES: Record<string, string> = {
@@ -246,6 +247,12 @@ export default function LoginPage() {
   useEffect(() => {
     const err = searchParams?.get('error');
     if (err) setAuthError(ERROR_MESSAGES[err] || 'Đăng nhập thất bại. Vui lòng thử lại');
+    const reason = searchParams?.get('reason');
+    if (reason === 'session_expired' || reason === 'reauth_required') {
+      setAuthHint('Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục đúng trang bạn đang mở.');
+    } else {
+      setAuthHint(null);
+    }
   }, [searchParams]);
 
   const schema = z.object({
@@ -286,7 +293,10 @@ export default function LoginPage() {
 
   const handleSocialSignIn = async (provider: 'google' | 'facebook') => {
     setSocialLoading(provider);
-    try { await signIn(provider, { callbackUrl: '/?welcome=1' }); }
+    try {
+      const callbackUrl = searchParams?.get('callbackUrl') || '/?welcome=1';
+      await signIn(provider, { callbackUrl });
+    }
     catch { toast.error('Đăng nhập thất bại. Vui lòng thử lại'); setSocialLoading(null); }
   };
 
@@ -335,6 +345,15 @@ export default function LoginPage() {
 
             {/* Error banner */}
             <AnimatePresence>
+              {authHint && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  className="flex items-center gap-2.5 p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm mb-4"
+                >
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {authHint}
+                </motion.div>
+              )}
               {authError && (
                 <motion.div
                   initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}

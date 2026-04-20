@@ -3,6 +3,7 @@ import GoogleProvider from 'next-auth/providers/google';
 import FacebookProvider from 'next-auth/providers/facebook';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import axios from 'axios';
+import { logAuthEvent } from '@/lib/auth/auth-log';
 
 // ─── SSR-safe API client ─────────────────────────────────────────────────────
 // On server (NextAuth runs server-side), use the internal API URL.
@@ -205,7 +206,11 @@ export const authOptions: NextAuthOptions = {
           // Refresh failed (expired / rotated / server restarted with different JWT secret).
           // Mark token as expired so the client gets a proper "sign in again" instead of
           // an infinite 401 loop. The session callback will see refreshError and return null.
-          console.error('[NextAuth] Refresh token rejected by backend:', err?.response?.data?.message || err.message);
+          logAuthEvent('session_refresh_rejected', {
+            eventSource: 'nextauth-jwt',
+            reasonCode: 'backend_refresh_rejected',
+            statusCode: err?.response?.status ?? null,
+          });
           token.refreshError = true;
           token.accessToken = undefined;
           token.refreshToken = undefined;

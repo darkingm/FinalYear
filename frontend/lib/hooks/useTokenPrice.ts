@@ -1,18 +1,15 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { getActiveRuntimeChainIds, getDeprecatedChainIds } from '@/lib/web3/testnet-lite';
 
 /**
  * Testnet chain IDs — tokens on these chains have no real market value
  * so we display equivalent as "0 USDT" instead of a live price.
  */
 export const TESTNET_CHAIN_IDS = new Set([
-    80002,  // Polygon Amoy
-    80001,  // Polygon Mumbai (deprecated)
-    31337,  // Localhost / Hardhat
-    97,     // BSC Testnet
-    421614, // Arbitrum Sepolia
-    84532,  // Base Sepolia
+    ...getActiveRuntimeChainIds(),
+    ...getDeprecatedChainIds(),
 ]);
 
 export function isTestnetChain(chainId: number): boolean {

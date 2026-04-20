@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { query } from '../config/database';
 import { publishEvent } from '../config/rabbitmq';
 import { logger } from '../utils/logger';
@@ -10,6 +11,8 @@ interface PaymentOutboxWorkerDeps {
   publish?: PublishFn;
   now?: () => Date;
   intervalMs?: number;
+  workerId?: string;
+  lockTimeoutMs?: number;
 }
 
 export class PaymentOutboxWorker {
@@ -17,6 +20,8 @@ export class PaymentOutboxWorker {
   private readonly publish: PublishFn;
   private readonly now: () => Date;
   private readonly intervalMs: number;
+  private readonly workerId: string;
+  private readonly lockTimeoutMs: number;
   private intervalId?: NodeJS.Timeout;
   private isRunning = false;
 
@@ -25,11 +30,15 @@ export class PaymentOutboxWorker {
     publish = publishEvent,
     now = () => new Date(),
     intervalMs = 3000,
+    workerId = `payment-outbox:${process.pid}:${randomUUID()}`,
+    lockTimeoutMs = 5 * 60 * 1000,
   }: PaymentOutboxWorkerDeps = {}) {
     this.paymentQuery = paymentQuery;
     this.publish = publish;
     this.now = now;
     this.intervalMs = intervalMs;
+    this.workerId = workerId;
+    this.lockTimeoutMs = lockTimeoutMs;
   }
 
   start() {
@@ -55,11 +64,25 @@ export class PaymentOutboxWorker {
     this.isRunning = true;
 
     try {
+      const lockedAt = this.now();
+      const staleBefore = new Date(lockedAt.getTime() - this.lockTimeoutMs);
       const result = await this.paymentQuery(
-        `SELECT * FROM payment_outbox
-         WHERE published_at IS NULL
-         ORDER BY created_at ASC
-         LIMIT 50`
+        `WITH candidates AS (
+           SELECT event_id
+           FROM payment_outbox
+           WHERE published_at IS NULL
+             AND (locked_at IS NULL OR locked_at < $2)
+           ORDER BY created_at ASC
+           FOR UPDATE SKIP LOCKED
+           LIMIT 50
+         )
+         UPDATE payment_outbox AS outbox
+         SET locked_at = $1,
+             locked_by = $3
+         FROM candidates
+         WHERE outbox.event_id = candidates.event_id
+         RETURNING outbox.*`,
+        [lockedAt, staleBefore, this.workerId]
       );
 
       for (const row of result.rows) {
@@ -68,17 +91,23 @@ export class PaymentOutboxWorker {
           await this.paymentQuery(
             `UPDATE payment_outbox
              SET published_at = $2,
+                 locked_at = NULL,
+                 locked_by = NULL,
                  last_error = NULL
-             WHERE event_id = $1`,
-            [row.event_id, this.now()]
+             WHERE event_id = $1
+               AND locked_by = $3`,
+            [row.event_id, this.now(), this.workerId]
           );
         } catch (error: any) {
           await this.paymentQuery(
             `UPDATE payment_outbox
              SET retry_count = retry_count + 1,
-                 last_error = $1
-             WHERE event_id = $2`,
-            [error.message, row.event_id]
+                 last_error = $1,
+                 locked_at = NULL,
+                 locked_by = NULL
+             WHERE event_id = $2
+               AND locked_by = $3`,
+            [error.message, row.event_id, this.workerId]
           );
 
           logger.warn('Payment outbox publish failed', {

@@ -32,7 +32,6 @@ interface Order {
   primary_image?: string | null;
   quantity: number;
   price_usd: number;
-  price_in_token?: number | null;
   token_symbol?: string | null;
   amount_token?: number | null;
   total_amount?: number;
@@ -116,9 +115,10 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
   const StatusIcon = cfg.icon;
   const pricingDisplay = getOrderPricingDisplay({
     token_symbol: order.token_symbol,
-    subtotal_token: order.amount_token ?? (order.price_in_token ? Number(order.price_in_token) * order.quantity : null),
+    subtotal_token: order.amount_token,
     amount_token: order.amount_token,
-    price_usd: order.price_usd ?? order.total_amount ?? 0,
+    price_usd: order.price_usd ?? 0,
+    total_amount: order.total_amount ?? null,
     primary_image: order.primary_image,
     product_metadata: order.product_metadata,
   });
@@ -246,7 +246,7 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) { router.push('/login'); return; }
+    if (!isLoading && !isAuthenticated) { router.push('/login?callbackUrl=/orders'); return; }
     if (isAuthenticated) fetchOrders();
   }, [isAuthenticated, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -286,7 +286,7 @@ export default function OrdersPage() {
   );
 
   // Summary stats
-  const totalSpentUSD = orders.reduce((s, o) => s + Number(o.price_usd ?? o.total_amount ?? 0), 0);
+  const totalSpentUSD = orders.reduce((s, o) => s + Number(o.total_amount ?? o.price_usd ?? 0), 0);
   const completedCount = orders.filter(o => ['COMPLETED', 'DELIVERED'].includes(o.status)).length;
   const pendingCount = orders.filter(o => ['UNPAID', 'TX_SUBMITTED', 'ONCHAIN_PENDING'].includes(o.status)).length;
 

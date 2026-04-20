@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/error-handler';
 import {
   collectAffectedOrderIds,
+  resolveBuyerWallet,
   resolveOperatorPrivateKey,
   resolveSellerWallet,
 } from './crypto-payment.logic';
@@ -35,18 +36,18 @@ const ESCROW_ABI = [
 
 const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-// All supported payment chains (testnets first for easy dev testing)
-const ALL_SUPPORTED_CHAINS = [31337, 80002, 97, 421614, 84532, 137, 42161, 56, 1];
+// All supported payment chains (demo-first, then primary public testnet)
+const ALL_SUPPORTED_CHAINS = [31337, 84532, 80002, 97, 421614, 137, 42161, 56, 1];
 
 // Escrow contract addresses per chain — falls back to ESCROW_CONTRACT_ADDRESS for unspecified
 const ESCROW_BY_CHAIN: Record<number, string | undefined> = {
   31337: process.env.ESCROW_CONTRACT_LOCALHOST || process.env.ESCROW_CONTRACT_ADDRESS,
+  84532: process.env.ESCROW_CONTRACT_BASE_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
   80002: process.env.ESCROW_CONTRACT_POLYGON_AMOY || '0xCDE08Be0190482691b3288C27240378497d74E79',
   137: process.env.ESCROW_CONTRACT_POLYGON || process.env.ESCROW_CONTRACT_ADDRESS,
   42161: process.env.ESCROW_CONTRACT_ARBITRUM || process.env.ESCROW_CONTRACT_ADDRESS,
   97: process.env.ESCROW_CONTRACT_BSC_TESTNET || process.env.ESCROW_CONTRACT_ADDRESS,
   421614: process.env.ESCROW_CONTRACT_ARB_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
-  84532: process.env.ESCROW_CONTRACT_BASE_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
 };
 
 export class CryptoPaymentService {
@@ -64,7 +65,6 @@ export class CryptoPaymentService {
     // Create robust FallbackProvider for Polygon Amoy (80002)
     const amoyRpcs = [
       process.env.POLYGON_AMOY_RPC_URL,
-      process.env.POLYGON_MUMBAI_RPC_URL,
       'https://polygon-amoy.drpc.org',
       'https://rpc-amoy.polygon.technology'
     ].filter(Boolean) as string[];
@@ -93,25 +93,40 @@ export class CryptoPaymentService {
     );
 
     this.providers.set(31337, new ethers.JsonRpcProvider(localRpc));
+    this.providers.set(84532, new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
     this.providers.set(80002, amoyFallback);
-    this.providers.set(80001, new ethers.JsonRpcProvider(process.env.POLYGON_MUMBAI_RPC_URL));
     this.providers.set(137, polyFallback);
     this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
     this.providers.set(97, bscTestFallback);
     this.providers.set(421614, new ethers.JsonRpcProvider(process.env.ARB_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'));
-    this.providers.set(84532, new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'));
   }
 
   private getRequiredConfirmations(chainId: number) {
     return getRequiredConfirmationsForChain(chainId);
   }
 
+  private isPayableOrderStatus(status: string) {
+    return ['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(status);
+  }
+
+  private isIdempotentSubmittedOrder(order: { status: string; tx_hash: string | null }, txHash: string) {
+    return ['PAID', 'ONCHAIN_CONFIRMED'].includes(order.status) && order.tx_hash === txHash;
+  }
+
   private async loadOrderPaymentContext(orderId: number) {
     const orderResult = await mainQuery(
-      `SELECT order_id, buyer_id, buyer_wallet, status, chain_id, token_id,
-              amount_token, escrow_contract, tx_hash
-       FROM orders
-       WHERE order_id = $1`,
+      `SELECT o.order_id,
+              o.buyer_id,
+              u.wallet_address AS buyer_wallet_address,
+              o.status,
+              o.chain_id,
+              o.token_id,
+              o.amount_token,
+              o.escrow_contract,
+              o.tx_hash
+       FROM orders o
+       LEFT JOIN users u ON u.user_id = o.buyer_id
+       WHERE o.order_id = $1`,
       [orderId]
     );
 
@@ -130,6 +145,7 @@ export class CryptoPaymentService {
     userId?: number;
     chainId?: number;
     amountToken?: number | string;
+    buyerWallet?: string | null;
   }) {
     if (!input.txHash.match(/^0x[a-fA-F0-9]{64}$/)) {
       throw new AppError('Invalid transaction hash format', 400);
@@ -138,12 +154,13 @@ export class CryptoPaymentService {
     const order = await this.loadOrderPaymentContext(input.orderId);
     const effectiveChainId = input.chainId ?? order.chain_id;
     const effectiveAmount = Number(input.amountToken ?? order.amount_token);
+    const allowIdempotentSubmit = this.isIdempotentSubmittedOrder(order, input.txHash);
 
     if (!Number.isFinite(effectiveAmount) || effectiveAmount <= 0) {
       throw new AppError('Missing canonical token amount for payment submission', 400);
     }
 
-    if (!['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status)) {
+    if (!this.isPayableOrderStatus(order.status) && !allowIdempotentSubmit) {
       throw new AppError(`Order ${input.orderId} is not payable`, 400);
     }
 
@@ -155,18 +172,24 @@ export class CryptoPaymentService {
       userId: input.userId ?? order.buyer_id,
       amount: effectiveAmount,
       tokenId: order.token_id ?? null,
-      fromAddress: order.buyer_wallet || String(order.buyer_id),
+      fromAddress: resolveBuyerWallet({
+        sessionBuyerWallet: input.buyerWallet,
+        userWallet: order.buyer_wallet_address,
+        buyerId: order.buyer_id,
+      }),
       toAddress: order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS || null,
     });
 
-    await mainQuery(
-      `UPDATE orders
-       SET tx_hash = $1,
-           status = 'TX_SUBMITTED',
-           updated_at = NOW()
-       WHERE order_id = $2`,
-      [input.txHash, input.orderId]
-    );
+    if (!allowIdempotentSubmit) {
+      await mainQuery(
+        `UPDATE orders
+         SET tx_hash = $1,
+             status = 'TX_SUBMITTED',
+             updated_at = NOW()
+         WHERE order_id = $2`,
+        [input.txHash, input.orderId]
+      );
+    }
 
     return {
       order,
@@ -190,7 +213,7 @@ export class CryptoPaymentService {
 
     const order = orderResult.rows[0];
 
-    if (order.status !== 'UNPAID') {
+    if (!['UNPAID', 'TX_FAILED'].includes(order.status)) {
       throw new AppError('Order is not in UNPAID status', 400);
     }
 
@@ -214,7 +237,7 @@ export class CryptoPaymentService {
     // Otherwise use default priority: amoy > bscTestnet > arbSepolia > mainnet chains.
     const searchChains: number[] = preferredChainId && ALL_SUPPORTED_CHAINS.includes(preferredChainId)
       ? [preferredChainId]   // strict: only the chosen chain
-      : [80002, 97, 421614, 84532, 137, 42161, 56, 1]; // broad fallback
+      : [84532, 80002, 97, 421614, 137, 42161, 56, 1]; // broad fallback
 
     const tokenResult = await query(
       `SELECT * FROM token_whitelist 
@@ -251,7 +274,7 @@ export class CryptoPaymentService {
     const escrowAddress = ESCROW_BY_CHAIN[token.chain_id] || process.env.ESCROW_CONTRACT_ADDRESS;
     if (!escrowAddress || escrowAddress === '0x0000000000000000000000000000000000000000') {
       throw new AppError(
-        `No escrow contract deployed on ${token.chain_id === 80002 ? 'Polygon Amoy' : `chain ${token.chain_id}`}. Please choose a different network.`,
+        `No escrow contract deployed on ${token.chain_id === 84532 ? 'Base Sepolia' : token.chain_id === 80002 ? 'Polygon Amoy' : `chain ${token.chain_id}`}. Please choose a different network.`,
         400
       );
     }
@@ -356,6 +379,7 @@ export class CryptoPaymentService {
       expires_at: Math.floor(Date.now() / 1000) + 600, // 10 phút
       token_price: tokenPrice,
       seller_wallet: sellerWallet,
+      buyer_wallet: buyerWallet || null,
     };
   }
 
@@ -378,8 +402,8 @@ export class CryptoPaymentService {
     const orders = orderResult.rows;
 
     for (const order of orders) {
-      if (order.status !== 'UNPAID') {
-        throw new AppError(`Order ${order.order_id} is not in UNPAID status`, 400);
+      if (!['UNPAID', 'TX_FAILED'].includes(order.status)) {
+        throw new AppError(`Order ${order.order_id} is not in payable retry state`, 400);
       }
     }
 
@@ -409,7 +433,7 @@ export class CryptoPaymentService {
     // Determine Chain and Token
     const searchChains: number[] = preferredChainId && ALL_SUPPORTED_CHAINS.includes(preferredChainId)
       ? [preferredChainId]
-      : [80002, 97, 421614, 84532, 137, 42161, 56, 1];
+      : [84532, 80002, 97, 421614, 137, 42161, 56, 1];
 
     const tokenResult = await query(
       `SELECT * FROM token_whitelist 
@@ -515,6 +539,7 @@ export class CryptoPaymentService {
       calldata,
       expires_at: Math.floor(Date.now() / 1000) + 600,
       token_price: tokenPrice,
+      buyer_wallet: buyerWallet || null,
     };
   }
 
@@ -536,6 +561,7 @@ export class CryptoPaymentService {
       userId: session.user_id,
       chainId: session.chain_id,
       amountToken: session.amount_token,
+      buyerWallet: (session.quote_snapshot as { buyer_wallet?: string | null })?.buyer_wallet ?? null,
     });
 
     logger.info('Session transaction submitted', {
@@ -564,7 +590,7 @@ export class CryptoPaymentService {
 
     const orderContexts = await Promise.all(orderIds.map((orderId) => this.loadOrderPaymentContext(orderId)));
     for (const order of orderContexts) {
-      if (!['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status)) {
+      if (!this.isPayableOrderStatus(order.status) && !this.isIdempotentSubmittedOrder(order, txHash)) {
         throw new AppError(`Order ${order.order_id} is not payable`, 400);
       }
     }
@@ -584,28 +610,38 @@ export class CryptoPaymentService {
           userId: session.user_id,
           amount: effectiveAmount,
           tokenId: order.token_id ?? null,
-          fromAddress: order.buyer_wallet || String(order.buyer_id),
+          fromAddress: resolveBuyerWallet({
+            sessionBuyerWallet: (session.quote_snapshot as { buyer_wallet?: string | null })?.buyer_wallet ?? null,
+            userWallet: order.buyer_wallet_address,
+            buyerId: order.buyer_id,
+          }),
           toAddress: order.escrow_contract || process.env.ESCROW_CONTRACT_ADDRESS || null,
         };
       })
     );
 
-    try {
-      await mainQuery(
-        `UPDATE orders
-         SET tx_hash = $1,
-             status = 'TX_SUBMITTED',
-             updated_at = NOW()
-         WHERE order_id = ANY($2::int[])`,
-        [txHash, orderIds]
-      );
-    } catch (error: any) {
-      logger.error('Best-effort batch order sync after submit failed; projection will retry via events', {
-        order_ids: orderIds,
-        tx_hash: txHash,
-        session_id: session.session_id,
-        error: error.message,
-      });
+    const orderIdsNeedingPendingSync = orderContexts
+      .filter((order) => !this.isIdempotentSubmittedOrder(order, txHash))
+      .map((order) => order.order_id);
+
+    if (orderIdsNeedingPendingSync.length > 0) {
+      try {
+        await mainQuery(
+          `UPDATE orders
+           SET tx_hash = $1,
+               status = 'TX_SUBMITTED',
+               updated_at = NOW()
+           WHERE order_id = ANY($2::int[])`,
+          [txHash, orderIdsNeedingPendingSync]
+        );
+      } catch (error: any) {
+        logger.error('Best-effort batch order sync after submit failed; projection will retry via events', {
+          order_ids: orderIdsNeedingPendingSync,
+          tx_hash: txHash,
+          session_id: session.session_id,
+          error: error.message,
+        });
+      }
     }
 
     logger.info('Batch session transaction submitted', {

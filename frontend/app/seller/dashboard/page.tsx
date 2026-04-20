@@ -14,6 +14,8 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 
 interface DashboardStats {
   orders: {
@@ -45,6 +47,13 @@ export default function SellerDashboardPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const getPricingDisplay = (order: any) => getOrderPricingDisplay({
+    token_symbol: order.token_symbol,
+    subtotal_token: order.amount_token,
+    amount_token: order.amount_token,
+    total_amount: order.total_amount ?? order.total_usd,
+    price_usd: order.total_usd ?? order.total_amount,
+  });
 
   useEffect(() => {
     if (!authLoading) {
@@ -242,7 +251,17 @@ export default function SellerDashboardPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-lg">${parseFloat(order.total_usd).toFixed(2)}</p>
+                        {(() => {
+                          const pricing = getPricingDisplay(order);
+                          return pricing.mode === 'token' ? (
+                            <div className="space-y-1">
+                              <TokenAmountInline amount={pricing.tokenAmount} symbol={pricing.tokenSymbol} size="sm" amountClassName="justify-end text-foreground" />
+                              <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="justify-end text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <UsdtAmountInline amount={pricing.usdAmount} size="sm" amountClassName="justify-end text-foreground font-bold text-lg" />
+                          );
+                        })()}
                         <span
                           className={`text-xs px-2 py-1 rounded-full ${order.status === 'COMPLETED'
                             ? 'bg-success/10 text-success'

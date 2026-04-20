@@ -42,7 +42,7 @@ const SheetContent = React.forwardRef<
         <DialogPrimitive.Content
             ref={ref}
             className={cn(
-                'fixed z-50 h-full flex flex-col bg-background shadow-2xl transition ease-in-out',
+                'fixed z-50 flex h-full flex-col border-l border-border bg-popover/96 shadow-2xl backdrop-blur-xl transition ease-in-out dark:bg-popover/82',
                 'data-[state=open]:animate-in data-[state=closed]:animate-out',
                 'data-[state=closed]:duration-300 data-[state=open]:duration-300',
                 side === 'right'

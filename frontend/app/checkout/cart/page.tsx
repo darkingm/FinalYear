@@ -30,6 +30,13 @@ import {
   submitPaymentBatchSessionTransaction,
   type PaymentBatchSession,
 } from '@/lib/payments/payment-batch-session';
+import {
+  buildLockedCartPreviewItems,
+  getLockedCartTotalUsd,
+  type CartOrderSnapshot,
+  type LockedCartPreviewItem,
+} from '@/lib/payments/cart-pricing';
+import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
 interface CryptoQuoteBatch {
@@ -83,7 +90,7 @@ function NetworkBadge({ net }: { net: typeof PAYMENT_NETWORKS[0] }) {
 function Steps({ current }: { current: number }) {
   const steps = ['Xem giỏ hàng', 'Chọn mạng & token', 'Ký & Thanh toán'];
   return (
-    <div className="flex items-center gap-2 p-4 bg-card border border-border rounded-2xl">
+    <div className={`${paymentPageTheme.secondarySurface} flex items-center gap-2 p-4`}>
       {steps.map((label, i) => {
         const id = i + 1;
         const done = current > id;
@@ -119,6 +126,8 @@ export default function CartCheckoutPage() {
 
   const [quote, setQuote] = useState<CryptoQuoteBatch | null>(null);
   const [createdOrderIds, setCreatedOrderIds] = useState<number[]>([]);
+  const [createdOrderSnapshots, setCreatedOrderSnapshots] = useState<CartOrderSnapshot[]>([]);
+  const [lockedCartItems, setLockedCartItems] = useState<LockedCartPreviewItem[]>([]);
   const [paymentBatchSession, setPaymentBatchSession] = useState<PaymentBatchSession | null>(null);
 
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -216,7 +225,10 @@ export default function CartCheckoutPage() {
           throw new Error(resCreate.data.message || 'Không thể tạo đơn hàng từ giỏ hàng');
         }
 
-        orderIdsToQuote = resCreate.data.orders.map((o: any) => o.order_id);
+        const createdOrders = Array.isArray(resCreate.data.orders) ? resCreate.data.orders : [];
+        orderIdsToQuote = createdOrders.map((o: any) => o.order_id);
+        setLockedCartItems(buildLockedCartPreviewItems(items, createdOrders));
+        setCreatedOrderSnapshots(createdOrders);
         setCreatedOrderIds(orderIdsToQuote);
         toast.success(`Đã tạo ${orderIdsToQuote.length} đơn hàng!`, { id: 'create-orders' });
         clearCart(); // Cart items are now locked as DB orders
@@ -344,21 +356,26 @@ export default function CartCheckoutPage() {
   /* ─── Render guards ─────────────────────────────────────────────────── */
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+      <div className={`${paymentPageTheme.pageShell} items-center justify-center gap-4`}>
         <Loader2 className="w-10 h-10 text-[#8247e5] animate-spin" />
         <p className="text-sm text-muted-foreground">Đang tải...</p>
       </div>
     );
   }
 
-  const totalUSD = getTotal();
+  const previewItems = lockedCartItems.length > 0
+    ? lockedCartItems
+    : buildLockedCartPreviewItems(items, createdOrderSnapshots);
+  const totalUSD = lockedCartItems.length > 0
+    ? lockedCartItems.reduce((sum, item) => sum + item.lockedUsdAmount, 0)
+    : getLockedCartTotalUsd(items, createdOrderSnapshots) || getTotal();
   const selectedTokenPrice = quote?.token_price || coinPrice || null;
   const estimatedCrypto = selectedTokenPrice ? (totalUSD / selectedTokenPrice).toFixed(6) : '...';
-  const displayItems = items.length > 0 ? items : [];
+  const displayItems = previewItems.length > 0 ? previewItems : [];
   const orderCount = createdOrderIds.length > 0 ? createdOrderIds.length : items.length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className={paymentPageTheme.pageShell}>
       <Header />
       <main className="flex-1 py-8 px-4">
         <div className="max-w-4xl mx-auto">
@@ -366,7 +383,7 @@ export default function CartCheckoutPage() {
           {/* Page Header */}
           <div className="flex items-center gap-3 mb-6">
             <Link href="/cart">
-              <button className="p-2 rounded-xl bg-card border border-border hover:bg-muted transition-colors">
+              <button className={`p-2 rounded-xl transition-colors ${paymentPageTheme.ghostButton}`}>
                 <ArrowLeft className="w-5 h-5" />
               </button>
             </Link>
@@ -388,12 +405,12 @@ export default function CartCheckoutPage() {
 
               {/* Cart Summary Bar (always visible, clickable to go back) */}
               <div
-                className="bg-card border border-border rounded-2xl p-4 flex gap-4 items-center cursor-pointer hover:bg-muted/30 transition-colors"
+                className={`${paymentPageTheme.secondarySurface} p-4 flex gap-4 items-center cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-white/5`}
                 onClick={() => step > 1 && setStep(1)}
                 role="button"
                 tabIndex={0}
               >
-                <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
                   <Package className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -415,7 +432,7 @@ export default function CartCheckoutPage() {
               {/* ── STEP 1: Chọn phương thức thanh toán ── */}
               {step === 1 && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                  className={`${paymentPageTheme.secondarySurface} p-5 space-y-4`}>
                   <h2 className="font-bold flex items-center gap-2 text-sm">
                     <span className="w-1.5 h-5 bg-[#8247e5] rounded-full" />
                     Chọn phương thức thanh toán
@@ -444,9 +461,9 @@ export default function CartCheckoutPage() {
                     <div className="mt-4 space-y-2 border-t border-border pt-4">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Sản phẩm trong giỏ</p>
                       {displayItems.map(item => (
-                        <div key={item.cart_item_id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
+                        <div key={item.cart_item_id} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-white/5">
                           <div
-                            className="w-10 h-10 rounded-lg bg-muted bg-cover bg-center flex-shrink-0"
+                            className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-white/5 bg-cover bg-center flex-shrink-0"
                             style={{ backgroundImage: `url(${item.image_url || item.metadata?.images?.[0]})` }}
                           />
                           <div className="flex-1 min-w-0">
@@ -454,7 +471,7 @@ export default function CartCheckoutPage() {
                             <p className="text-xs text-muted-foreground">x{item.quantity}</p>
                           </div>
                           <p className="text-sm font-bold text-[#8247e5] flex-shrink-0">
-                            ${(item.base_price_usd * item.quantity).toFixed(2)}
+                            ${item.lockedUsdAmount.toFixed(2)}
                           </p>
                         </div>
                       ))}
@@ -466,7 +483,7 @@ export default function CartCheckoutPage() {
               {/* ── STEP 2: Chọn mạng & token ── */}
               {step === 2 && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card border border-border rounded-2xl p-5 space-y-5">
+                  className={`${paymentPageTheme.secondarySurface} p-5 space-y-5`}>
                   <h2 className="font-bold flex items-center gap-2 text-sm">
                     <span className="w-1.5 h-5 bg-emerald-400 rounded-full" />
                     Chọn mạng & token
@@ -482,7 +499,7 @@ export default function CartCheckoutPage() {
                       {PAYMENT_NETWORKS.map(net => (
                         <button
                           key={net.chainId}
-                          onClick={() => { setSelectedNet(net.chainId); setQuote(null); setPaymentBatchSession(null); setCreatedOrderIds([]); }}
+                          onClick={() => { setSelectedNet(net.chainId); setQuote(null); setPaymentBatchSession(null); }}
                           className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${selectedNet === net.chainId
                             ? 'border-[#8247e5]/60 bg-[#8247e5]/10'
                             : 'border-border hover:border-[#8247e5]/30'
@@ -509,7 +526,7 @@ export default function CartCheckoutPage() {
                       {tokensToShow.map(token => (
                         <button
                           key={token}
-                          onClick={() => { setSelectedToken(token); setQuote(null); setPaymentBatchSession(null); setCreatedOrderIds([]); }}
+                          onClick={() => { setSelectedToken(token); setQuote(null); setPaymentBatchSession(null); }}
                           className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all ${selectedToken === token
                             ? 'border-[#8247e5] bg-[#8247e5]/10 text-[#8247e5]'
                             : 'border-border hover:border-[#8247e5]/40 text-foreground'
@@ -523,7 +540,7 @@ export default function CartCheckoutPage() {
                   </div>
 
                   {/* Estimated amount */}
-                  <div className="p-4 bg-background border border-border rounded-xl flex items-center justify-between">
+                  <div className={`${paymentPageTheme.subSurface} p-4 flex items-center justify-between`}>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Ước tính cần trả</p>
                       <TokenAmountInline amount={estimatedCrypto} symbol={selectedToken} size="lg" amountClassName="text-[#8247e5]" />
@@ -535,7 +552,7 @@ export default function CartCheckoutPage() {
                   </div>
 
                   {/* Wallet connection */}
-                  <div className="p-4 bg-background border border-border rounded-xl">
+                  <div className={`${paymentPageTheme.subSurface} p-4`}>
                     {!isConnected ? (
                       <ConnectButton.Custom>
                         {({ openConnectModal }) => (
@@ -570,7 +587,7 @@ export default function CartCheckoutPage() {
                   </button>
 
                   {quoteError && (
-                    <div className="flex gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+                    <div className={`${getPaymentAccentPanelClass('red')} flex gap-2 p-3 rounded-xl text-sm text-red-500 dark:text-red-400`}>
                       <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                       <p>{quoteError}</p>
                     </div>
@@ -581,7 +598,7 @@ export default function CartCheckoutPage() {
               {/* ── STEP 3: Thanh toán ── */}
               {step === 3 && quote && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                  className={`${paymentPageTheme.secondarySurface} p-5 space-y-4`}>
                   <div className="flex items-center justify-between">
                     <h2 className="font-bold flex items-center gap-2 text-sm">
                       <Lock className="w-4 h-4 text-[#8247e5]" />
@@ -589,14 +606,14 @@ export default function CartCheckoutPage() {
                     </h2>
                     <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold font-mono ${timeLeft < 60
                       ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                      : 'bg-muted border-border text-muted-foreground'
+                      : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-white/5 dark:border-white/10 dark:text-muted-foreground'
                       }`}>
                       ⏱ {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                     </div>
                   </div>
 
                   {/* Amount display */}
-                  <div className="p-4 bg-background border border-border rounded-xl flex items-end justify-between">
+                  <div className={`${paymentPageTheme.subSurface} p-4 flex items-end justify-between`}>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">
                         Tổng thanh toán gộp ({quote.order_ids.length} đơn hàng)
@@ -628,14 +645,14 @@ export default function CartCheckoutPage() {
                       <h3 className="text-2xl font-black text-emerald-400">Thanh toán thành công! 🎉</h3>
 
                       {/* TX Hash */}
-                      <div className="bg-background border border-border rounded-xl p-3 text-left space-y-1">
+                      <div className={`${paymentPageTheme.subSurface} p-3 text-left space-y-1`}>
                         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Mã giao dịch (TX Hash)</p>
                         <p className="text-xs text-foreground font-mono break-all">{txHash}</p>
                       </div>
 
                       {/* Escrow contract */}
                       {quote?.escrow_contract && (
-                        <div className="bg-background border border-border rounded-xl p-3 text-left space-y-1">
+                        <div className={`${paymentPageTheme.subSurface} p-3 text-left space-y-1`}>
                           <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Escrow Contract</p>
                           <p className="text-xs text-foreground font-mono break-all">{quote.escrow_contract}</p>
                           <p className="text-[10px] text-muted-foreground">Chain ID: {quote.chain_id}</p>
@@ -649,7 +666,7 @@ export default function CartCheckoutPage() {
                           </button>
                         </Link>
                         <Link href="/products">
-                          <button className="w-full py-3 bg-card border border-border font-semibold rounded-xl hover:bg-muted text-sm transition-colors">
+                          <button className={`w-full py-3 font-semibold rounded-xl text-sm transition-colors ${paymentPageTheme.ghostButton}`}>
                             Tiếp tục mua
                           </button>
                         </Link>
@@ -664,9 +681,9 @@ export default function CartCheckoutPage() {
                       Chuyển sang {quoteNet?.name || `Chain ${quote.chain_id}`}
                     </button>
                   ) : needsApprove ? (
-                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-2">
-                      <p className="text-sm font-bold text-amber-300">Bước 1 – Ủy quyền Token</p>
-                      <p className="text-xs text-amber-400/80">
+                    <div className={`${getPaymentAccentPanelClass('amber')} p-4 rounded-xl space-y-2`}>
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Bước 1 – Ủy quyền Token</p>
+                      <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
                         Cho phép Escrow Contract sử dụng {quote.amount_token_total.toFixed(4)} {selectedToken} từ ví của bạn.
                       </p>
                       <button
@@ -696,7 +713,7 @@ export default function CartCheckoutPage() {
 
             {/* ─── RIGHT COLUMN: Sidebar ─── */}
             <div className="hidden lg:block">
-              <div className="bg-card border border-border p-6 rounded-3xl sticky top-24 space-y-4">
+              <div className={`${paymentPageTheme.primarySurface} p-6 sticky top-24 space-y-4`}>
                 <h4 className="font-bold flex items-center gap-2">
                   <Shield className="text-emerald-500 w-5 h-5" />
                   Bảo vệ 100%
@@ -716,7 +733,7 @@ export default function CartCheckoutPage() {
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-lg">
+                <div className={`${paymentPageTheme.subSurface} flex items-center gap-2 text-xs ${paymentPageTheme.subtleText} p-2.5`}>
                   <Info className="w-4 h-4 flex-shrink-0" />
                   Powered by EscrowCore Smart Contract
                 </div>

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { query } from '../../config/database';
 import { AppError } from '../../middleware/error-handler';
 import { projectOrderStatus } from '../orders/order-payment-projection.service';
+import { getChannel } from '../../config/rabbitmq';
 
 export interface PaymentReconciliationCase {
   order_id: number;
@@ -86,6 +87,48 @@ export class PaymentReconciliationAdminService {
     );
 
     return response.data;
+  }
+
+  async getOpsHealth() {
+    const [paymentResponse, projectionResult] = await Promise.all([
+      this.httpGet<{ success: true; health: any }>(
+        `${this.getPaymentServiceUrl()}/api/payments/crypto/admin/ops-health`,
+        {
+          headers: this.getInternalHeaders(),
+          timeout: 15000,
+        }
+      ),
+      query(
+        `SELECT
+           COUNT(*) FILTER (WHERE processed_at >= NOW() - INTERVAL '24 hours') AS processed_24h,
+           MAX(processed_at) AS last_processed_at
+         FROM processed_events`
+      ),
+    ]);
+
+    const staleProjectionResult = await query(
+      `SELECT COUNT(*) AS stale_projection_count
+       FROM orders
+       WHERE status IN ('TX_SUBMITTED', 'PAID', 'ONCHAIN_CONFIRMED')
+         AND payment_projection_version = 0`
+    );
+
+    const projectionRow = projectionResult.rows[0] || {};
+    const staleRow = staleProjectionResult.rows[0] || {};
+
+    return {
+      payment_service: paymentResponse.data.health,
+      main_service: {
+        rabbitmq: {
+          status: getChannel() ? 'connected' : 'disconnected',
+        },
+        projection: {
+          processed_24h: Number(projectionRow.processed_24h || 0),
+          last_processed_at: projectionRow.last_processed_at || null,
+          stale_projection_count: Number(staleRow.stale_projection_count || 0),
+        },
+      },
+    };
   }
 
   async repairOrderState(orderId: number) {

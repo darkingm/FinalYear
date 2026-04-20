@@ -10,6 +10,8 @@ export type { AccessControl } from "./@openzeppelin/contracts/access/AccessContr
 export { AccessControl__factory } from "./factories/@openzeppelin/contracts/access/AccessControl__factory";
 export type { IAccessControl } from "./@openzeppelin/contracts/access/IAccessControl";
 export { IAccessControl__factory } from "./factories/@openzeppelin/contracts/access/IAccessControl__factory";
+export type { Ownable } from "./@openzeppelin/contracts/access/Ownable";
+export { Ownable__factory } from "./factories/@openzeppelin/contracts/access/Ownable__factory";
 export type { IERC1155Errors } from "./@openzeppelin/contracts/interfaces/draft-IERC6093.sol/IERC1155Errors";
 export { IERC1155Errors__factory } from "./factories/@openzeppelin/contracts/interfaces/draft-IERC6093.sol/IERC1155Errors__factory";
 export type { IERC20Errors } from "./@openzeppelin/contracts/interfaces/draft-IERC6093.sol/IERC20Errors";
@@ -64,6 +66,8 @@ export type { ICreditScoreSBT } from "./contracts/EscrowCore.sol/ICreditScoreSBT
 export { ICreditScoreSBT__factory } from "./factories/contracts/EscrowCore.sol/ICreditScoreSBT__factory";
 export type { ISwapRouter } from "./contracts/EscrowCore.sol/ISwapRouter";
 export { ISwapRouter__factory } from "./factories/contracts/EscrowCore.sol/ISwapRouter__factory";
+export type { MockUSDT } from "./contracts/MockUSDT";
+export { MockUSDT__factory } from "./factories/contracts/MockUSDT__factory";
 export type { ProductNFT } from "./contracts/ProductNFT";
 export { ProductNFT__factory } from "./factories/contracts/ProductNFT__factory";
 export type { ProfitDistributor } from "./contracts/ProfitDistributor";

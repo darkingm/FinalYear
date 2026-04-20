@@ -26,7 +26,9 @@ import { CoinImage } from '@/components/ui/CoinImage';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { resolveCheckoutProductImage } from '@/lib/checkout/images';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
+import { getRecommendedCheckoutChainMetas } from '@/lib/web3/testnet-lite';
 import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
+import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 import {
   createPaymentSession,
   getPaymentSessionQuote,
@@ -34,6 +36,11 @@ import {
   submitPaymentSessionTransaction,
   type PaymentSession,
 } from '@/lib/payments/payment-session';
+import {
+  canCreateFreshPaymentSession,
+  hasSubmittedPaymentInFlight,
+} from '@/lib/payments/payment-session-guards';
+import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
 
 /* ─── Block Explorers per chain ─────────────────────────────────────────── */
 export const CHAIN_EXPLORERS: Record<number, { name: string; tx: string; address: string }> = {
@@ -61,9 +68,12 @@ function explorerAddrUrl(chainId: number, addr: string): string {
 interface Order {
   order_id: number; internal_order_id: string; product_id: number;
   product_name: string; quantity: number; price_usd: number;
-  total_amount?: number; status: string; payment_method: string | null;
+  total_amount?: number | string; status: string; payment_method: string | null;
   buyer_name: string; seller_name: string;
   primary_image?: string | null;
+  token_symbol?: string | null;
+  amount_token?: number | string | null;
+  subtotal_token?: number | string | null;
   product_metadata: {
     images?: Array<string | { url?: string; image_url?: string; sort_order?: number; is_primary?: boolean }>;
     accepted_tokens?: { crypto?: string[]; fiat?: string[] };
@@ -88,42 +98,24 @@ interface PaymentStatusSnapshot {
 
 /* ─── SUPPORTED NETWORKS ────────────────────────────────────────────────── */
 export const PAYMENT_NETWORKS = [
-  {
-    chainId: 31337,
-    name: 'Hardhat VPS',
-    shortName: 'Hardhat',
-    color: '#22c55e',
-    icon: '🖥️',
-    nativeSym: 'ETH',
+  ...getRecommendedCheckoutChainMetas().map((network) => ({
+    chainId: network.chainId,
+    name: network.name,
+    shortName: network.shortName,
+    color: network.mode === 'demo'
+      ? '#22c55e'
+      : network.mode === 'primary'
+        ? '#3b82f6'
+        : network.mode === 'secondary'
+          ? '#8247e5'
+          : '#f0b90b',
+    icon: network.icon,
+    nativeSym: network.nativeSymbol,
     testnet: true,
-    badge: 'MIỄN PHÍ',
-    badgeColor: 'emerald',
-    description: 'Chain ảo trên VPS — test thanh toán ngay lập tức, không cần token thật',
-  },
-  {
-    chainId: 80002,
-    name: 'Polygon Amoy',
-    shortName: 'Amoy',
-    color: '#8247e5',
-    icon: '🔷',
-    nativeSym: 'MATIC',
-    testnet: true,
-    badge: 'TESTNET',
-    badgeColor: 'purple',
-    description: 'Polygon Amoy Testnet — cần MATIC từ faucet, gần giống mainnet',
-  },
-  {
-    chainId: 97,
-    name: 'BNB Testnet',
-    shortName: 'BNB',
-    color: '#f0b90b',
-    icon: '🟡',
-    nativeSym: 'tBNB',
-    testnet: true,
-    badge: 'TESTNET',
-    badgeColor: 'yellow',
-    description: 'BNB Smart Chain Testnet',
-  },
+    badge: network.badge,
+    badgeColor: network.badgeColor,
+    description: network.description,
+  })),
 ];
 
 const CHAIN_META: Record<number, typeof PAYMENT_NETWORKS[0]> =
@@ -186,7 +178,7 @@ function NetworkBadge({ net }: { net: typeof PAYMENT_NETWORKS[0] }) {
 function Steps({ current }: { current: number }) {
   const steps = ['Xem đơn', 'Chọn mạng & token', 'Thanh toán'];
   return (
-    <div className="flex items-center gap-2 p-4 bg-card border border-border rounded-2xl">
+    <div className={`${paymentPageTheme.secondarySurface} flex items-center gap-2 p-4`}>
       {steps.map((label, i) => {
         const id = i + 1;
         const done = current > id;
@@ -314,7 +306,7 @@ export default function CheckoutPage() {
 
   /* ─── Load order ─────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) { router.push('/login'); return; }
+    if (!authLoading && !isAuthenticated) { router.push(`/login?callbackUrl=${encodeURIComponent(`/checkout/${orderId}`)}`); return; }
     if (isAuthenticated && orderId) {
       apiClient.get(`/api/orders/${orderId}`)
         .then(res => {
@@ -352,6 +344,15 @@ export default function CheckoutPage() {
   /* ─── Get Quote ─────────────────────────────────────────────────────── */
   const handleGetQuote = async () => {
     if (!isConnected || !address) { toast.error('Kết nối ví MetaMask trước'); return; }
+    if (order && !canCreateFreshPaymentSession(order.status)) {
+      if (hasSubmittedPaymentInFlight(order.status)) {
+        toast.info('Đơn hàng đã có giao dịch on-chain. Đang kiểm tra lại trạng thái blockchain.');
+        await refreshPaymentStatus(true);
+        return;
+      }
+      toast.error('Đơn hàng không còn ở trạng thái có thể tạo hóa đơn mới');
+      return;
+    }
     setQuote(null); setPaymentSession(null); setQuoteError(null); setQuoteLoading(true); setGasEstimate(null);
     try {
       const session = await createPaymentSession({
@@ -528,11 +529,21 @@ export default function CheckoutPage() {
     if (!quote || !walletClient || !address) { toast.error('Kết nối ví'); return; }
     if (isWrongChain) { await handleSwitchChain(); return; }
     if (!paymentSession) {
+      if (order && hasSubmittedPaymentInFlight(order.status)) {
+        toast.info('Đơn hàng đã gửi giao dịch lên blockchain. Đang kiểm tra lại trạng thái.');
+        await refreshPaymentStatus(true);
+        return;
+      }
       toast.info('Phiên thanh toán chưa sẵn sàng, đang làm mới báo giá');
       await handleGetQuote();
       return;
     }
     if (timeLeft === 0) {
+      if (order && hasSubmittedPaymentInFlight(order.status)) {
+        toast.info('Đơn hàng đã có giao dịch on-chain. Đang kiểm tra lại trạng thái thay vì tạo phiên mới.');
+        await refreshPaymentStatus(true);
+        return;
+      }
       toast.info('Phiên thanh toán đã hết hạn, đang tạo lại session mới');
       await handleGetQuote();
       return;
@@ -630,7 +641,7 @@ export default function CheckoutPage() {
 
   /* ─── Loading / not found ────────────────────────────────────────────── */
   if (authLoading || loading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className={`${paymentPageTheme.pageShell} items-center justify-center`}>
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-4 border-[#f0b90b]/30 border-t-[#f0b90b] rounded-full animate-spin" />
         <p className="text-sm text-muted-foreground">Đang tải đơn hàng...</p>
@@ -639,7 +650,7 @@ export default function CheckoutPage() {
   );
 
   if (!order) return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className={paymentPageTheme.pageShell}>
       <Header />
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-3">
@@ -652,7 +663,8 @@ export default function CheckoutPage() {
     </div>
   );
 
-  const totalUSD = Number(order.total_amount || order.price_usd);
+  const orderPricingDisplay = getOrderPricingDisplay(order);
+  const totalUSD = Number(orderPricingDisplay.usdAmount || order.total_amount || order.price_usd);
   const selectedTokenPrice = quote?.token_price || coinPrice || null;
   const estimatedCrypto = selectedTokenPrice ? (totalUSD / selectedTokenPrice).toFixed(6) : '...';
   const platformFeeUsd = totalUSD > Number(order.price_usd)
@@ -660,6 +672,14 @@ export default function CheckoutPage() {
     : calcPlatformFee(Number(order.price_usd));
   const productTokenAmount = selectedTokenPrice ? (Number(order.price_usd) / selectedTokenPrice).toFixed(6) : '...';
   const platformFeeTokenAmount = selectedTokenPrice ? (platformFeeUsd / selectedTokenPrice).toFixed(6) : '...';
+  const useLockedPaymentSnapshot = hasSubmittedPaymentInFlight(order.status)
+    && orderPricingDisplay.mode === 'token'
+    && !!orderPricingDisplay.tokenSymbol
+    && !!orderPricingDisplay.tokenAmountLabel;
+  const summaryTokenSymbol = useLockedPaymentSnapshot ? orderPricingDisplay.tokenSymbol! : selectedToken;
+  const summaryTokenAmount = useLockedPaymentSnapshot
+    ? orderPricingDisplay.tokenAmountLabel!
+    : (quote ? quote.amount_token.toFixed(6) : estimatedCrypto);
   const checkoutProductImage = resolveCheckoutProductImage(
     order,
     productImage ? { primary_image: productImage } : null,
@@ -667,7 +687,7 @@ export default function CheckoutPage() {
 
   /* ─────────────────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className={paymentPageTheme.pageShell}>
       <Header />
 
       <main className="flex-1 py-8 px-4">
@@ -676,7 +696,7 @@ export default function CheckoutPage() {
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
             <Link href={`/products/${order.product_id}`}>
-              <button className="p-2 rounded-xl bg-card border border-border hover:bg-muted transition-colors">
+              <button className={`p-2 rounded-xl transition-colors ${paymentPageTheme.ghostButton}`}>
                 <ArrowLeft className="w-5 h-5" />
               </button>
             </Link>
@@ -703,13 +723,13 @@ export default function CheckoutPage() {
                     <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-amber-300">Giao dịch đang chờ xác nhận</p>
-                    <p className="text-xs text-amber-400/80 mt-0.5">{verificationMessage || 'Thanh toán đã được gửi lên blockchain. Bạn có thể theo dõi hoặc kiểm tra lại trạng thái ngay tại đây.'}</p>
+                    <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Giao dịch đang chờ xác nhận</p>
+                    <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">{verificationMessage || 'Thanh toán đã được gửi lên blockchain. Bạn có thể theo dõi hoặc kiểm tra lại trạng thái ngay tại đây.'}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={() => refreshPaymentStatus(true)}
-                      className="px-3 py-1.5 bg-background text-foreground border border-border font-bold rounded-lg text-xs hover:bg-muted flex items-center gap-1.5"
+                      className={`px-3 py-1.5 font-bold rounded-lg text-xs flex items-center gap-1.5 ${paymentPageTheme.ghostButton}`}
                     >
                       {statusRefreshLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                       Kiểm tra lại
@@ -728,10 +748,10 @@ export default function CheckoutPage() {
 
               {/* ── ORDER SUMMARY (step 1) ── */}
               <div
-                className="bg-card border border-border rounded-2xl p-4 flex gap-4 items-center cursor-pointer hover:bg-muted/30 transition-colors"
+                className={`${paymentPageTheme.secondarySurface} p-4 flex gap-4 items-center cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-white/5`}
                 onClick={() => step > 1 && setStep(1)}
               >
-                <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+                <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 dark:bg-white/5 flex-shrink-0">
                   {checkoutProductImage
                     ? <img src={checkoutProductImage} alt={order.product_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
                     : <div className="w-full h-full flex items-center justify-center"><Package className="w-6 h-6 text-muted-foreground" /></div>}
@@ -743,7 +763,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <div className="flex flex-col items-end gap-1">
-                    <TokenAmountInline amount={estimatedCrypto} symbol={selectedToken} size="lg" amountClassName="text-[#f0b90b]" />
+                    <TokenAmountInline amount={summaryTokenAmount} symbol={summaryTokenSymbol} size="lg" amountClassName="text-[#f0b90b]" />
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                       <span aria-hidden="true">≈</span>
                       <UsdtAmountInline amount={totalUSD} size="sm" />
@@ -755,7 +775,7 @@ export default function CheckoutPage() {
               {/* ── PAYMENT METHOD (step 1) ── */}
               {step === 1 && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                  className={`${paymentPageTheme.secondarySurface} p-5 space-y-4`}>
                   <h2 className="font-bold flex items-center gap-2 text-sm">
                     <span className="w-1.5 h-5 bg-[#f0b90b] rounded-full" />
                     Chọn phương thức thanh toán
@@ -785,7 +805,7 @@ export default function CheckoutPage() {
               {/* ── CRYPTO SETUP (step 2) ── */}
               {step === 2 && payMode === 'crypto' && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card border border-border rounded-2xl p-5 space-y-5">
+                  className={`${paymentPageTheme.secondarySurface} p-5 space-y-5`}>
                   <h2 className="font-bold flex items-center gap-2 text-sm">
                     <span className="w-1.5 h-5 bg-emerald-400 rounded-full" />
                     Chọn mạng & token
@@ -817,7 +837,7 @@ export default function CheckoutPage() {
 
                     {/* Hardhat setup guide */}
                     {selectedNet === 31337 && (
-                      <div className="mt-3 p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl space-y-2">
+                      <div className={`${getPaymentAccentPanelClass('emerald')} mt-3 p-3 rounded-xl space-y-2`}>
                         <p className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                           <Info className="w-3.5 h-3.5" /> Hướng dẫn test trên Hardhat VPS (miễn phí)
                         </p>
@@ -904,10 +924,10 @@ export default function CheckoutPage() {
                   </div>
 
                   {/* Estimate */}
-                  <div className="p-4 bg-background border border-border rounded-xl flex items-center justify-between">
+                  <div className={`${paymentPageTheme.subSurface} p-4 flex items-center justify-between`}>
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1">Ước tính cần trả</p>
-                      <TokenAmountInline amount={estimatedCrypto} symbol={selectedToken} size="lg" amountClassName="text-[#f0b90b]" />
+                      <p className="text-xs text-muted-foreground mb-1">{useLockedPaymentSnapshot ? 'Số tiền đã khóa' : 'Ước tính cần trả'}</p>
+                      <TokenAmountInline amount={summaryTokenAmount} symbol={summaryTokenSymbol} size="lg" amountClassName="text-[#f0b90b]" />
                       <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                         <span aria-hidden="true">≈</span>
                         <UsdtAmountInline amount={totalUSD} size="sm" />
@@ -917,7 +937,7 @@ export default function CheckoutPage() {
                   </div>
 
                   {/* Wallet panel */}
-                  <div className="p-4 bg-background border border-border rounded-xl">
+                  <div className={`${paymentPageTheme.subSurface} p-4`}>
                     {!isConnected ? (
                       <div className="space-y-3">
                         <p className="text-sm font-medium flex items-center gap-2">
@@ -976,23 +996,28 @@ export default function CheckoutPage() {
               {/* ── PAYMENT STEP (step 3) ── */}
               {step === 3 && quote && payMode === 'crypto' && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                  className={`${paymentPageTheme.secondarySurface} p-5 space-y-4`}>
                   <div className="flex items-center justify-between">
                     <h2 className="font-bold flex items-center gap-2 text-sm">
                       <Lock className="w-4 h-4 text-[#f0b90b]" />
                       Thanh toán — {quoteNet?.name || `Chain ${quote.chain_id}`}
                     </h2>
                     {/* Quote timer */}
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold font-mono ${timeLeft < 60 ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-muted border-border text-muted-foreground'}`}>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold font-mono ${timeLeft < 60 ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-white/5 dark:border-white/10 dark:text-muted-foreground'}`}>
                       ⏱ {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                     </div>
                   </div>
 
                   {/* Amount */}
-                  <div className="flex items-center justify-between p-4 bg-background border border-border rounded-xl">
+                  <div className={`${paymentPageTheme.subSurface} flex items-center justify-between p-4`}>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Số tiền thanh toán</p>
-                      <TokenAmountInline amount={quote.amount_token.toFixed(6)} symbol={selectedToken} size="lg" amountClassName="text-[#f0b90b]" />
+                      <TokenAmountInline
+                        amount={useLockedPaymentSnapshot ? summaryTokenAmount : quote.amount_token.toFixed(6)}
+                        symbol={useLockedPaymentSnapshot ? summaryTokenSymbol : selectedToken}
+                        size="lg"
+                        amountClassName="text-[#f0b90b]"
+                      />
                     </div>
                     <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
@@ -1010,7 +1035,7 @@ export default function CheckoutPage() {
                   </div>
 
                   {/* Gas Fee Estimate */}
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-background/50 border border-border rounded-xl">
+                  <div className={`${paymentPageTheme.subSurface} flex items-center justify-between px-4 py-2.5`}>
                     <div className="flex items-center gap-2">
                       <Zap className="w-3.5 h-3.5 text-amber-400" />
                       <p className="text-xs text-muted-foreground">Phí gas ước tính</p>
@@ -1034,7 +1059,7 @@ export default function CheckoutPage() {
                   </div>
 
                   {/* Smart Contract Info — always visible */}
-                  <div className="p-3 bg-background border border-border rounded-xl space-y-3">
+                  <div className={`${paymentPageTheme.subSurface} p-3 space-y-3`}>
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Smart Contract Escrow</p>
                       {explorerAddrUrl(quote.chain_id, quote.escrow_contract) && (
@@ -1081,7 +1106,7 @@ export default function CheckoutPage() {
                     <div className="flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                       <div className="flex items-center gap-2 text-sm">
                         <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                        <span className="text-amber-300">MetaMask đang ở sai mạng</span>
+                        <span className="text-amber-700 dark:text-amber-300">MetaMask đang ở sai mạng</span>
                       </div>
                       <button onClick={handleSwitchChain}
                         className="px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg text-xs hover:bg-amber-400">
@@ -1093,8 +1118,8 @@ export default function CheckoutPage() {
                   {/* ERC-20 Approve step */}
                   {needsApprove && !isWrongChain && (
                     <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-2">
-                      <p className="text-sm font-bold text-amber-300">Bước 1: Authorize Token</p>
-                      <p className="text-xs text-amber-400/80">
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Bước 1: Authorize Token</p>
+                      <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
                         Cho phép hợp đồng escrow sử dụng {quote.amount_token.toFixed(6)} {selectedToken} từ ví bạn.
                         Chỉ cần làm 1 lần cho mỗi token.
                       </p>
@@ -1127,10 +1152,10 @@ export default function CheckoutPage() {
                           </p>
                         )}
                       </div>
-                      <div className="p-3 bg-background border border-border rounded-xl text-left">
+                      <div className={`${paymentPageTheme.subSurface} p-3 text-left`}>
                         <p className="text-[10px] text-muted-foreground mb-1 font-semibold uppercase tracking-wider">TX Hash</p>
                         <div className="flex items-center gap-2">
-                          <p className="font-mono text-xs flex-1 break-all text-emerald-300">{txHash}</p>
+                          <p className="font-mono text-xs flex-1 break-all text-emerald-700 dark:text-emerald-300">{txHash}</p>
                           <button onClick={() => copyText(txHash!, 'Tx Hash')} className="text-muted-foreground hover:text-foreground flex-shrink-0">
                             <Copy className="w-3.5 h-3.5" />
                           </button>
@@ -1141,7 +1166,7 @@ export default function CheckoutPage() {
                           <button className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-400 text-sm">Xem đơn hàng</button>
                         </Link>
                         <Link href="/products">
-                          <button className="w-full py-3 bg-card border border-border text-foreground text-sm font-semibold rounded-xl hover:bg-muted">Tiếp tục mua</button>
+                          <button className={`w-full py-3 text-sm font-semibold rounded-xl ${paymentPageTheme.ghostButton}`}>Tiếp tục mua</button>
                         </Link>
                       </div>
                     </motion.div>
@@ -1252,7 +1277,7 @@ export default function CheckoutPage() {
                         <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                         <p className="text-sm font-bold text-red-400">Giao dịch thất bại</p>
                       </div>
-                      <p className="text-xs text-red-300/80 break-words">{payError}</p>
+                        <p className="text-xs text-red-700/80 dark:text-red-300/80 break-words">{payError}</p>
                       <button onClick={() => { setPayError(null); setPayStep('idle'); }}
                         className="w-full py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl text-sm font-medium transition-colors">
                         Thử lại
@@ -1294,7 +1319,7 @@ export default function CheckoutPage() {
               {/* ── PAYPAL ── */}
               {step >= 2 && payMode === 'paypal' && acceptPayPal && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="bg-card border border-[#003087]/30 rounded-2xl p-6 space-y-4">
+                  className={`${paymentPageTheme.secondarySurface} border-[#003087]/20 dark:border-[#003087]/30 p-6 space-y-4`}>
                   <div className="text-center">
                     <div className="w-14 h-14 bg-[#003087]/20 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-[#003087]/30">
                       <CreditCard className="w-7 h-7 text-[#0070ba]" />
@@ -1302,9 +1327,9 @@ export default function CheckoutPage() {
                     <h3 className="font-bold">Thanh toán PayPal</h3>
                     <p className="text-sm text-muted-foreground mt-1">An toàn, bảo vệ tranh chấp</p>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-background border border-border rounded-xl">
+                  <div className={`${paymentPageTheme.subSurface} flex justify-between items-center p-4`}>
                     <span className="text-muted-foreground text-sm">Tổng cộng</span>
-                    <span className="font-black">{formatUSD(Number(order.price_usd))}</span>
+                    <span className="font-black">{formatUSD(totalUSD)}</span>
                   </div>
                   <button onClick={async () => {
                     try {
@@ -1326,14 +1351,14 @@ export default function CheckoutPage() {
             {/* ─── RIGHT SIDEBAR ────────────────────────────────────────── */}
             <div className="space-y-4">
               {/* Order card */}
-              <div className="bg-card border border-border rounded-2xl p-5 sticky top-24 space-y-4">
+              <div className={`${paymentPageTheme.primarySurface} p-5 sticky top-24 space-y-4`}>
                 <h2 className="font-bold flex items-center gap-2 text-sm">
                   <CheckCircle className="w-4 h-4 text-emerald-400" />
                   Tóm tắt đơn hàng
                 </h2>
 
                 {/* Product image */}
-                <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-muted">
+                <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-white/5">
                   {checkoutProductImage ? (
                     <>
                       <img
@@ -1364,11 +1389,19 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex justify-between items-center gap-3 text-muted-foreground pb-2 border-b border-border">
                     <span>Giá sản phẩm</span>
-                    <TokenAmountInline amount={productTokenAmount} symbol={selectedToken} size="md" />
+                    {useLockedPaymentSnapshot ? (
+                      <UsdtAmountInline amount={totalUSD} size="md" />
+                    ) : (
+                      <TokenAmountInline amount={productTokenAmount} symbol={selectedToken} size="md" />
+                    )}
                   </div>
                   <div className="flex justify-between items-center gap-3 text-muted-foreground pb-2 border-b border-border">
                     <span>Phí nền tảng ({PLATFORM_FEE_LABEL})</span>
-                    <TokenAmountInline amount={platformFeeTokenAmount} symbol={selectedToken} size="md" />
+                    {useLockedPaymentSnapshot ? (
+                      <span className="text-xs font-semibold text-muted-foreground">Đã gộp trong tổng thanh toán</span>
+                    ) : (
+                      <TokenAmountInline amount={platformFeeTokenAmount} symbol={selectedToken} size="md" />
+                    )}
                   </div>
                   <div className="flex justify-between text-muted-foreground pb-2 border-b border-border">
                     <span>Phí giao dịch</span>
@@ -1377,8 +1410,8 @@ export default function CheckoutPage() {
                   <div className="flex justify-between items-center pt-1">
                     <span className="font-bold">Tổng thanh toán</span>
                     <TokenAmountInline
-                      amount={quote ? quote.amount_token.toFixed(6) : estimatedCrypto}
-                      symbol={selectedToken}
+                      amount={summaryTokenAmount}
+                      symbol={summaryTokenSymbol}
                       size="lg"
                       amountClassName="text-[#f0b90b]"
                     />
@@ -1386,12 +1419,12 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Escrow info + contract explorer */}
-                <div className="p-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl space-y-2">
+                <div className={`${getPaymentAccentPanelClass('emerald')} p-3 rounded-xl space-y-2`}>
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-emerald-400" />
                     <span className="text-sm font-bold text-emerald-400">Escrow bảo vệ</span>
                   </div>
-                  <p className="text-xs text-emerald-400/70">Tiền giữ trong Smart Contract đến khi bạn xác nhận nhận hàng.</p>
+                  <p className="text-xs text-emerald-700/75 dark:text-emerald-400/70">Tiền giữ trong Smart Contract đến khi bạn xác nhận nhận hàng.</p>
                   {/* Contract explorer link — show when quote available */}
                   {quote && explorerAddrUrl(quote.chain_id, quote.escrow_contract) && (
                     <a
@@ -1415,7 +1448,7 @@ export default function CheckoutPage() {
                 {/* Actions */}
                 <div className="space-y-2">
                   <Link href={`/orders/${order.order_id}`} className="block">
-                    <button className="w-full py-2.5 bg-muted border border-border text-sm font-semibold rounded-xl hover:bg-muted/80">
+                    <button className={`w-full py-2.5 text-sm font-semibold rounded-xl ${paymentPageTheme.ghostButton}`}>
                       Theo dõi đơn hàng
                     </button>
                   </Link>

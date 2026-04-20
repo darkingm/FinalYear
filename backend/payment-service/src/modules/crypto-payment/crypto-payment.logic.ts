@@ -15,6 +15,22 @@ export function resolveOperatorPrivateKey(env: NodeJS.ProcessEnv): string | null
   return candidate && candidate.trim() ? candidate : null;
 }
 
+export function resolveBuyerWallet(input: {
+  sessionBuyerWallet?: string | null;
+  userWallet?: string | null;
+  buyerId: number | string;
+}): string {
+  if (isValidEthAddress(input.sessionBuyerWallet)) {
+    return input.sessionBuyerWallet.toLowerCase();
+  }
+
+  if (isValidEthAddress(input.userWallet)) {
+    return input.userWallet.toLowerCase();
+  }
+
+  return String(input.buyerId);
+}
+
 export function collectAffectedOrderIds(rows: PaymentRowRef[]): number[] {
   const uniqueIds = new Set<number>();
 

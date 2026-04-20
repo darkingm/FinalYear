@@ -21,11 +21,12 @@ export class AdminService {
             query('SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL \'24 hours\') as today FROM orders'),
             query('SELECT COALESCE(SUM(total_amount), 0) as total_revenue, COALESCE(SUM(total_amount) FILTER (WHERE created_at > NOW() - INTERVAL \'30 days\'), 0) as monthly FROM orders WHERE status IN (\'PAID\', \'COMPLETED\', \'ONCHAIN_CONFIRMED\', \'DELIVERING\', \'completed\', \'delivered\')'),
             query('SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = \'open\') as open FROM disputes'),
-            query(`SELECT o.order_id, o.order_number, o.status, o.total_amount, o.payment_method, o.created_at,
+            query(`SELECT o.order_id, o.order_number, o.status, o.total_amount, o.amount_token, tw.symbol as token_symbol, o.payment_method, o.created_at,
               buyer.username as buyer_name, seller_p.display_name as seller_name
              FROM orders o
              LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
              LEFT JOIN seller_profiles seller_p ON o.seller_id = seller_p.seller_id
+             LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
              ORDER BY o.created_at DESC LIMIT 10`),
             query(`SELECT status, COUNT(*) as count FROM orders GROUP BY status ORDER BY count DESC`),
             query(`SELECT DATE(created_at) as date, COALESCE(SUM(total_amount), 0) as revenue, COUNT(*) as count
@@ -91,11 +92,13 @@ export class AdminService {
               buyer.username as buyer_name, buyer.email as buyer_email, buyer.wallet_address as buyer_wallet,
               seller_p.display_name as seller_name,
               p.name as product_name,
+              tw.symbol as token_symbol,
               pay.tx_hash as payment_tx_hash, pay.status as payment_status, pay.confirmations
        FROM orders o
        LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
        LEFT JOIN seller_profiles seller_p ON o.seller_id = seller_p.seller_id
        LEFT JOIN products p ON o.product_id = p.product_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
        LEFT JOIN payments pay ON o.order_id = pay.order_id
        ${whereClause}
        ORDER BY o.created_at DESC
@@ -119,6 +122,7 @@ export class AdminService {
               seller_u.username as seller_username, seller_u.email as seller_email, seller_u.wallet_address as seller_wallet,
               seller_p.display_name as seller_name,
               p.name as product_name, p.base_price_usd as product_price,
+              tw.symbol as token_symbol,
               NULL as product_token_id, NULL as product_token_symbol, NULL as product_token_decimals,
               pay.tx_hash as payment_tx_hash, pay.status as payment_status, pay.confirmations,
               pay.block_number as payment_block, pay.gas_used as payment_gas
@@ -127,6 +131,7 @@ export class AdminService {
        LEFT JOIN seller_profiles seller_p ON o.seller_id = seller_p.seller_id
        LEFT JOIN users seller_u ON seller_p.user_id = seller_u.user_id
        LEFT JOIN products p ON o.product_id = p.product_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
        LEFT JOIN payments pay ON o.order_id = pay.order_id
        WHERE o.order_id = $1`,
             [orderId]
@@ -328,7 +333,7 @@ export class AdminService {
 
         const result = await query(
             `SELECT d.*,
-              o.order_number, o.total_amount, o.payment_method, o.status as order_status,
+              o.order_number, o.total_amount, o.amount_token, tw.symbol as token_symbol, o.payment_method, o.status as order_status,
               o.internal_order_id, o.tx_hash, o.chain_id,
               raiser.username as raised_by_name, raiser.email as raised_by_email,
               resolver.username as resolver_name,
@@ -336,6 +341,7 @@ export class AdminService {
               seller_u.username as seller_name, seller_u.wallet_address as seller_wallet
        FROM disputes d
        JOIN orders o ON d.order_id = o.order_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
        LEFT JOIN users raiser ON d.raised_by = raiser.user_id
        LEFT JOIN users resolver ON d.resolver_id = resolver.user_id
        LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
@@ -449,12 +455,13 @@ export class AdminService {
 
         const result = await query(
             `SELECT r.*,
-              o.order_number, o.total_amount as order_total, o.payment_method,
+              o.order_number, o.total_amount as order_total, o.amount_token, tw.symbol as token_symbol, o.payment_method,
               o.internal_order_id, o.tx_hash, o.chain_id,
               buyer.username as buyer_name, buyer.wallet_address as buyer_wallet,
               admin_u.username as approved_by_name
        FROM refunds r
        JOIN orders o ON r.order_id = o.order_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
        LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
        LEFT JOIN users admin_u ON r.approved_by = admin_u.user_id
        ${whereClause}
@@ -617,7 +624,7 @@ export class AdminService {
         // Get all orders that have on-chain data  
         const result = await query(
             `SELECT o.order_id, o.order_number, o.internal_order_id, o.status,
-              o.tx_hash, o.chain_id, o.escrow_contract, o.amount_token,
+              o.tx_hash, o.chain_id, o.escrow_contract, o.amount_token, tw.symbol as token_symbol,
               o.total_amount, o.payment_method,
               buyer.username as buyer_name, buyer.wallet_address as buyer_wallet,
               seller_u.wallet_address as seller_wallet,
@@ -626,6 +633,7 @@ export class AdminService {
        LEFT JOIN users buyer ON o.buyer_id = buyer.user_id
        LEFT JOIN seller_profiles seller_p ON o.seller_id = seller_p.seller_id
        LEFT JOIN users seller_u ON seller_p.user_id = seller_u.user_id
+       LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
        WHERE o.payment_method = 'crypto' AND o.tx_hash IS NOT NULL
        ORDER BY o.created_at DESC`
         );

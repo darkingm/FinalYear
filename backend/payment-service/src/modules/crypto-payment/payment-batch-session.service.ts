@@ -85,6 +85,14 @@ export class PaymentBatchSessionService {
     this.sessionTtlMs = sessionTtlMs;
   }
 
+  private canCreateFreshSession(orderStatus: string) {
+    return ['UNPAID', 'TX_FAILED'].includes(orderStatus);
+  }
+
+  private hasSubmittedPaymentInFlight(orderStatus: string) {
+    return ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED', 'PAID'].includes(orderStatus);
+  }
+
   async createSession(input: {
     userId: number;
     orderIds: number[];
@@ -113,7 +121,11 @@ export class PaymentBatchSessionService {
         throw new AppError('Cannot create payment session for these orders', 403);
       }
 
-      if (!['UNPAID', 'TX_FAILED'].includes(order.status)) {
+      if (this.hasSubmittedPaymentInFlight(order.status)) {
+        throw new AppError(`Order ${order.order_id} already has a submitted payment`, 409);
+      }
+
+      if (!this.canCreateFreshSession(order.status)) {
         throw new AppError(`Order ${order.order_id} is not payable`, 400);
       }
     }

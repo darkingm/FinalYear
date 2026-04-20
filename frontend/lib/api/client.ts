@@ -5,6 +5,7 @@ import {
   getStoredAccessToken,
   refreshSessionAccessToken,
 } from '@/lib/auth/session-token-manager';
+import { logAuthEvent } from '@/lib/auth/auth-log';
 
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_MAIN_API_URL || 'http://localhost:3001',
@@ -62,11 +63,17 @@ async function handle401(error: any, client: any) {
         }
       } catch { /* ignore */ }
 
-      // No valid session — clear everything and redirect to login
+      // No valid session — clear everything and redirect to login with callback
       clearSessionAccessToken();
-      // Don't redirect if already on login page (prevents redirect loop)
+      const callbackUrl = `${window.location.pathname}${window.location.search}`;
+      logAuthEvent('client_reauth_redirect', {
+        eventSource: client?.defaults?.baseURL ?? 'unknown-client',
+        reasonCode: 'backend_401_after_refresh',
+        statusCode: error.response?.status ?? null,
+        path: window.location.pathname,
+      });
       if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+        window.location.href = `/login?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=reauth_required`;
       }
     }
   }

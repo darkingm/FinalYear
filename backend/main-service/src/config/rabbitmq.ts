@@ -5,6 +5,13 @@ import 'dotenv/config';
 let connection: any;
 let channel: any;
 
+interface SubscribeOptions {
+  queueName?: string;
+  durable?: boolean;
+  prefetch?: number;
+  requeueOnError?: boolean;
+}
+
 export async function connectRabbitMQ() {
   try {
     connection = await amqp.connect(process.env.RABBITMQ_URL || 'amqp://localhost');
@@ -32,9 +39,21 @@ export async function publishEvent(topic: string, data: any) {
   }
 }
 
-export async function subscribeToEvents(topics: string[], callback: (msg: any) => void) {
+export async function subscribeToEvents(
+  topics: string[],
+  callback: (msg: any) => void,
+  options: SubscribeOptions = {}
+) {
   try {
-    const queue = await channel.assertQueue('', { exclusive: true });
+    const queueName = options.queueName ?? '';
+    const queue = await channel.assertQueue(
+      queueName,
+      options.queueName ? { durable: options.durable ?? true } : { exclusive: true }
+    );
+
+    if (options.prefetch && options.prefetch > 0) {
+      await channel.prefetch(options.prefetch);
+    }
 
     for (const topic of topics) {
       await channel.bindQueue(queue.queue, 'marketplace', topic);
@@ -51,7 +70,7 @@ export async function subscribeToEvents(topics: string[], callback: (msg: any) =
             topics,
             error,
           });
-          channel.nack(msg, false, true);
+          channel.nack(msg, false, options.requeueOnError ?? true);
         }
       }
     });

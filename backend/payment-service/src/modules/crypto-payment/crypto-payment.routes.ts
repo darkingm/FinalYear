@@ -9,6 +9,7 @@ import {
   getPaymentSessionStatus,
   getPaymentBatchSessionStatus,
   getPaymentReconciliationCases,
+  getPaymentOpsHealth,
   retryVerifyOrderPayment,
   generateQuote,
   getPaymentStatus,
@@ -68,6 +69,7 @@ router.post('/session-batch/:sessionId/submit', authenticate, validateRequest(su
 router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
 router.get('/session-batch/:sessionId/status', authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
 router.get('/admin/reconciliation', authenticateOrInternalKey, validateRequest(getPaymentReconciliationCasesSchema), getPaymentReconciliationCases);
+router.get('/admin/ops-health', authenticateOrInternalKey, getPaymentOpsHealth);
 router.post('/admin/reconciliation/:orderId/retry-verify', authenticateOrInternalKey, validateRequest(retryVerifyOrderPaymentSchema), retryVerifyOrderPayment);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);

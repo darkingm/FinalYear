@@ -1,6 +1,7 @@
 'use client';
 
 import { ShoppingCart, Zap } from 'lucide-react';
+import { paymentPageTheme } from '@/lib/payments/payment-page-theme';
 
 interface ProductQuickActionsProps {
   onAddToCart?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -27,7 +28,7 @@ export function ProductQuickActions({
           aria-label="Thêm vào giỏ hàng"
           title="Thêm vào giỏ hàng"
           className={[
-            'inline-flex items-center justify-center rounded-xl border border-border bg-card text-foreground transition-all hover:border-primary/40 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
+            `inline-flex items-center justify-center rounded-xl transition-all disabled:cursor-not-allowed disabled:opacity-50 ${paymentPageTheme.ghostButton} dark:border-violet-500/30 dark:hover:border-violet-400/60`,
             compact ? 'h-10 w-10' : 'h-12 w-12',
           ].join(' ')}
         >
