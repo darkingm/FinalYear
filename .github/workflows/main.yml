@@ -340,6 +340,7 @@ jobs:
         env:
           GIT_SHA: ${{ github.sha }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           # Pass change flags to only pull changed images
           CHANGED_FRONTEND: ${{ needs.changes.outputs.frontend }}
           CHANGED_MAIN_API: ${{ needs.changes.outputs.main-api }}
@@ -352,7 +353,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          envs: GIT_SHA,DOCKERHUB_USERNAME,CHANGED_FRONTEND,CHANGED_MAIN_API,CHANGED_PAYMENT_API,CHANGED_AI,CHANGED_DB,CHANGED_TOKEN
+          envs: GIT_SHA,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,CHANGED_FRONTEND,CHANGED_MAIN_API,CHANGED_PAYMENT_API,CHANGED_AI,CHANGED_DB,CHANGED_TOKEN
           command_timeout: 12m
           script: |
             set -e
@@ -362,6 +363,13 @@ jobs:
             echo "=============================================="
 
             cd /root/services/FinalYear/docker
+
+            if [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin >/dev/null 2>&1
+              echo "✓ Docker Hub login OK"
+            else
+              echo "⚠ DOCKERHUB_TOKEN not provided; relying on existing VPS docker auth"
+            fi
 
             TAG_ENV_FILE=".image-tags.env"
             touch "$TAG_ENV_FILE"
