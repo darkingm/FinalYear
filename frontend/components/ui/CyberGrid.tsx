@@ -203,7 +203,7 @@ export function CyberGrid() {
     <canvas
       ref={canvasRef}
       className="pointer-events-none fixed inset-0"
-      style={{ zIndex: -2 }}
+      style={{ zIndex: 0 }}
       aria-hidden="true"
     />
   );
