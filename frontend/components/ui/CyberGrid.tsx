@@ -36,7 +36,7 @@ export function CyberGrid() {
       y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.35,
       vy: (Math.random() - 0.5) * 0.35,
-      size: Math.random() * 3.0 + 2.5,
+      size: Math.random() * 2.0 + 1.5,
       opacity: Math.random() * 0.4 + 0.5,
       pulse: Math.random() * Math.PI * 2,
       pulseSpeed: Math.random() * 0.015 + 0.008,
@@ -142,16 +142,15 @@ export function CyberGrid() {
         const pulsedOpacity = p.opacity * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.pulse))) * globalAlpha;
         const pulsedSize = p.size * (0.7 + 0.3 * (0.5 + 0.5 * Math.sin(p.pulse)));
 
-        // Outer glow
+        // Soft glowing dot with radial gradient (feathered edges)
+        const glowRadius = pulsedSize * 3;
+        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
+        grad.addColorStop(0, `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity})`);
+        grad.addColorStop(0.3, `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity * 0.5})`);
+        grad.addColorStop(1, `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, 0)`);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, pulsedSize * 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity * 0.15})`;
-        ctx.fill();
-
-        // Core dot
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, pulsedSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity})`;
+        ctx.arc(p.x, p.y, glowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
         ctx.fill();
       }
 
