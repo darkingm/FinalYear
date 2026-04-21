@@ -454,16 +454,18 @@ export function Header() {
                   </DropdownMenu>
                 ) : (
                   <div className="flex gap-2">
-                    <Link href="/login">
+                    {/* Plain <a> tags — NOT <Link>. Ensures full page load even
+                        when browser has stale JS from a previous deployment. */}
+                    <a href="/login">
                       <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground border border-border" suppressHydrationWarning>
                         {isMounted ? t('auth.login') : 'Login'}
                       </Button>
-                    </Link>
-                    <Link href="/register">
+                    </a>
+                    <a href="/register">
                       <Button size="sm" className="btn-purple-rainbow font-semibold shadow-lg shadow-purple-500/20" suppressHydrationWarning>
                         {isMounted ? t('auth.register') : 'Register'}
                       </Button>
-                    </Link>
+                    </a>
                   </div>
                 )}
               </div>
@@ -555,12 +557,12 @@ export function Header() {
 
                 {!isAuthenticated ? (
                   <div className="flex gap-2">
-                    <Link href="/login" className="flex-1">
+                    <a href="/login" className="flex-1">
                       <Button variant="outline" className="w-full border-border">Đăng nhập</Button>
-                    </Link>
-                    <Link href="/register" className="flex-1">
+                    </a>
+                    <a href="/register" className="flex-1">
                       <Button className="w-full btn-purple-rainbow font-semibold">Đăng ký</Button>
-                    </Link>
+                    </a>
                   </div>
                 ) : (
                   <>
