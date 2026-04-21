@@ -36,7 +36,7 @@ export function CyberGrid() {
       vx: (Math.random() - 0.5) * 0.35,
       vy: (Math.random() - 0.5) * 0.35,
       size: Math.random() * 2.5 + 1.5,
-      opacity: Math.random() * 0.5 + 0.3,
+      opacity: Math.random() * 0.4 + 0.5,
       pulse: Math.random() * Math.PI * 2,
       pulseSpeed: Math.random() * 0.015 + 0.008,
     }));
@@ -91,7 +91,7 @@ export function CyberGrid() {
       : { r: 109, g: 40, b: 217 };  // violet-700 — deep purple glow
 
     // Opacity multiplier — dark mode brighter
-    const globalAlpha = isDark ? 1.0 : 0.85;
+    const globalAlpha = isDark ? 1.0 : 0.9;
 
     const frame = () => {
       ctx.clearRect(0, 0, w, h);
@@ -192,7 +192,7 @@ export function CyberGrid() {
     <canvas
       ref={canvasRef}
       className="pointer-events-none fixed inset-0"
-      style={{ zIndex: 0 }}
+      style={{ zIndex: 2 }}
       aria-hidden="true"
     />
   );
