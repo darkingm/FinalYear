@@ -163,7 +163,7 @@ export function CyberGrid() {
           const dy = particles[i].y - particles[j].y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < connectionDist) {
-            const alpha = (1 - dist / connectionDist) * 0.18 * globalAlpha;
+            const alpha = (1 - dist / connectionDist) * 0.30 * globalAlpha;
             ctx.beginPath();
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
@@ -180,7 +180,7 @@ export function CyberGrid() {
         const dy = p.y - my;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < 250) {
-          const alpha = (1 - dist / 250) * 0.35 * globalAlpha;
+          const alpha = (1 - dist / 250) * 0.50 * globalAlpha;
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(mx, my);
