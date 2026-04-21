@@ -176,17 +176,6 @@ export function CyberGrid() {
         }
       }
 
-      // Mouse cursor glow orb
-      if (mx > 0 && my > 0) {
-        const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, 80);
-        gradient.addColorStop(0, `rgba(${mouseGlowColor.r}, ${mouseGlowColor.g}, ${mouseGlowColor.b}, ${0.08 * globalAlpha})`);
-        gradient.addColorStop(1, `rgba(${mouseGlowColor.r}, ${mouseGlowColor.g}, ${mouseGlowColor.b}, 0)`);
-        ctx.beginPath();
-        ctx.arc(mx, my, 80, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
-        ctx.fill();
-      }
-
       animRef.current = requestAnimationFrame(frame);
     };
 
