@@ -30,7 +30,7 @@ export function CyberGrid() {
   const isDark = resolvedTheme === 'dark';
 
   const createParticles = useCallback((w: number, h: number): Particle[] => {
-    const count = Math.min(Math.floor((w * h) / 25000), 55);
+    const count = Math.min(Math.floor((w * h) / 40000), 35);
     return Array.from({ length: count }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
@@ -168,7 +168,7 @@ export function CyberGrid() {
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
             ctx.strokeStyle = `rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${alpha})`;
-            ctx.lineWidth = 1.2;
+            ctx.lineWidth = 0.6;
             ctx.stroke();
           }
         }
@@ -185,7 +185,7 @@ export function CyberGrid() {
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(mx, my);
           ctx.strokeStyle = `rgba(${mouseGlowColor.r}, ${mouseGlowColor.g}, ${mouseGlowColor.b}, ${alpha})`;
-          ctx.lineWidth = 1.0;
+          ctx.lineWidth = 0.5;
           ctx.stroke();
         }
       }
