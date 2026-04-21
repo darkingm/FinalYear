@@ -68,8 +68,9 @@ export function ProductTokenPricing({
   }
 
   return (
-    <div className="space-y-2.5">
-      <div className={isDetail ? 'flex flex-wrap gap-2' : 'flex flex-wrap items-end gap-x-3 gap-y-2'}>
+    <div className={isDetail ? 'space-y-2.5' : 'space-y-1.5'}>
+      {/* Token chips */}
+      <div className={isDetail ? 'flex flex-wrap gap-2' : 'flex items-center gap-2'}>
         {chipState.visible.map((token) => (
           <ChipWrapper
             key={`${token.token_id}-${token.symbol}`}
@@ -80,59 +81,55 @@ export function ProductTokenPricing({
               'aria-pressed': token.isActive,
             } : {})}
             className={[
-              'text-left transition',
+              'text-left transition-all duration-200',
               isDetail
                 ? 'inline-flex min-h-11 items-center gap-2 rounded-full border px-3.5 py-2'
-                : 'inline-flex flex-col items-start rounded-xl px-1 py-0.5',
+                : 'inline-flex items-center gap-1.5 rounded-lg px-2 py-1',
               isDetail
                 ? token.isActive
                   ? 'border-primary/60 bg-primary/10 text-foreground shadow-sm shadow-primary/10'
                   : 'border-border bg-card/80 text-foreground/90'
                 : token.isActive
-                  ? `${activeTextTone}`
-                  : `${inactiveTextTone}`,
+                  ? 'bg-foreground/[0.06] text-foreground'
+                  : 'text-muted-foreground opacity-60',
               interactive
                 ? isDetail
                   ? 'hover:border-primary/40 hover:bg-primary/5'
-                  : 'hover:bg-white/5'
+                  : 'hover:opacity-100 hover:bg-foreground/[0.04]'
                 : '',
             ].join(' ')}
           >
-            <span className={isDetail ? 'inline-flex items-center gap-2' : 'inline-flex items-center gap-1.5'}>
-              <span
-                className={[
-                  'font-black tabular-nums leading-none',
-                  isDetail
-                    ? 'text-sm'
-                    : token.isActive
-                      ? 'text-[1.6rem] tracking-[-0.03em]'
-                      : 'text-[0.95rem]',
-                ].join(' ')}
-              >
-                {token.amountLabel}
-              </span>
-              <CoinImage
-                symbol={token.logo_symbol || token.symbol}
-                size={isDetail ? 18 : token.isActive ? 17 : 15}
-                className="rounded-full"
-                alt={token.symbol}
-              />
+            <CoinImage
+              symbol={token.logo_symbol || token.symbol}
+              size={isDetail ? 18 : token.isActive ? 16 : 14}
+              className="rounded-full flex-shrink-0"
+              alt={token.symbol}
+            />
+            <span
+              className={[
+                'font-extrabold tabular-nums leading-none tracking-tight',
+                isDetail
+                  ? 'text-sm'
+                  : token.isActive
+                    ? 'text-[1.1rem]'
+                    : 'text-[0.8rem]',
+              ].join(' ')}
+            >
+              {token.amountLabel}
             </span>
-            {!isDetail ? (
-              <span
-                className={[
-                  'mt-1 h-px rounded-full transition-all',
-                  token.isActive ? 'w-full bg-[#f0b90b]/70' : 'w-0 bg-transparent',
-                ].join(' ')}
-              />
-            ) : null}
+            <span className={[
+              'text-[0.65rem] font-semibold uppercase tracking-wide',
+              token.isActive ? 'text-muted-foreground' : 'text-muted-foreground/70',
+            ].join(' ')}>
+              {token.symbol}
+            </span>
           </ChipWrapper>
         ))}
         {chipState.hiddenCount > 0 && (
           <span
             className={[
-              'inline-flex items-center border border-border bg-muted/40 font-black text-muted-foreground',
-              isDetail ? 'min-h-9 rounded-full px-3 py-1.5 text-[13px]' : 'min-h-8 rounded-full px-2.5 py-1 text-xs',
+              'inline-flex items-center border border-border bg-muted/40 font-bold text-muted-foreground',
+              isDetail ? 'min-h-9 rounded-full px-3 py-1.5 text-[13px]' : 'rounded-lg px-2 py-1 text-[11px]',
             ].join(' ')}
           >
             +{chipState.hiddenCount}
@@ -140,21 +137,18 @@ export function ProductTokenPricing({
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <span aria-hidden="true">≈</span>
-            <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border bg-background/75 px-3.5 py-1.5 text-[14px] font-black text-foreground shadow-[0_10px_24px_rgba(0,0,0,0.08)]">
-              <span>{liveEstimate.displayAmount}</span>
-              <CoinImage symbol="USDT" size={14} className="rounded-full" alt="USDT" />
-            </span>
-          </div>
-        </div>
+      {/* USDT estimate + stock */}
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+          <span className="opacity-60">≈</span>
+          <span className="font-bold tabular-nums">{liveEstimate.displayAmount}</span>
+          <CoinImage symbol="USDT" size={12} className="rounded-full" alt="USDT" />
+        </span>
         {stockLabel ? (
           <span
             className={[
-              'text-xs font-medium',
-              stock === 0 ? 'text-red-500' : 'text-muted-foreground',
+              'text-[11px] font-medium',
+              stock === 0 ? 'text-red-500' : 'text-muted-foreground/70',
             ].join(' ')}
           >
             {stockLabel}

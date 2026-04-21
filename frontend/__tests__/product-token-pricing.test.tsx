@@ -39,7 +39,7 @@ describe('ProductTokenPricing', () => {
     );
 
     expect(screen.getByRole('button', { name: /chọn eth 0\.019996/i })).toBeTruthy();
-    expect(screen.queryByText(/^ETH$/)).toBeNull();
+    expect(screen.getByText('ETH')).toBeTruthy();
     expect(screen.getByText('+1')).toBeTruthy();
     expect(screen.getByText('≈')).toBeTruthy();
     expect(screen.getAllByAltText(/^USDT$/i).length).toBeGreaterThan(0);
@@ -47,7 +47,7 @@ describe('ProductTokenPricing', () => {
     expect(screen.getByText(/300 còn lại/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /chọn usdt 49\.99/i }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: /chọn eth 0\.019996/i }).getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: /chọn usdt 49\.99/i }).className).toContain('text-slate-950');
+    expect(screen.getByRole('button', { name: /chọn usdt 49\.99/i }).className).toContain('text-foreground');
 
     await user.click(screen.getByRole('button', { name: /chọn usdt 49\.99/i }));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ token_id: 2 }));

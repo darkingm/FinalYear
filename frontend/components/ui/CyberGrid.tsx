@@ -76,19 +76,19 @@ export function CyberGrid() {
     };
     window.addEventListener('mousemove', onMouseMove);
 
-    // Dark mode: bright violet/cyan particles — vivid against dark space
-    // Light mode: deep cosmic purple/blue — visible against light sky
+    // Dark mode: white particles — clean against dark space
+    // Light mode: black particles — visible against light background
     const dotColor = isDark
-      ? { r: 167, g: 139, b: 250 }  // violet-400
-      : { r: 99, g: 70, b: 199 };   // deep cosmic purple
+      ? { r: 255, g: 255, b: 255 }
+      : { r: 30, g: 30, b: 30 };
 
     const lineColor = isDark
-      ? { r: 139, g: 92, b: 246 }   // violet-500
-      : { r: 79, g: 55, b: 180 };   // darker purple for contrast
+      ? { r: 255, g: 255, b: 255 }
+      : { r: 40, g: 40, b: 40 };
 
     const mouseGlowColor = isDark
-      ? { r: 56, g: 189, b: 248 }   // sky-400 — cyan glow
-      : { r: 109, g: 40, b: 217 };  // violet-700 — deep purple glow
+      ? { r: 255, g: 255, b: 255 }
+      : { r: 20, g: 20, b: 20 };
 
     // Opacity multiplier — dark mode brighter
     const globalAlpha = isDark ? 1.0 : 0.9;
