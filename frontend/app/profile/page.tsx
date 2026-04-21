@@ -123,7 +123,13 @@ export default function ProfilePage() {
     || profile.email.charAt(0).toUpperCase();
 
   const connections = [
-    { label: 'Google', icon: <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />, linked: !!profile.google_id, bg: 'bg-white' },
+    {
+      label: 'Google',
+      icon: <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />,
+      linked: !!profile.google_id,
+      bg: 'bg-white',
+      subtitle: profile.google_id ? profile.email : 'Chưa kết nối',
+    },
     { label: 'Crypto Wallet', icon: <Wallet className="w-5 h-5 text-[#f0b90b]" />, linked: !!profile.wallet_address, bg: 'bg-[#f0b90b]/10', subtitle: profile.wallet_address ? `${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}` : 'Chưa kết nối' },
     { label: 'PayPal', icon: <CreditCard className="w-5 h-5 text-blue-500" />, linked: !!profile.paypal_email, bg: 'bg-blue-500/10', subtitle: profile.paypal_email || 'Chưa kết nối' },
   ];

@@ -9,6 +9,8 @@ export interface UserProfile {
   wallet_address: string | null;
   avatar_url: string | null;
   paypal_email?: string | null;
+  google_id?: string | null;
+  facebook_id?: string | null;
   role: string;
   status: string;
   created_at: Date;
@@ -17,7 +19,7 @@ export interface UserProfile {
 export const usersRepository = {
   findById: async (userId: number): Promise<UserProfile | null> => {
     const result = await query(
-      `SELECT user_id, email, phone, address_line, username, wallet_address, avatar_url, paypal_email, role, status, created_at
+      `SELECT user_id, email, phone, address_line, username, wallet_address, avatar_url, paypal_email, google_id, facebook_id, role, status, created_at
        FROM users WHERE user_id = $1`,
       [userId]
     );

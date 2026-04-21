@@ -202,6 +202,8 @@ services:
       db-migrator:
         # ← Chờ migration xong mới khởi động
         condition: service_completed_successfully
+      hardhat-node:
+        condition: service_started
     networks:
       - marketplace-network
     restart: unless-stopped
