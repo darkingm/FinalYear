@@ -78,29 +78,18 @@ export function CyberGrid() {
     };
     window.addEventListener('mousemove', onMouseMove);
 
-    // Dark mode: warm white/gold like stars and satellites
-    // Light mode: warm amber/brown for visibility
-    const starColors = isDark
-      ? [
-          { r: 255, g: 255, b: 240 },  // warm white
-          { r: 255, g: 240, b: 180 },  // soft gold
-          { r: 255, g: 220, b: 130 },  // amber gold
-          { r: 230, g: 230, b: 255 },  // cool blue-white (variety)
-        ]
-      : [
-          { r: 80, g: 60, b: 20 },     // dark gold
-          { r: 100, g: 70, b: 10 },    // warm brown
-          { r: 60, g: 50, b: 30 },     // deep amber
-          { r: 40, g: 40, b: 50 },     // dark blue-gray
-        ];
+    // Dark mode: violet particles | Light mode: solid black
+    const dotColor = isDark
+      ? { r: 167, g: 139, b: 250 }
+      : { r: 20, g: 20, b: 20 };
 
     const lineColor = isDark
-      ? { r: 255, g: 245, b: 210 }
-      : { r: 90, g: 70, b: 30 };
+      ? { r: 139, g: 92, b: 246 }
+      : { r: 30, g: 30, b: 30 };
 
     const mouseGlowColor = isDark
-      ? { r: 255, g: 235, b: 170 }
-      : { r: 70, g: 55, b: 20 };
+      ? { r: 167, g: 139, b: 250 }
+      : { r: 20, g: 20, b: 20 };
 
     // Opacity multiplier — dark mode brighter
     const globalAlpha = isDark ? 1.0 : 0.9;
@@ -153,19 +142,16 @@ export function CyberGrid() {
         const pulsedOpacity = p.opacity * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.pulse))) * globalAlpha;
         const pulsedSize = p.size * (0.7 + 0.3 * (0.5 + 0.5 * Math.sin(p.pulse)));
 
-        // Use particle's assigned star color
-        const c = starColors[p.colorIdx];
-
         // Outer glow
         ctx.beginPath();
         ctx.arc(p.x, p.y, pulsedSize * 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${pulsedOpacity * 0.15})`;
+        ctx.fillStyle = `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity * 0.15})`;
         ctx.fill();
 
         // Core dot
         ctx.beginPath();
         ctx.arc(p.x, p.y, pulsedSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${pulsedOpacity})`;
+        ctx.fillStyle = `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity})`;
         ctx.fill();
       }
 
