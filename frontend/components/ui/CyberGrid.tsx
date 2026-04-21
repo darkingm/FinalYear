@@ -35,7 +35,7 @@ export function CyberGrid() {
       y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.35,
       vy: (Math.random() - 0.5) * 0.35,
-      size: Math.random() * 2.5 + 1.5,
+      size: Math.random() * 3.0 + 2.5,
       opacity: Math.random() * 0.4 + 0.5,
       pulse: Math.random() * Math.PI * 2,
       pulseSpeed: Math.random() * 0.015 + 0.008,
@@ -138,8 +138,8 @@ export function CyberGrid() {
         else if (p.y > h) p.y -= h;
 
         // Draw particle dot with pulse
-        const pulsedOpacity = p.opacity * (0.5 + 0.5 * Math.sin(p.pulse)) * globalAlpha;
-        const pulsedSize = p.size * (0.85 + 0.15 * Math.sin(p.pulse));
+        const pulsedOpacity = p.opacity * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.pulse))) * globalAlpha;
+        const pulsedSize = p.size * (0.7 + 0.3 * (0.5 + 0.5 * Math.sin(p.pulse)));
 
         // Outer glow
         ctx.beginPath();
@@ -155,7 +155,7 @@ export function CyberGrid() {
       }
 
       // Connect nearby particles with lines
-      const connectionDist = 180;
+      const connectionDist = 220;
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
