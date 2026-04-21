@@ -235,7 +235,7 @@ export const ProductCard = memo(function ProductCard({
               <button
                 onClick={handleAddToCart}
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-black/50 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 hover:text-white"
-                aria-label="Thêm vào giỏ hàng"
+                aria-label="Thêm nhanh vào giỏ"
               >
                 <ShoppingCart className="h-4 w-4" />
               </button>
