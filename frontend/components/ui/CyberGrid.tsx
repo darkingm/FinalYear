@@ -19,6 +19,7 @@ interface Particle {
   opacity: number;
   pulse: number;
   pulseSpeed: number;
+  colorIdx: number;
 }
 
 export function CyberGrid() {
@@ -29,7 +30,7 @@ export function CyberGrid() {
   const isDark = resolvedTheme === 'dark';
 
   const createParticles = useCallback((w: number, h: number): Particle[] => {
-    const count = Math.min(Math.floor((w * h) / 18000), 80);
+    const count = Math.min(Math.floor((w * h) / 25000), 55);
     return Array.from({ length: count }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
@@ -39,6 +40,7 @@ export function CyberGrid() {
       opacity: Math.random() * 0.4 + 0.5,
       pulse: Math.random() * Math.PI * 2,
       pulseSpeed: Math.random() * 0.015 + 0.008,
+      colorIdx: Math.floor(Math.random() * 4),
     }));
   }, []);
 
@@ -76,19 +78,29 @@ export function CyberGrid() {
     };
     window.addEventListener('mousemove', onMouseMove);
 
-    // Dark mode: white particles — clean against dark space
-    // Light mode: black particles — visible against light background
-    const dotColor = isDark
-      ? { r: 255, g: 255, b: 255 }
-      : { r: 30, g: 30, b: 30 };
+    // Dark mode: warm white/gold like stars and satellites
+    // Light mode: warm amber/brown for visibility
+    const starColors = isDark
+      ? [
+          { r: 255, g: 255, b: 240 },  // warm white
+          { r: 255, g: 240, b: 180 },  // soft gold
+          { r: 255, g: 220, b: 130 },  // amber gold
+          { r: 230, g: 230, b: 255 },  // cool blue-white (variety)
+        ]
+      : [
+          { r: 80, g: 60, b: 20 },     // dark gold
+          { r: 100, g: 70, b: 10 },    // warm brown
+          { r: 60, g: 50, b: 30 },     // deep amber
+          { r: 40, g: 40, b: 50 },     // dark blue-gray
+        ];
 
     const lineColor = isDark
-      ? { r: 255, g: 255, b: 255 }
-      : { r: 40, g: 40, b: 40 };
+      ? { r: 255, g: 245, b: 210 }
+      : { r: 90, g: 70, b: 30 };
 
     const mouseGlowColor = isDark
-      ? { r: 255, g: 255, b: 255 }
-      : { r: 20, g: 20, b: 20 };
+      ? { r: 255, g: 235, b: 170 }
+      : { r: 70, g: 55, b: 20 };
 
     // Opacity multiplier — dark mode brighter
     const globalAlpha = isDark ? 1.0 : 0.9;
@@ -141,21 +153,24 @@ export function CyberGrid() {
         const pulsedOpacity = p.opacity * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.pulse))) * globalAlpha;
         const pulsedSize = p.size * (0.7 + 0.3 * (0.5 + 0.5 * Math.sin(p.pulse)));
 
+        // Use particle's assigned star color
+        const c = starColors[p.colorIdx];
+
         // Outer glow
         ctx.beginPath();
         ctx.arc(p.x, p.y, pulsedSize * 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity * 0.15})`;
+        ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${pulsedOpacity * 0.15})`;
         ctx.fill();
 
         // Core dot
         ctx.beginPath();
         ctx.arc(p.x, p.y, pulsedSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${dotColor.r}, ${dotColor.g}, ${dotColor.b}, ${pulsedOpacity})`;
+        ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${pulsedOpacity})`;
         ctx.fill();
       }
 
       // Connect nearby particles with lines
-      const connectionDist = 220;
+      const connectionDist = 320;
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
