@@ -95,36 +95,71 @@ governanceRouter.post('/:assetId/proposals', async (req: Request, res: Response)
     }
 });
 
-/** Record a vote (synced from on-chain event) */
+/**
+ * Record a vote.
+ *
+ * Security:
+ *   - Weight is validated from investor_holdings, NOT trusted from body.
+ *   - INSERT ... ON CONFLICT RETURNING detects duplicates — tally only
+ *     updates when the insert actually inserts (not on replay).
+ */
 governanceRouter.post('/proposals/:id/vote', async (req: Request, res: Response) => {
-    const { voter_address, support, weight, tx_hash } = req.body;
+    const { voter_address, support, tx_hash } = req.body;
 
     if (!voter_address || support === undefined) {
         return res.status(400).json({ error: 'Missing required fields: voter_address, support' });
     }
 
     try {
-        // Record vote
-        await query(`
+        // 1. Get proposal — must be ACTIVE
+        const proposalResult = await query(
+            `SELECT asset_id, status, voting_deadline FROM governance_proposals WHERE id = $1`,
+            [req.params.id]
+        );
+        if (proposalResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Proposal not found' });
+        }
+        const proposal = proposalResult.rows[0];
+        if (proposal.status !== 'ACTIVE') {
+            return res.status(400).json({ error: 'Proposal is not active' });
+        }
+        if (new Date(proposal.voting_deadline) < new Date()) {
+            return res.status(400).json({ error: 'Voting period has ended' });
+        }
+
+        // 2. Validate weight from ACTUAL holdings — do not trust body
+        const holdingsResult = await query(
+            `SELECT tokens_held FROM investor_holdings
+             WHERE wallet_address = $1 AND asset_id = $2 AND tokens_held > 0`,
+            [voter_address.toLowerCase(), proposal.asset_id]
+        );
+        if (holdingsResult.rows.length === 0) {
+            return res.status(403).json({ error: 'No holdings for this asset — cannot vote' });
+        }
+        const verifiedWeight = holdingsResult.rows[0].tokens_held;
+
+        // 3. Insert vote — RETURNING tells us if it was actually inserted
+        //    ON CONFLICT DO NOTHING means duplicate (proposal_id, voter_address)
+        //    returns 0 rows → we skip tally update.
+        const voteResult = await query(`
             INSERT INTO governance_votes (proposal_id, voter_address, support, weight, tx_hash)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (proposal_id, voter_address) DO NOTHING
-        `, [req.params.id, voter_address, support, weight || 0, tx_hash || null]);
+            RETURNING proposal_id
+        `, [req.params.id, voter_address.toLowerCase(), support, verifiedWeight, tx_hash || null]);
 
-        // Update vote tallies
-        if (support) {
-            await query(
-                `UPDATE governance_proposals SET for_votes = for_votes + $2, updated_at = NOW() WHERE id = $1`,
-                [req.params.id, weight || 0]
-            );
-        } else {
-            await query(
-                `UPDATE governance_proposals SET against_votes = against_votes + $2, updated_at = NOW() WHERE id = $1`,
-                [req.params.id, weight || 0]
-            );
+        if (voteResult.rows.length === 0) {
+            return res.status(409).json({ error: 'Already voted on this proposal' });
         }
 
-        res.json({ ok: true });
+        // 4. Update tally ONLY when vote was actually inserted
+        const col = support ? 'for_votes' : 'against_votes';
+        await query(
+            `UPDATE governance_proposals SET ${col} = ${col} + $2, updated_at = NOW() WHERE id = $1`,
+            [req.params.id, verifiedWeight]
+        );
+
+        res.json({ ok: true, weight: verifiedWeight });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

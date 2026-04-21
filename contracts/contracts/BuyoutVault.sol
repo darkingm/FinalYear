@@ -6,14 +6,28 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
+ * @title GovernanceRWA interface (minimal — for proposal verification)
+ */
+interface IGovernanceRWA {
+    function verifyPassedProposal(uint256 proposalId, bytes32 expectedHash) external view returns (bool);
+}
+
+/**
  * @title BuyoutVault
- * @notice Handles asset buyout with Merkle-claim settlement.
+ * @notice Handles governance-gated asset buyout with Merkle-claim settlement.
+ *
+ * Security model:
+ *   - initiateBuyout() requires OPERATOR_ROLE and a PASSED governance proposal
+ *     whose executionHash matches the buyout terms.
+ *   - Each proposal can only be consumed ONCE (prevents replay).
+ *   - Merkle root for claims is submitted by operator after off-chain snapshot.
+ *   - Holders claim pro-rata ETH via Merkle proof.
  *
  * Flow:
- *  1. Governance proposal passes (INITIATE_BUYOUT)
- *  2. Buyer calls initiateBuyout() depositing ETH = pricePerToken × totalSupply
- *  3. Operator takes off-chain snapshot of all holder balances
- *  4. Operator submits Merkle root via setMerkleRoot()
+ *  1. Governance proposal (INITIATE_BUYOUT) passes with executionHash
+ *  2. Operator calls initiateBuyout() referencing the passed proposalId
+ *  3. Contract verifies proposal is PASSED and hash matches buyout terms
+ *  4. Operator takes off-chain snapshot, submits Merkle root
  *  5. Holders claim their pro-rata ETH share via claimProceeds()
  *  6. After claim deadline, buyer sweeps unclaimed ETH
  */
@@ -22,10 +36,17 @@ contract BuyoutVault is AccessControl, ReentrancyGuard {
 
     enum BuyoutStatus { NONE, INITIATED, FINALIZED, SETTLED }
 
+    /* ── Governance linkage ─────────────────────────────────── */
+    IGovernanceRWA public governanceContract;
+    uint256 public consumedProposalId;    // the proposal that authorized this buyout
+
+    /* ── Buyout state ──────────────────────────────────────── */
     address public tokenAddress;
     address public buyer;
-    uint256 public buyoutPricePerToken;  // in wei
-    uint256 public totalBuyoutPrice;     // total ETH deposited
+    uint256 public buyoutPricePerToken;   // in wei
+    uint256 public snapshotBlock;         // block used for holder snapshot
+    uint256 public approvedTotalSupply;   // total supply at snapshot
+    uint256 public totalBuyoutPrice;      // total ETH deposited
     uint256 public totalClaimed;
     bytes32 public merkleRoot;
     uint256 public claimDeadline;
@@ -34,41 +55,81 @@ contract BuyoutVault is AccessControl, ReentrancyGuard {
     uint256 public constant CLAIM_PERIOD = 30 days;
 
     mapping(address => bool) public hasClaimed;
+    mapping(uint256 => bool) public usedProposals;  // prevent proposal replay
 
-    event BuyoutInitiated(address indexed buyer, uint256 pricePerToken, uint256 totalPrice);
+    event BuyoutInitiated(address indexed buyer, uint256 proposalId, uint256 pricePerToken, uint256 totalPrice);
     event MerkleRootSet(bytes32 root, uint256 deadline);
     event ProceedsClaimed(address indexed holder, uint256 amount);
     event UnclaimedSwept(address indexed buyer, uint256 amount);
 
-    constructor(address admin) {
+    constructor(address admin, address governance_) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(OPERATOR_ROLE, admin);
+        governanceContract = IGovernanceRWA(governance_);
     }
 
     /**
-     * @notice Buyer initiates buyout by depositing full buyout amount.
-     * @param token_  The RWAToken address being bought out
-     * @param pricePerToken_  Price per token in wei
-     * @param expectedTotalTokens  Expected total supply (for validation)
+     * @notice Compute the execution hash that must match the governance proposal.
+     *         Frontend/operator computes this when creating the proposal, and again
+     *         when calling initiateBuyout(). Contract verifies they match.
+     */
+    function computeExecutionHash(
+        address vault_,
+        address token_,
+        uint256 pricePerToken_,
+        uint256 snapshotBlock_,
+        uint256 totalSupply_
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(vault_, token_, pricePerToken_, snapshotBlock_, totalSupply_));
+    }
+
+    /**
+     * @notice Initiate buyout — governance-gated.
+     * @param token_             The RWAToken address being bought out
+     * @param pricePerToken_     Price per token in wei
+     * @param snapshotBlock_     Block number used for holder balance snapshot
+     * @param totalSupply_       Total token supply at snapshot
+     * @param governanceProposalId  ID of the PASSED governance proposal authorizing this
      */
     function initiateBuyout(
         address token_,
         uint256 pricePerToken_,
-        uint256 expectedTotalTokens
-    ) external payable {
+        uint256 snapshotBlock_,
+        uint256 totalSupply_,
+        uint256 governanceProposalId
+    ) external payable onlyRole(OPERATOR_ROLE) {
         require(status == BuyoutStatus.NONE, "BuyoutVault: already initiated");
         require(pricePerToken_ > 0, "BuyoutVault: zero price");
+        require(totalSupply_ > 0, "BuyoutVault: zero supply");
 
-        uint256 requiredDeposit = pricePerToken_ * expectedTotalTokens / 1e18;
+        // ── Governance verification ──────────────────────────────
+        require(!usedProposals[governanceProposalId], "BuyoutVault: proposal already consumed");
+
+        bytes32 expectedHash = computeExecutionHash(
+            address(this), token_, pricePerToken_, snapshotBlock_, totalSupply_
+        );
+        require(
+            governanceContract.verifyPassedProposal(governanceProposalId, expectedHash),
+            "BuyoutVault: governance proposal not passed or hash mismatch"
+        );
+
+        // Mark proposal as consumed — prevents replay
+        usedProposals[governanceProposalId] = true;
+        consumedProposalId = governanceProposalId;
+
+        // ── Deposit verification ─────────────────────────────────
+        uint256 requiredDeposit = pricePerToken_ * totalSupply_ / 1e18;
         require(msg.value >= requiredDeposit, "BuyoutVault: insufficient deposit");
 
         tokenAddress = token_;
         buyer = msg.sender;
         buyoutPricePerToken = pricePerToken_;
+        snapshotBlock = snapshotBlock_;
+        approvedTotalSupply = totalSupply_;
         totalBuyoutPrice = msg.value;
         status = BuyoutStatus.INITIATED;
 
-        emit BuyoutInitiated(msg.sender, pricePerToken_, msg.value);
+        emit BuyoutInitiated(msg.sender, governanceProposalId, pricePerToken_, msg.value);
     }
 
     /**
@@ -105,8 +166,7 @@ contract BuyoutVault is AccessControl, ReentrancyGuard {
 
         hasClaimed[msg.sender] = true;
 
-        // Calculate pro-rata ETH: (tokenBalance / totalSupply) × totalBuyoutPrice
-        // Since we don't know totalSupply on-chain here, we use pricePerToken
+        // Calculate pro-rata ETH using buyoutPricePerToken
         uint256 payout = (tokenBalance * buyoutPricePerToken) / 1e18;
         require(payout > 0, "BuyoutVault: zero payout");
 
@@ -134,6 +194,14 @@ contract BuyoutVault is AccessControl, ReentrancyGuard {
             require(sent, "BuyoutVault: ETH transfer failed");
             emit UnclaimedSwept(buyer, remaining);
         }
+    }
+
+    /**
+     * @notice Update governance contract address (admin only, for upgrades)
+     */
+    function setGovernanceContract(address governance_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(governance_ != address(0), "BuyoutVault: zero address");
+        governanceContract = IGovernanceRWA(governance_);
     }
 
     receive() external payable {}

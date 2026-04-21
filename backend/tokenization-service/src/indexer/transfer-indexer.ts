@@ -89,15 +89,16 @@ async function indexAsset(
 }
 
 async function upsertHolding(assetId: string, walletAddress: string, tokenAmount: number) {
+    // Use (asset_id, wallet_address) as the conflict key — prevents merging
+    // multiple unlinked wallets into user_id=0 per asset.
     await query(`
         INSERT INTO investor_holdings (user_id, asset_id, tokens_held, wallet_address, last_updated)
         VALUES (
-            COALESCE((SELECT user_id FROM rwa_kyc WHERE wallet_address = $2), 0),
+            (SELECT user_id FROM rwa_kyc WHERE wallet_address = $2),
             $1, $3, $2, NOW()
         )
-        ON CONFLICT (user_id, asset_id) DO UPDATE SET
+        ON CONFLICT (asset_id, wallet_address) DO UPDATE SET
             tokens_held = investor_holdings.tokens_held + $3,
-            wallet_address = COALESCE(investor_holdings.wallet_address, $2),
             last_updated = NOW()
     `, [assetId, walletAddress.toLowerCase(), tokenAmount]);
 }

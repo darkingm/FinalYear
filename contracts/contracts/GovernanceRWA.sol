@@ -14,6 +14,9 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
  *   - SELL_ASSET / INITIATE_BUYOUT / REPLACE_OPERATOR: 67% supermajority
  *
  * Flow: createProposal → castVote (during voting period) → executeProposal
+ *
+ * Actionable proposals (INITIATE_BUYOUT, SELL_ASSET) carry an executionHash
+ * that downstream contracts (BuyoutVault) verify before accepting deposits.
  */
 contract GovernanceRWA is AccessControl {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -37,6 +40,7 @@ contract GovernanceRWA is AccessControl {
         ProposalType   proposalType;
         string         description;
         string         ipfsDoc;         // IPFS CID for detailed proposal doc
+        bytes32        executionHash;   // hash of structured execution params (for actionable proposals)
         uint256        snapshotBlock;   // block at which voting power is measured
         uint256        forVotes;        // total votes FOR (in token units)
         uint256        againstVotes;    // total votes AGAINST
@@ -57,7 +61,7 @@ contract GovernanceRWA is AccessControl {
     mapping(uint256 => mapping(address => bool)) public hasVoted;
 
     /* ── Events ───────────────────────────────────────────────── */
-    event ProposalCreated(uint256 indexed id, address indexed proposer, ProposalType pType, string description, uint256 deadline);
+    event ProposalCreated(uint256 indexed id, address indexed proposer, ProposalType pType, string description, bytes32 executionHash, uint256 deadline);
     event VoteCast(uint256 indexed proposalId, address indexed voter, bool support, uint256 weight);
     event ProposalExecuted(uint256 indexed id);
     event ProposalCancelled(uint256 indexed id);
@@ -81,18 +85,32 @@ contract GovernanceRWA is AccessControl {
     }
 
     /* ── Create Proposal ──────────────────────────────────────── */
+
+    /**
+     * @notice Create a proposal. Actionable proposals (INITIATE_BUYOUT, SELL_ASSET)
+     *         MUST include an executionHash = keccak256(abi.encodePacked(
+     *             vaultAddress, tokenAddress, pricePerToken, snapshotBlock, totalSupply
+     *         )).
+     *         Non-actionable proposals pass bytes32(0).
+     */
     function createProposal(
         ProposalType pType,
         string calldata description,
-        string calldata ipfsDoc
+        string calldata ipfsDoc,
+        bytes32 executionHash
     ) external returns (uint256) {
         uint256 supply = token.totalSupply();
         require(supply > 0, "Gov: no tokens issued");
 
-        // Check proposer has enough voting power (at least proposalThresholdBps basis points)
+        // Check proposer has enough voting power
         uint256 voterBalance = token.balanceOf(msg.sender);
         uint256 threshold = (supply * proposalThresholdBps) / 10000;
         require(voterBalance >= threshold, "Gov: below proposal threshold");
+
+        // Actionable proposals must carry execution params hash
+        if (_isActionableType(pType)) {
+            require(executionHash != bytes32(0), "Gov: actionable proposal requires executionHash");
+        }
 
         proposalCount++;
         uint256 id = proposalCount;
@@ -103,7 +121,8 @@ contract GovernanceRWA is AccessControl {
             proposalType:  pType,
             description:   description,
             ipfsDoc:       ipfsDoc,
-            snapshotBlock: block.number - 1, // use previous block for snapshot
+            executionHash: executionHash,
+            snapshotBlock: block.number - 1,
             forVotes:      0,
             againstVotes:  0,
             deadline:      block.timestamp + votingPeriod,
@@ -111,8 +130,20 @@ contract GovernanceRWA is AccessControl {
             executed:      false
         });
 
-        emit ProposalCreated(id, msg.sender, pType, description, block.timestamp + votingPeriod);
+        emit ProposalCreated(id, msg.sender, pType, description, executionHash, block.timestamp + votingPeriod);
         return id;
+    }
+
+    /**
+     * @notice Backward-compatible overload without executionHash (for non-actionable proposals)
+     */
+    function createProposal(
+        ProposalType pType,
+        string calldata description,
+        string calldata ipfsDoc
+    ) external returns (uint256) {
+        require(!_isActionableType(pType), "Gov: actionable proposal requires executionHash");
+        return this.createProposal(pType, description, ipfsDoc, bytes32(0));
     }
 
     /* ── Cast Vote ────────────────────────────────────────────── */
@@ -191,9 +222,29 @@ contract GovernanceRWA is AccessControl {
         return token.getPastVotes(voter, p.snapshotBlock);
     }
 
+    /**
+     * @notice Verify that a proposal with the given ID is PASSED and its
+     *         executionHash matches the expected hash. Used by BuyoutVault
+     *         to gate buyout initiation to governance-approved terms.
+     */
+    function verifyPassedProposal(
+        uint256 proposalId,
+        bytes32 expectedHash
+    ) external view returns (bool) {
+        Proposal storage p = proposals[proposalId];
+        return p.id > 0
+            && p.status == ProposalStatus.PASSED
+            && p.executionHash == expectedHash;
+    }
+
     function _isSupermajorityType(ProposalType t) internal pure returns (bool) {
         return t == ProposalType.SELL_ASSET
             || t == ProposalType.INITIATE_BUYOUT
             || t == ProposalType.REPLACE_OPERATOR;
+    }
+
+    function _isActionableType(ProposalType t) internal pure returns (bool) {
+        return t == ProposalType.SELL_ASSET
+            || t == ProposalType.INITIATE_BUYOUT;
     }
 }

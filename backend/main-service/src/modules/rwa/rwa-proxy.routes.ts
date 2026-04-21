@@ -218,9 +218,12 @@ router.post('/governance/:assetId/proposals', authenticate, async (req: AuthRequ
 });
 
 // Authenticated: cast vote
-router.post('/governance/proposals/:id/vote', authenticate, async (req: Request, res: Response) => {
+router.post('/governance/proposals/:id/vote', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const data = await proxyToTokenization('post', `/api/rwa/governance/proposals/${req.params.id}/vote`, req.body);
+        const data = await proxyToTokenization('post', `/api/rwa/governance/proposals/${req.params.id}/vote`, {
+            ...req.body,
+            user_id: req.user!.user_id,
+        });
         res.json(data);
     } catch (err: any) {
         res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
@@ -317,9 +320,11 @@ router.post('/market/:assetId/list', authenticate, async (req: AuthRequest, res:
     }
 });
 
-router.patch('/market/listings/:id/cancel', authenticate, async (req: Request, res: Response) => {
+router.patch('/market/listings/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const data = await proxyToTokenization('patch', `/api/rwa/market/listings/${req.params.id}/cancel`, {});
+        const data = await proxyToTokenization('patch', `/api/rwa/market/listings/${req.params.id}/cancel`, {
+            seller_user_id: req.user!.user_id,
+        });
         res.json(data);
     } catch (err: any) {
         res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });

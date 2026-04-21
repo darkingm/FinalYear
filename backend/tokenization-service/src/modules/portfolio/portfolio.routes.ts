@@ -8,16 +8,28 @@ export const portfolioRouter = Router();
 /** Get a user's holdings across all assets */
 portfolioRouter.get('/:userId', async (req: Request, res: Response) => {
     try {
+        // With wallet-first PK, a user may have multiple wallet rows per asset.
+        // Aggregate them into one row per asset for portfolio view.
         const result = await query(`
       SELECT
-        h.asset_id, h.tokens_held, h.avg_cost_usd, h.total_claimed_profit,
+        h.asset_id,
+        SUM(h.tokens_held) AS tokens_held,
+        -- Weighted avg cost across wallets
+        CASE WHEN SUM(h.tokens_held) > 0
+          THEN SUM(h.avg_cost_usd * h.tokens_held) / SUM(h.tokens_held)
+          ELSE 0
+        END AS avg_cost_usd,
+        SUM(h.total_claimed_profit) AS total_claimed_profit,
         a.name, a.asset_type, a.price_per_token_usd, a.token_contract_address, a.distributor_contract_address,
         a.expected_apy, a.status, a.total_tokens,
-        (h.tokens_held * a.price_per_token_usd) AS current_value_usd,
-        CASE WHEN a.total_tokens > 0 THEN ROUND((h.tokens_held::NUMERIC / a.total_tokens) * 100, 4) ELSE 0 END AS ownership_percent
+        (SUM(h.tokens_held) * a.price_per_token_usd) AS current_value_usd,
+        CASE WHEN a.total_tokens > 0 THEN ROUND((SUM(h.tokens_held)::NUMERIC / a.total_tokens) * 100, 4) ELSE 0 END AS ownership_percent,
+        ARRAY_AGG(h.wallet_address) AS wallet_addresses
       FROM investor_holdings h
       JOIN rwa_assets a USING (asset_id)
       WHERE h.user_id = $1
+      GROUP BY h.asset_id, a.name, a.asset_type, a.price_per_token_usd, a.token_contract_address,
+               a.distributor_contract_address, a.expected_apy, a.status, a.total_tokens
       ORDER BY current_value_usd DESC
     `, [req.params.userId]);
 
@@ -60,13 +72,16 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Missing or invalid required fields' });
     }
 
+    const normalizedWallet = wallet_address.toLowerCase();
+    let mintTxHash: string | undefined;
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
         // ── 1. Check idempotency — reject duplicates ──────────────────
         const existingPurchase = await client.query(
-            `SELECT idempotency_key, mint_tx_hash FROM purchase_idempotency WHERE idempotency_key = $1`,
+            `SELECT idempotency_key, mint_tx_hash, status FROM purchase_idempotency WHERE idempotency_key = $1`,
             [idempotencyKey]
         );
         if (existingPurchase.rows.length > 0) {
@@ -102,43 +117,55 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Asset not yet deployed on-chain' });
         }
 
-        // ── 3. Mint tokens on-chain ───────────────────────────────────
-        let mintTxHash: string;
+        // ── 2b. Write idempotency row BEFORE minting (status=PENDING) ─
+        // If mint succeeds but DB commit fails, retry sees this row and rejects.
+        await client.query(
+            `INSERT INTO purchase_idempotency (idempotency_key, asset_id, user_id, wallet_address, token_amount, status)
+             VALUES ($1, $2, $3, $4, $5, 'PENDING')`,
+            [idempotencyKey, asset_id, user_id, normalizedWallet, token_amount]
+        );
+        await client.query('COMMIT');
+
+        // ── 3. Mint tokens on-chain (OUTSIDE transaction) ─────────────
         try {
-            // RWAToken uses 18 decimals (ERC20 default)
             const receipt = await mintTokens(
                 token_contract_address,
-                wallet_address,
+                normalizedWallet,
                 BigInt(token_amount) * 10n ** 18n
             );
             mintTxHash = receipt.hash;
         } catch (mintErr: any) {
-            // Mint failed — rollback DB, log for recovery
-            await client.query('ROLLBACK');
-            // Record the failure for manual recovery
+            // Mint failed — remove the PENDING idempotency row so retry is possible
+            await query(
+                `DELETE FROM purchase_idempotency WHERE idempotency_key = $1 AND status = 'PENDING'`,
+                [idempotencyKey]
+            ).catch(() => {});
+            // Record failure for manual recovery
             await query(
                 `INSERT INTO failed_mint_recovery (asset_id, user_id, wallet_address, token_amount, error_message)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [asset_id, user_id, wallet_address, token_amount, mintErr.message]
-            ).catch(() => {}); // Don't let recovery logging fail the response
+                [asset_id, user_id, normalizedWallet, token_amount, mintErr.message]
+            ).catch(() => {});
             return res.status(500).json({ error: `On-chain mint failed: ${mintErr.message}` });
         }
 
-        // ── 4. Mint succeeded — update DB within the same transaction ─
-        // Upsert holdings
+        // ── 4. Mint succeeded — update DB in a new transaction ────────
+        await client.query('BEGIN');
+
+        // Upsert holdings (wallet-first PK)
         await client.query(`
             INSERT INTO investor_holdings (user_id, asset_id, tokens_held, avg_cost_usd, wallet_address)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (user_id, asset_id) DO UPDATE SET
+            ON CONFLICT (asset_id, wallet_address) DO UPDATE SET
                 tokens_held = investor_holdings.tokens_held + $3,
                 avg_cost_usd = CASE
                     WHEN investor_holdings.tokens_held + $3 > 0
                     THEN (investor_holdings.avg_cost_usd * investor_holdings.tokens_held + $4 * $3) / (investor_holdings.tokens_held + $3)
                     ELSE $4
                 END,
-                wallet_address = COALESCE(investor_holdings.wallet_address, $5),
+                user_id = COALESCE(investor_holdings.user_id, $1),
                 last_updated = NOW()
-        `, [user_id, asset_id, token_amount, cost_usd / token_amount, wallet_address]);
+        `, [user_id, asset_id, token_amount, cost_usd / token_amount, normalizedWallet]);
 
         // Update tokens_sold
         await client.query(
@@ -146,11 +173,10 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             [token_amount, asset_id]
         );
 
-        // Record idempotency
+        // Mark idempotency as COMPLETED with tx hash
         await client.query(
-            `INSERT INTO purchase_idempotency (idempotency_key, asset_id, user_id, wallet_address, token_amount, mint_tx_hash)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [idempotencyKey, asset_id, user_id, wallet_address, token_amount, mintTxHash]
+            `UPDATE purchase_idempotency SET mint_tx_hash = $2, status = 'COMPLETED' WHERE idempotency_key = $1`,
+            [idempotencyKey, mintTxHash]
         );
 
         await client.query('COMMIT');
@@ -163,13 +189,18 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
     } catch (err: any) {
         await client.query('ROLLBACK').catch(() => {});
 
-        // If mint succeeded but DB commit failed — record for recovery
-        // The mint_tx_hash would be in the closure scope, but we can't access it here
-        // because the error might be from a different part of the transaction.
-        // The failed_mint_recovery table handles the case where mint succeeded but DB failed.
+        // If mint succeeded but DB commit failed — persist tx_hash for recovery
+        if (mintTxHash) {
+            await query(
+                `UPDATE purchase_idempotency SET mint_tx_hash = $2, status = 'COMPLETED' WHERE idempotency_key = $1`,
+                [idempotencyKey, mintTxHash]
+            ).catch(() => {});
+        }
+
         console.error('[purchase] Transaction failed:', err.message);
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
     }
 });
+

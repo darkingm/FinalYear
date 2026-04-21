@@ -67,20 +67,36 @@ marketRouter.post('/:assetId/list', async (req: Request, res: Response) => {
     }
 });
 
-/** Cancel a listing */
+/**
+ * Cancel a listing — seller ownership enforced.
+ * Requires seller_user_id in body (injected by rwa-proxy from auth context).
+ */
 marketRouter.patch('/listings/:id/cancel', async (req: Request, res: Response) => {
+    const { seller_user_id } = req.body;
+    if (!seller_user_id) {
+        return res.status(400).json({ error: 'seller_user_id required for cancellation' });
+    }
+
     try {
-        const result = await query(`
-            UPDATE rwa_listings SET status = 'CANCELLED' WHERE id = $1 AND status = 'ACTIVE' RETURNING *
-        `, [req.params.id]);
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Listing not found or already cancelled' });
+        const result = await query(
+            `UPDATE rwa_listings SET status = 'CANCELLED', updated_at = NOW()
+             WHERE id = $1 AND status = 'ACTIVE' AND seller_user_id = $2
+             RETURNING *`,
+            [req.params.id, seller_user_id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Listing not found, already cancelled, or not owned by you' });
+        }
         res.json({ listing: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
 });
 
-/** Record a trade (after on-chain buy completes) */
+/**
+ * Record a trade (after on-chain buy completes).
+ * Enforces: buyer ≠ seller, buyer_user_id from auth context.
+ */
 marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
     const { buyer_address, buyer_user_id, trade_tx_hash } = req.body;
 
@@ -94,10 +110,19 @@ marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
         if (listingResult.rows.length === 0) return res.status(404).json({ error: 'Listing not active' });
 
         const listing = listingResult.rows[0];
+
+        // Prevent self-trade
+        if (listing.seller_user_id && buyer_user_id && listing.seller_user_id === buyer_user_id) {
+            return res.status(400).json({ error: 'Cannot buy your own listing' });
+        }
+        if (listing.seller_address && buyer_address.toLowerCase() === listing.seller_address.toLowerCase()) {
+            return res.status(400).json({ error: 'Cannot buy your own listing' });
+        }
+
         const totalPriceWei = (BigInt(listing.price_per_token_wei) * BigInt(listing.token_amount) / BigInt(10 ** 18)).toString();
 
         // Mark listing filled
-        await query(`UPDATE rwa_listings SET status = 'FILLED' WHERE id = $1`, [req.params.id]);
+        await query(`UPDATE rwa_listings SET status = 'FILLED', updated_at = NOW() WHERE id = $1`, [req.params.id]);
 
         // Record trade
         const tradeResult = await query(`
