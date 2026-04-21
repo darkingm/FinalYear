@@ -4,14 +4,12 @@ import { memo, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Star, User } from 'lucide-react';
+import { Star, User, ShoppingCart, Zap, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCartStore } from '@/store/cart-store';
-import { ProductQuickActions } from '@/components/product/ProductQuickActions';
 import { ProductTokenPricing } from '@/components/product/ProductTokenPricing';
 import { getPrimaryProductImage, normalizeProductImages } from '@/lib/products/images';
 import type { ProductAcceptedTokenView, ProductGalleryImage } from '@/lib/products/types';
-import { paymentPageTheme } from '@/lib/payments/payment-page-theme';
 
 const FALLBACK = '/placeholder-product.svg';
 
@@ -99,57 +97,7 @@ export const ProductCard = memo(function ProductCard({
     setSelectedTokenId(token.token_id);
   };
 
-  const infoBlock = (
-    <>
-      <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-        {sellerAvatar ? (
-          <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover" alt="" />
-        ) : (
-          <User className="h-3.5 w-3.5 flex-shrink-0" />
-        )}
-        <span className="truncate">{product.seller_name || 'Người bán'}</span>
-        {rating > 0 ? (
-          <span className="ml-auto flex flex-shrink-0 items-center gap-0.5 text-yellow-500">
-            <Star className="h-3 w-3 fill-current" />
-            <span className="text-muted-foreground">{rating.toFixed(1)}</span>
-          </span>
-        ) : null}
-      </div>
-
-      <Link href={productHref} className="mb-1 block">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors hover:text-primary">
-          {product.name}
-        </h3>
-      </Link>
-
-      {product.description ? (
-        <p className="mb-3 line-clamp-2 text-xs text-muted-foreground">{product.description}</p>
-      ) : null}
-
-      <div className="mt-auto border-t border-border/50 pt-3">
-        <ProductTokenPricing
-          acceptedTokens={acceptedTokens}
-          basePriceUsd={basePriceUsd}
-          selectedTokenId={selectedToken?.token_id ?? null}
-          onSelect={handleSelectToken}
-          variant="card"
-          stock={product.stock}
-        />
-
-        {showAddToCart ? (
-          <div className="mt-3">
-            <ProductQuickActions
-              onAddToCart={handleAddToCart}
-              onBuyNow={handleBuyNow}
-              disabled={product.stock === 0}
-              size="card"
-            />
-          </div>
-        ) : null}
-      </div>
-    </>
-  );
-
+  /* ── List variant ───────────────────────────────────── */
   if (variant === 'list') {
     return (
       <motion.div
@@ -157,11 +105,11 @@ export const ProductCard = memo(function ProductCard({
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3, delay: index * 0.03 }}
       >
-        <div className={`group flex gap-4 rounded-2xl p-4 transition-all hover:shadow-lg ${paymentPageTheme.secondarySurface} dark:border-violet-500/30 dark:hover:border-violet-400/60`}>
-          <Link href={productHref} className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-white/5">
+        <div className="group flex gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm transition-all duration-300 hover:border-violet-500/30 hover:bg-white/[0.04] hover:shadow-lg hover:shadow-violet-500/5">
+          <Link href={productHref} className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50">
             {product.category ? (
-              <div className="absolute left-3 top-3 z-10">
-                <span className="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-bold capitalize text-white backdrop-blur-sm">
+              <div className="absolute left-2 top-2 z-10">
+                <span className="rounded-full border border-white/10 bg-black/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/80 backdrop-blur-md">
                   {product.category}
                 </span>
               </div>
@@ -170,71 +118,196 @@ export const ProductCard = memo(function ProductCard({
               src={imgSrc}
               alt={product.name}
               fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className="object-cover transition-transform duration-500 group-hover:scale-110"
               unoptimized
               onError={() => setImgFailed(true)}
             />
             {product.stock === 0 ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/70">
-                <span className="text-xs font-bold text-red-400">Hết hàng</span>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">Hết hàng</span>
               </div>
             ) : null}
           </Link>
 
-          <div className="flex min-w-0 flex-1 flex-col justify-between">
-            {infoBlock}
+          <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+            {/* Seller + Rating */}
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-white/40">
+              {sellerAvatar ? (
+                <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+              ) : (
+                <User className="h-3.5 w-3.5 flex-shrink-0 text-white/25" />
+              )}
+              <span className="truncate">{product.seller_name || 'Người bán'}</span>
+              {rating > 0 ? (
+                <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                  <span className="text-white/50">{rating.toFixed(1)}</span>
+                </span>
+              ) : null}
+            </div>
+
+            <Link href={productHref} className="mb-1.5 block">
+              <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-white/90 transition-colors group-hover:text-white">
+                {product.name}
+              </h3>
+            </Link>
+
+            <div className="mt-auto border-t border-white/[0.06] pt-2">
+              <ProductTokenPricing
+                acceptedTokens={acceptedTokens}
+                basePriceUsd={basePriceUsd}
+                selectedTokenId={selectedToken?.token_id ?? null}
+                onSelect={handleSelectToken}
+                variant="card"
+                stock={product.stock}
+              />
+            </div>
           </div>
         </div>
       </motion.div>
     );
   }
 
+  /* ── Grid / Featured variant ────────────────────────── */
   const isFeatured = variant === 'featured';
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      whileHover={{ y: -2 }}
+      transition={{ duration: 0.35, delay: index * 0.06, ease: [0.25, 0.46, 0.45, 0.94] }}
+      whileHover={{ y: -4 }}
       className="h-full"
     >
       <div
         className={[
-          `group flex h-full flex-col overflow-hidden rounded-2xl transition-all duration-300 ${paymentPageTheme.secondarySurface} dark:border-violet-500/30 dark:hover:border-violet-400/60 hover:shadow-xl hover:shadow-black/10`,
-          isFeatured ? 'ring-1 ring-[#f0b90b]/0 hover:ring-[#f0b90b]/20' : '',
+          'group relative flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-300',
+          /* Default state */
+          'border-white/[0.06] bg-white/[0.02] backdrop-blur-sm',
+          /* Hover state */
+          'hover:border-violet-500/30 hover:bg-white/[0.04] hover:shadow-2xl hover:shadow-violet-500/10',
+          isFeatured ? 'ring-1 ring-violet-500/0 hover:ring-violet-500/20' : '',
         ].join(' ')}
       >
-        <Link href={productHref} className={`relative block overflow-hidden bg-slate-100 dark:bg-white/5 ${isFeatured ? 'h-52' : 'h-44'}`}>
+        {/* ── Image ─────────────────────────────────── */}
+        <Link href={productHref} className={`relative block overflow-hidden ${isFeatured ? 'h-56' : 'h-48'}`}>
+          {/* Gradient background for loading state */}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-800/60 via-slate-900/40 to-slate-800/60" />
+
           <Image
             src={imgSrc}
             alt={product.name}
             fill
-            className="object-cover transition-transform duration-700 group-hover:scale-105"
+            className="object-cover transition-all duration-700 group-hover:scale-110"
             unoptimized
             onError={() => setImgFailed(true)}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
+          {/* Hover overlay gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+          {/* Top-left badge area */}
+          <div className="absolute left-3 top-3 flex flex-col gap-1.5">
+            {product.category ? (
+              <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white/80 backdrop-blur-md">
+                {product.category}
+              </span>
+            ) : null}
+            {product.is_nft_minted ? (
+              <span className="rounded-full border border-violet-400/20 bg-violet-500/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-violet-300 backdrop-blur-md">
+                NFT
+              </span>
+            ) : null}
+          </div>
+
+          {/* Out of stock overlay */}
           {product.stock === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
-              <span className="rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-400">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+              <span className="rounded-full border border-red-500/20 bg-red-500/15 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-400">
                 Hết hàng
               </span>
             </div>
           ) : null}
 
-          {product.category ? (
-            <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-              <span className="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-bold capitalize text-white backdrop-blur-sm">
-                {product.category}
-              </span>
+          {/* Quick add overlay on hover */}
+          {showAddToCart && product.stock !== 0 ? (
+            <div className="absolute bottom-3 right-3 opacity-0 transition-all duration-300 group-hover:opacity-100">
+              <button
+                onClick={handleAddToCart}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-black/50 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 hover:text-white"
+                aria-label="Thêm vào giỏ hàng"
+              >
+                <ShoppingCart className="h-4 w-4" />
+              </button>
             </div>
           ) : null}
         </Link>
 
+        {/* ── Content ───────────────────────────────── */}
         <div className="flex flex-grow flex-col p-4">
-          {infoBlock}
+          {/* Seller row */}
+          <div className="mb-2 flex items-center gap-1.5 text-[11px]">
+            {sellerAvatar ? (
+              <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+            ) : (
+              <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-white/5">
+                <User className="h-2.5 w-2.5 text-white/30" />
+              </div>
+            )}
+            <span className="truncate text-white/40">{product.seller_name || 'Người bán'}</span>
+            {rating > 0 ? (
+              <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                <span className="text-[11px] text-white/50">{rating.toFixed(1)}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Product name */}
+          <Link href={productHref} className="mb-1.5 block">
+            <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-white/90 transition-colors group-hover:text-white">
+              {product.name}
+            </h3>
+          </Link>
+
+          {product.description ? (
+            <p className="mb-2 line-clamp-1 text-[11px] leading-relaxed text-white/30">{product.description}</p>
+          ) : null}
+
+          {/* Price + Actions — pushed to bottom */}
+          <div className="mt-auto space-y-3 border-t border-white/[0.06] pt-3">
+            <ProductTokenPricing
+              acceptedTokens={acceptedTokens}
+              basePriceUsd={basePriceUsd}
+              selectedTokenId={selectedToken?.token_id ?? null}
+              onSelect={handleSelectToken}
+              variant="card"
+              stock={product.stock}
+            />
+
+            {showAddToCart ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={product.stock === 0}
+                  aria-label="Thêm vào giỏ hàng"
+                  className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/50 transition-all hover:border-violet-500/30 hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ShoppingCart className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={product.stock === 0}
+                  className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#f0b90b] to-[#e6a800] text-[12px] font-extrabold text-black shadow-lg shadow-yellow-500/15 transition-all hover:shadow-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Mua ngay
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </motion.div>

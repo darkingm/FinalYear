@@ -16,10 +16,10 @@ import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { CoinImage } from '@/components/ui/CoinImage';
-import { getProductGallery } from '@/lib/utils/product-images';
+import { ProductCard } from '@/components/product/ProductCard';
+import { productsApi } from '@/lib/api/products';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { productService } from '@/services';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { ShoppingCart } from 'lucide-react';
@@ -867,13 +867,12 @@ function FullSwapPanel({ coinName, currentPrice }: { coinName: string; currentPr
 /* ─── Suggested Products for Coin ────────────────── */
 function RecommendedProducts({ symbol }: { symbol: string }) {
   const [products, setProducts] = useState<any[]>([]);
-  const [failed, setFailed] = useState<Set<number>>(new Set());
-  const addItem = useCartStore(s => s.addItem);
   const { t } = useClientTranslation();
 
   useEffect(() => {
-    productService.list({ limit: 4 }).then(res => {
-      setProducts(Array.isArray(res.products) ? res.products : []);
+    productsApi.list({ limit: 4 }).then(res => {
+      const list = res.data?.data ?? [];
+      setProducts(Array.isArray(list) ? list.slice(0, 4) : []);
     }).catch(() => { });
   }, []);
 
@@ -892,55 +891,15 @@ function RecommendedProducts({ symbol }: { symbol: string }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {products.map((p, idx) => {
-          const galleryImages = getProductGallery(p.name, p.metadata?.category, p.metadata?.images);
-          const img = failed.has(p.product_id) ? '/placeholder-product.svg' : (galleryImages[0] || '/placeholder-product.svg');
-          return (
-            <motion.div
-              key={p.product_id}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: idx * 0.1 }}
-            >
-              <Link href={`/products/${p.product_id}`} className="block h-full">
-                <div className="bg-card h-full flex flex-col border border-border rounded-xl overflow-hidden group hover:border-primary/30 transition-all">
-                  <div className="relative h-40 bg-secondary/20 flex-shrink-0">
-                    <Image
-                      src={img}
-                      alt={p.name}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform"
-                      unoptimized
-                      onError={() => setFailed(pr => new Set(pr).add(p.product_id))}
-                    />
-                  </div>
-                  <div className="p-3 flex flex-col flex-grow">
-                    <h3 className="font-semibold text-sm text-foreground mb-1 line-clamp-1">{p.name}</h3>
-                    <div className="mt-auto">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-primary">${Number(p.base_price_usd).toFixed(2)}</span>
-                      </div>
-                      <Button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          addItem({ product_id: p.product_id, name: p.name, base_price_usd: Number(p.base_price_usd), metadata: p.metadata });
-                          toast.success('Đã thêm');
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-8 text-xs border-border hover:bg-primary/10 hover:text-primary gap-1"
-                      >
-                        <ShoppingCart className="w-3 h-3" />
-                        Thêm vào giỏ
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            </motion.div>
-          );
-        })}
+        {products.map((p: any, idx: number) => (
+          <ProductCard
+            key={p.product_id}
+            product={p}
+            index={idx}
+            variant="grid"
+            showAddToCart
+          />
+        ))}
       </div>
     </div>
   );
