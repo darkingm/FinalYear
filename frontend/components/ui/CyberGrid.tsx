@@ -36,7 +36,7 @@ export function CyberGrid() {
       vx: (Math.random() - 0.5) * 0.35,
       vy: (Math.random() - 0.5) * 0.35,
       size: Math.random() * 2.5 + 1.5,
-      opacity: Math.random() * 0.5 + 0.15,
+      opacity: Math.random() * 0.5 + 0.3,
       pulse: Math.random() * Math.PI * 2,
       pulseSpeed: Math.random() * 0.015 + 0.008,
     }));
@@ -91,7 +91,7 @@ export function CyberGrid() {
       : { r: 109, g: 40, b: 217 };  // violet-700 — deep purple glow
 
     // Opacity multiplier — dark mode brighter
-    const globalAlpha = isDark ? 1.0 : 0.7;
+    const globalAlpha = isDark ? 1.0 : 0.85;
 
     const frame = () => {
       ctx.clearRect(0, 0, w, h);
@@ -154,7 +154,7 @@ export function CyberGrid() {
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
             ctx.strokeStyle = `rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${alpha})`;
-            ctx.lineWidth = 0.8;
+            ctx.lineWidth = 1.2;
             ctx.stroke();
           }
         }
@@ -171,7 +171,7 @@ export function CyberGrid() {
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(mx, my);
           ctx.strokeStyle = `rgba(${mouseGlowColor.r}, ${mouseGlowColor.g}, ${mouseGlowColor.b}, ${alpha})`;
-          ctx.lineWidth = 0.8;
+          ctx.lineWidth = 1.0;
           ctx.stroke();
         }
       }
