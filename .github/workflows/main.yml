@@ -8,6 +8,7 @@ on:
 
 env:
   NODE_VERSION: '22'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   TEST_DB_USER: testuser
   TEST_DB_PASSWORD: testpassword
   TEST_DB_NAME: marketplace_test
