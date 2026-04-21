@@ -1,12 +1,14 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
-import { useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useEffect, useRef } from 'react';
 import { clearSessionAccessToken, setSessionAccessToken } from '@/lib/auth/session-token-manager';
 import { logAuthEvent } from '@/lib/auth/auth-log';
+import { toast } from 'sonner';
 
 export function useAuth() {
   const { data: session, status } = useSession();
+  const signingOut = useRef(false);
 
   useEffect(() => {
     if (status === 'authenticated' && session?.accessToken) {
@@ -20,18 +22,22 @@ export function useAuth() {
     }
   }, [session, status]);
 
-  // Refresh token expiry means the session is no longer usable for protected APIs,
-  // but we do not hard-sign-out immediately. We clear local access state and let
-  // guarded pages redirect to re-auth with the current callback URL.
+  // When refresh token is expired, the session cookie is useless (zombie cookie).
+  // Auto sign-out to clear it — otherwise every page load retries the failed refresh
+  // and the user can never reach a clean login state without manually clearing cookies.
   useEffect(() => {
-    if ((session as any)?.error === 'RefreshTokenExpired') {
+    if ((session as any)?.error === 'RefreshTokenExpired' && !signingOut.current) {
+      signingOut.current = true;
       localStorage.removeItem('auth_token');
       clearSessionAccessToken();
-      logAuthEvent('session_reauth_required', {
+      logAuthEvent('session_auto_signout', {
         eventSource: 'useAuth',
         reasonCode: 'refresh_token_expired',
         path: typeof window !== 'undefined' ? window.location.pathname : undefined,
       });
+      toast.info('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      // signOut clears the NextAuth session cookie, then redirects to login
+      signOut({ callbackUrl: '/login?reason=session_expired', redirect: true });
     }
   }, [session]);
 
