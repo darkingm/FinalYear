@@ -105,7 +105,7 @@ export const ProductCard = memo(function ProductCard({
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3, delay: index * 0.03 }}
       >
-        <div className="group flex gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm transition-all duration-300 hover:border-violet-500/30 hover:bg-white/[0.04] hover:shadow-lg hover:shadow-violet-500/5">
+        <div className="group flex gap-4 rounded-2xl border border-border bg-card p-3 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
           <Link href={productHref} className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50">
             {product.category ? (
               <div className="absolute left-2 top-2 z-10">
@@ -131,28 +131,28 @@ export const ProductCard = memo(function ProductCard({
 
           <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
             {/* Seller + Rating */}
-            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-white/40">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               {sellerAvatar ? (
                 <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
               ) : (
-                <User className="h-3.5 w-3.5 flex-shrink-0 text-white/25" />
+                <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/60" />
               )}
               <span className="truncate">{product.seller_name || 'Người bán'}</span>
               {rating > 0 ? (
                 <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
                   <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                  <span className="text-white/50">{rating.toFixed(1)}</span>
+                  <span className="text-muted-foreground">{rating.toFixed(1)}</span>
                 </span>
               ) : null}
             </div>
 
             <Link href={productHref} className="mb-1.5 block">
-              <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-white/90 transition-colors group-hover:text-white">
+              <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-foreground transition-colors group-hover:text-foreground">
                 {product.name}
               </h3>
             </Link>
 
-            <div className="mt-auto border-t border-white/[0.06] pt-2">
+            <div className="mt-auto border-t border-border pt-2">
               <ProductTokenPricing
                 acceptedTokens={acceptedTokens}
                 basePriceUsd={basePriceUsd}
@@ -183,10 +183,10 @@ export const ProductCard = memo(function ProductCard({
         className={[
           'group relative flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-300',
           /* Default state */
-          'border-white/[0.06] bg-white/[0.02] backdrop-blur-sm',
+          'border-border bg-card backdrop-blur-sm',
           /* Hover state */
-          'hover:border-violet-500/30 hover:bg-white/[0.04] hover:shadow-2xl hover:shadow-violet-500/10',
-          isFeatured ? 'ring-1 ring-violet-500/0 hover:ring-violet-500/20' : '',
+          'hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10',
+          isFeatured ? 'ring-1 ring-primary/0 hover:ring-primary/20' : '',
         ].join(' ')}
       >
         {/* ── Image ─────────────────────────────────── */}
@@ -250,32 +250,32 @@ export const ProductCard = memo(function ProductCard({
             {sellerAvatar ? (
               <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
             ) : (
-              <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-white/5">
-                <User className="h-2.5 w-2.5 text-white/30" />
+              <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-muted">
+                <User className="h-2.5 w-2.5 text-muted-foreground" />
               </div>
             )}
-            <span className="truncate text-white/40">{product.seller_name || 'Người bán'}</span>
+            <span className="truncate text-muted-foreground">{product.seller_name || 'Người bán'}</span>
             {rating > 0 ? (
               <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                <span className="text-[11px] text-white/50">{rating.toFixed(1)}</span>
+                <span className="text-[11px] text-muted-foreground">{rating.toFixed(1)}</span>
               </span>
             ) : null}
           </div>
 
           {/* Product name */}
           <Link href={productHref} className="mb-1.5 block">
-            <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-white/90 transition-colors group-hover:text-white">
+            <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-foreground transition-colors group-hover:text-foreground">
               {product.name}
             </h3>
           </Link>
 
           {product.description ? (
-            <p className="mb-2 line-clamp-1 text-[11px] leading-relaxed text-white/30">{product.description}</p>
+            <p className="mb-2 line-clamp-1 text-[11px] leading-relaxed text-muted-foreground">{product.description}</p>
           ) : null}
 
           {/* Price + Actions — pushed to bottom */}
-          <div className="mt-auto space-y-3 border-t border-white/[0.06] pt-3">
+          <div className="mt-auto space-y-3 border-t border-border pt-3">
             <ProductTokenPricing
               acceptedTokens={acceptedTokens}
               basePriceUsd={basePriceUsd}
@@ -292,7 +292,7 @@ export const ProductCard = memo(function ProductCard({
                   onClick={handleAddToCart}
                   disabled={product.stock === 0}
                   aria-label="Thêm vào giỏ hàng"
-                  className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/50 transition-all hover:border-violet-500/30 hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
                 </button>

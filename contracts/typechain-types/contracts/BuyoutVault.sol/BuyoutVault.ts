@@ -21,93 +21,57 @@ import type {
   TypedLogDescription,
   TypedListener,
   TypedContractMethod,
-} from "../common";
+} from "../../common";
 
-export declare namespace GovernanceRWA {
-  export type ProposalStruct = {
-    id: BigNumberish;
-    proposer: AddressLike;
-    proposalType: BigNumberish;
-    description: string;
-    ipfsDoc: string;
-    executionHash: BytesLike;
-    snapshotBlock: BigNumberish;
-    forVotes: BigNumberish;
-    againstVotes: BigNumberish;
-    deadline: BigNumberish;
-    status: BigNumberish;
-    executed: boolean;
-  };
-
-  export type ProposalStructOutput = [
-    id: bigint,
-    proposer: string,
-    proposalType: bigint,
-    description: string,
-    ipfsDoc: string,
-    executionHash: string,
-    snapshotBlock: bigint,
-    forVotes: bigint,
-    againstVotes: bigint,
-    deadline: bigint,
-    status: bigint,
-    executed: boolean
-  ] & {
-    id: bigint;
-    proposer: string;
-    proposalType: bigint;
-    description: string;
-    ipfsDoc: string;
-    executionHash: string;
-    snapshotBlock: bigint;
-    forVotes: bigint;
-    againstVotes: bigint;
-    deadline: bigint;
-    status: bigint;
-    executed: boolean;
-  };
-}
-
-export interface GovernanceRWAInterface extends Interface {
+export interface BuyoutVaultInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "CLAIM_PERIOD"
       | "DEFAULT_ADMIN_ROLE"
       | "OPERATOR_ROLE"
-      | "cancelProposal"
-      | "castVote"
-      | "createProposal(uint8,string,string)"
-      | "createProposal(uint8,string,string,bytes32)"
-      | "executeProposal"
-      | "getProposal"
+      | "approvedTotalSupply"
+      | "buyer"
+      | "buyoutPricePerToken"
+      | "claimDeadline"
+      | "claimProceeds"
+      | "computeExecutionHash"
+      | "consumedProposalId"
       | "getRoleAdmin"
-      | "getVotingPower"
+      | "governanceContract"
       | "grantRole"
+      | "hasClaimed"
       | "hasRole"
-      | "hasVoted"
-      | "proposalCount"
-      | "proposalThresholdBps"
-      | "proposals"
-      | "quorumPercent"
+      | "initiateBuyout"
+      | "merkleRoot"
       | "renounceRole"
       | "revokeRole"
-      | "supermajorityPercent"
+      | "setGovernanceContract"
+      | "setMerkleRoot"
+      | "snapshotBlock"
+      | "status"
       | "supportsInterface"
-      | "token"
-      | "verifyPassedProposal"
-      | "votingPeriod"
+      | "sweepUnclaimed"
+      | "tokenAddress"
+      | "totalBuyoutPrice"
+      | "totalClaimed"
+      | "usedProposals"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "ProposalCancelled"
-      | "ProposalCreated"
-      | "ProposalExecuted"
+      | "BuyoutInitiated"
+      | "MerkleRootSet"
+      | "ProceedsClaimed"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
-      | "VoteCast"
+      | "UnclaimedSwept"
   ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "CLAIM_PERIOD",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "DEFAULT_ADMIN_ROLE",
     values?: undefined
@@ -117,63 +81,62 @@ export interface GovernanceRWAInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "cancelProposal",
-    values: [BigNumberish]
+    functionFragment: "approvedTotalSupply",
+    values?: undefined
+  ): string;
+  encodeFunctionData(functionFragment: "buyer", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "buyoutPricePerToken",
+    values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "castVote",
-    values: [BigNumberish, boolean]
+    functionFragment: "claimDeadline",
+    values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "createProposal(uint8,string,string)",
-    values: [BigNumberish, string, string]
+    functionFragment: "claimProceeds",
+    values: [BigNumberish, BytesLike[]]
   ): string;
   encodeFunctionData(
-    functionFragment: "createProposal(uint8,string,string,bytes32)",
-    values: [BigNumberish, string, string, BytesLike]
+    functionFragment: "computeExecutionHash",
+    values: [AddressLike, AddressLike, BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "executeProposal",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getProposal",
-    values: [BigNumberish]
+    functionFragment: "consumedProposalId",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "getVotingPower",
-    values: [AddressLike, BigNumberish]
+    functionFragment: "governanceContract",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "grantRole",
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "hasClaimed",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "hasRole",
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "hasVoted",
-    values: [BigNumberish, AddressLike]
+    functionFragment: "initiateBuyout",
+    values: [
+      AddressLike,
+      BigNumberish,
+      BigNumberish,
+      BigNumberish,
+      BigNumberish
+    ]
   ): string;
   encodeFunctionData(
-    functionFragment: "proposalCount",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "proposalThresholdBps",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "proposals",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "quorumPercent",
+    functionFragment: "merkleRoot",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -185,23 +148,47 @@ export interface GovernanceRWAInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "supermajorityPercent",
+    functionFragment: "setGovernanceContract",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setMerkleRoot",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "snapshotBlock",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "status", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
   ): string;
-  encodeFunctionData(functionFragment: "token", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "verifyPassedProposal",
-    values: [BigNumberish, BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "votingPeriod",
+    functionFragment: "sweepUnclaimed",
     values?: undefined
   ): string;
+  encodeFunctionData(
+    functionFragment: "tokenAddress",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalBuyoutPrice",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalClaimed",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "usedProposals",
+    values: [BigNumberish]
+  ): string;
 
+  decodeFunctionResult(
+    functionFragment: "CLAIM_PERIOD",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "DEFAULT_ADMIN_ROLE",
     data: BytesLike
@@ -211,24 +198,28 @@ export interface GovernanceRWAInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "cancelProposal",
+    functionFragment: "approvedTotalSupply",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "castVote", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "buyer", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "createProposal(uint8,string,string)",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "createProposal(uint8,string,string,bytes32)",
+    functionFragment: "buyoutPricePerToken",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "executeProposal",
+    functionFragment: "claimDeadline",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "getProposal",
+    functionFragment: "claimProceeds",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "computeExecutionHash",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "consumedProposalId",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -236,54 +227,79 @@ export interface GovernanceRWAInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "getVotingPower",
+    functionFragment: "governanceContract",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "grantRole", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "hasClaimed", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "hasVoted", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "proposalCount",
+    functionFragment: "initiateBuyout",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "proposalThresholdBps",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(functionFragment: "proposals", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "quorumPercent",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "merkleRoot", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceRole",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "supermajorityPercent",
+    functionFragment: "setGovernanceContract",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "setMerkleRoot",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "snapshotBlock",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "status", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "token", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "verifyPassedProposal",
+    functionFragment: "sweepUnclaimed",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "votingPeriod",
+    functionFragment: "tokenAddress",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "totalBuyoutPrice",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "totalClaimed",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "usedProposals",
     data: BytesLike
   ): Result;
 }
 
-export namespace ProposalCancelledEvent {
-  export type InputTuple = [id: BigNumberish];
-  export type OutputTuple = [id: bigint];
+export namespace BuyoutInitiatedEvent {
+  export type InputTuple = [
+    buyer: AddressLike,
+    proposalId: BigNumberish,
+    pricePerToken: BigNumberish,
+    totalPrice: BigNumberish
+  ];
+  export type OutputTuple = [
+    buyer: string,
+    proposalId: bigint,
+    pricePerToken: bigint,
+    totalPrice: bigint
+  ];
   export interface OutputObject {
-    id: bigint;
+    buyer: string;
+    proposalId: bigint;
+    pricePerToken: bigint;
+    totalPrice: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -291,29 +307,11 @@ export namespace ProposalCancelledEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace ProposalCreatedEvent {
-  export type InputTuple = [
-    id: BigNumberish,
-    proposer: AddressLike,
-    pType: BigNumberish,
-    description: string,
-    executionHash: BytesLike,
-    deadline: BigNumberish
-  ];
-  export type OutputTuple = [
-    id: bigint,
-    proposer: string,
-    pType: bigint,
-    description: string,
-    executionHash: string,
-    deadline: bigint
-  ];
+export namespace MerkleRootSetEvent {
+  export type InputTuple = [root: BytesLike, deadline: BigNumberish];
+  export type OutputTuple = [root: string, deadline: bigint];
   export interface OutputObject {
-    id: bigint;
-    proposer: string;
-    pType: bigint;
-    description: string;
-    executionHash: string;
+    root: string;
     deadline: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -322,11 +320,12 @@ export namespace ProposalCreatedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace ProposalExecutedEvent {
-  export type InputTuple = [id: BigNumberish];
-  export type OutputTuple = [id: bigint];
+export namespace ProceedsClaimedEvent {
+  export type InputTuple = [holder: AddressLike, amount: BigNumberish];
+  export type OutputTuple = [holder: string, amount: bigint];
   export interface OutputObject {
-    id: bigint;
+    holder: string;
+    amount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -392,24 +391,12 @@ export namespace RoleRevokedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace VoteCastEvent {
-  export type InputTuple = [
-    proposalId: BigNumberish,
-    voter: AddressLike,
-    support: boolean,
-    weight: BigNumberish
-  ];
-  export type OutputTuple = [
-    proposalId: bigint,
-    voter: string,
-    support: boolean,
-    weight: bigint
-  ];
+export namespace UnclaimedSweptEvent {
+  export type InputTuple = [buyer: AddressLike, amount: BigNumberish];
+  export type OutputTuple = [buyer: string, amount: bigint];
   export interface OutputObject {
-    proposalId: bigint;
-    voter: string;
-    support: boolean;
-    weight: bigint;
+    buyer: string;
+    amount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -417,11 +404,11 @@ export namespace VoteCastEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export interface GovernanceRWA extends BaseContract {
-  connect(runner?: ContractRunner | null): GovernanceRWA;
+export interface BuyoutVault extends BaseContract {
+  connect(runner?: ContractRunner | null): BuyoutVault;
   waitForDeployment(): Promise<this>;
 
-  interface: GovernanceRWAInterface;
+  interface: BuyoutVaultInterface;
 
   queryFilter<TCEvent extends TypedContractEvent>(
     event: TCEvent,
@@ -460,58 +447,43 @@ export interface GovernanceRWA extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  CLAIM_PERIOD: TypedContractMethod<[], [bigint], "view">;
+
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
   OPERATOR_ROLE: TypedContractMethod<[], [string], "view">;
 
-  cancelProposal: TypedContractMethod<
-    [proposalId: BigNumberish],
+  approvedTotalSupply: TypedContractMethod<[], [bigint], "view">;
+
+  buyer: TypedContractMethod<[], [string], "view">;
+
+  buyoutPricePerToken: TypedContractMethod<[], [bigint], "view">;
+
+  claimDeadline: TypedContractMethod<[], [bigint], "view">;
+
+  claimProceeds: TypedContractMethod<
+    [tokenBalance: BigNumberish, proof: BytesLike[]],
     [void],
     "nonpayable"
   >;
 
-  castVote: TypedContractMethod<
-    [proposalId: BigNumberish, support: boolean],
-    [void],
-    "nonpayable"
-  >;
-
-  "createProposal(uint8,string,string)": TypedContractMethod<
-    [pType: BigNumberish, description: string, ipfsDoc: string],
-    [bigint],
-    "nonpayable"
-  >;
-
-  "createProposal(uint8,string,string,bytes32)": TypedContractMethod<
+  computeExecutionHash: TypedContractMethod<
     [
-      pType: BigNumberish,
-      description: string,
-      ipfsDoc: string,
-      executionHash: BytesLike
+      vault_: AddressLike,
+      token_: AddressLike,
+      pricePerToken_: BigNumberish,
+      snapshotBlock_: BigNumberish,
+      totalSupply_: BigNumberish
     ],
-    [bigint],
-    "nonpayable"
-  >;
-
-  executeProposal: TypedContractMethod<
-    [proposalId: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
-
-  getProposal: TypedContractMethod<
-    [id: BigNumberish],
-    [GovernanceRWA.ProposalStructOutput],
+    [string],
     "view"
   >;
+
+  consumedProposalId: TypedContractMethod<[], [bigint], "view">;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
-  getVotingPower: TypedContractMethod<
-    [voter: AddressLike, proposalId: BigNumberish],
-    [bigint],
-    "view"
-  >;
+  governanceContract: TypedContractMethod<[], [string], "view">;
 
   grantRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -519,57 +491,27 @@ export interface GovernanceRWA extends BaseContract {
     "nonpayable"
   >;
 
+  hasClaimed: TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
+
   hasRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
     [boolean],
     "view"
   >;
 
-  hasVoted: TypedContractMethod<
-    [arg0: BigNumberish, arg1: AddressLike],
-    [boolean],
-    "view"
-  >;
-
-  proposalCount: TypedContractMethod<[], [bigint], "view">;
-
-  proposalThresholdBps: TypedContractMethod<[], [bigint], "view">;
-
-  proposals: TypedContractMethod<
-    [arg0: BigNumberish],
+  initiateBuyout: TypedContractMethod<
     [
-      [
-        bigint,
-        string,
-        bigint,
-        string,
-        string,
-        string,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        boolean
-      ] & {
-        id: bigint;
-        proposer: string;
-        proposalType: bigint;
-        description: string;
-        ipfsDoc: string;
-        executionHash: string;
-        snapshotBlock: bigint;
-        forVotes: bigint;
-        againstVotes: bigint;
-        deadline: bigint;
-        status: bigint;
-        executed: boolean;
-      }
+      token_: AddressLike,
+      pricePerToken_: BigNumberish,
+      snapshotBlock_: BigNumberish,
+      totalSupply_: BigNumberish,
+      governanceProposalId: BigNumberish
     ],
-    "view"
+    [void],
+    "payable"
   >;
 
-  quorumPercent: TypedContractMethod<[], [bigint], "view">;
+  merkleRoot: TypedContractMethod<[], [string], "view">;
 
   renounceRole: TypedContractMethod<
     [role: BytesLike, callerConfirmation: AddressLike],
@@ -583,7 +525,17 @@ export interface GovernanceRWA extends BaseContract {
     "nonpayable"
   >;
 
-  supermajorityPercent: TypedContractMethod<[], [bigint], "view">;
+  setGovernanceContract: TypedContractMethod<
+    [governance_: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  setMerkleRoot: TypedContractMethod<[root: BytesLike], [void], "nonpayable">;
+
+  snapshotBlock: TypedContractMethod<[], [bigint], "view">;
+
+  status: TypedContractMethod<[], [bigint], "view">;
 
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
@@ -591,20 +543,23 @@ export interface GovernanceRWA extends BaseContract {
     "view"
   >;
 
-  token: TypedContractMethod<[], [string], "view">;
+  sweepUnclaimed: TypedContractMethod<[], [void], "nonpayable">;
 
-  verifyPassedProposal: TypedContractMethod<
-    [proposalId: BigNumberish, expectedHash: BytesLike],
-    [boolean],
-    "view"
-  >;
+  tokenAddress: TypedContractMethod<[], [string], "view">;
 
-  votingPeriod: TypedContractMethod<[], [bigint], "view">;
+  totalBuyoutPrice: TypedContractMethod<[], [bigint], "view">;
+
+  totalClaimed: TypedContractMethod<[], [bigint], "view">;
+
+  usedProposals: TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
 
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
+  getFunction(
+    nameOrSignature: "CLAIM_PERIOD"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
@@ -612,54 +567,46 @@ export interface GovernanceRWA extends BaseContract {
     nameOrSignature: "OPERATOR_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "cancelProposal"
-  ): TypedContractMethod<[proposalId: BigNumberish], [void], "nonpayable">;
+    nameOrSignature: "approvedTotalSupply"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
-    nameOrSignature: "castVote"
+    nameOrSignature: "buyer"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "buyoutPricePerToken"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "claimDeadline"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "claimProceeds"
   ): TypedContractMethod<
-    [proposalId: BigNumberish, support: boolean],
+    [tokenBalance: BigNumberish, proof: BytesLike[]],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "createProposal(uint8,string,string)"
-  ): TypedContractMethod<
-    [pType: BigNumberish, description: string, ipfsDoc: string],
-    [bigint],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "createProposal(uint8,string,string,bytes32)"
+    nameOrSignature: "computeExecutionHash"
   ): TypedContractMethod<
     [
-      pType: BigNumberish,
-      description: string,
-      ipfsDoc: string,
-      executionHash: BytesLike
+      vault_: AddressLike,
+      token_: AddressLike,
+      pricePerToken_: BigNumberish,
+      snapshotBlock_: BigNumberish,
+      totalSupply_: BigNumberish
     ],
-    [bigint],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "executeProposal"
-  ): TypedContractMethod<[proposalId: BigNumberish], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "getProposal"
-  ): TypedContractMethod<
-    [id: BigNumberish],
-    [GovernanceRWA.ProposalStructOutput],
+    [string],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "consumedProposalId"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
   getFunction(
-    nameOrSignature: "getVotingPower"
-  ): TypedContractMethod<
-    [voter: AddressLike, proposalId: BigNumberish],
-    [bigint],
-    "view"
-  >;
+    nameOrSignature: "governanceContract"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "grantRole"
   ): TypedContractMethod<
@@ -668,6 +615,9 @@ export interface GovernanceRWA extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "hasClaimed"
+  ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
+  getFunction(
     nameOrSignature: "hasRole"
   ): TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -675,56 +625,21 @@ export interface GovernanceRWA extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "hasVoted"
+    nameOrSignature: "initiateBuyout"
   ): TypedContractMethod<
-    [arg0: BigNumberish, arg1: AddressLike],
-    [boolean],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "proposalCount"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "proposalThresholdBps"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "proposals"
-  ): TypedContractMethod<
-    [arg0: BigNumberish],
     [
-      [
-        bigint,
-        string,
-        bigint,
-        string,
-        string,
-        string,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        boolean
-      ] & {
-        id: bigint;
-        proposer: string;
-        proposalType: bigint;
-        description: string;
-        ipfsDoc: string;
-        executionHash: string;
-        snapshotBlock: bigint;
-        forVotes: bigint;
-        againstVotes: bigint;
-        deadline: bigint;
-        status: bigint;
-        executed: boolean;
-      }
+      token_: AddressLike,
+      pricePerToken_: BigNumberish,
+      snapshotBlock_: BigNumberish,
+      totalSupply_: BigNumberish,
+      governanceProposalId: BigNumberish
     ],
-    "view"
+    [void],
+    "payable"
   >;
   getFunction(
-    nameOrSignature: "quorumPercent"
-  ): TypedContractMethod<[], [bigint], "view">;
+    nameOrSignature: "merkleRoot"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "renounceRole"
   ): TypedContractMethod<
@@ -740,45 +655,56 @@ export interface GovernanceRWA extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "supermajorityPercent"
+    nameOrSignature: "setGovernanceContract"
+  ): TypedContractMethod<[governance_: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setMerkleRoot"
+  ): TypedContractMethod<[root: BytesLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "snapshotBlock"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "status"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
-    nameOrSignature: "token"
+    nameOrSignature: "sweepUnclaimed"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "tokenAddress"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "verifyPassedProposal"
-  ): TypedContractMethod<
-    [proposalId: BigNumberish, expectedHash: BytesLike],
-    [boolean],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "votingPeriod"
+    nameOrSignature: "totalBuyoutPrice"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "totalClaimed"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "usedProposals"
+  ): TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
 
   getEvent(
-    key: "ProposalCancelled"
+    key: "BuyoutInitiated"
   ): TypedContractEvent<
-    ProposalCancelledEvent.InputTuple,
-    ProposalCancelledEvent.OutputTuple,
-    ProposalCancelledEvent.OutputObject
+    BuyoutInitiatedEvent.InputTuple,
+    BuyoutInitiatedEvent.OutputTuple,
+    BuyoutInitiatedEvent.OutputObject
   >;
   getEvent(
-    key: "ProposalCreated"
+    key: "MerkleRootSet"
   ): TypedContractEvent<
-    ProposalCreatedEvent.InputTuple,
-    ProposalCreatedEvent.OutputTuple,
-    ProposalCreatedEvent.OutputObject
+    MerkleRootSetEvent.InputTuple,
+    MerkleRootSetEvent.OutputTuple,
+    MerkleRootSetEvent.OutputObject
   >;
   getEvent(
-    key: "ProposalExecuted"
+    key: "ProceedsClaimed"
   ): TypedContractEvent<
-    ProposalExecutedEvent.InputTuple,
-    ProposalExecutedEvent.OutputTuple,
-    ProposalExecutedEvent.OutputObject
+    ProceedsClaimedEvent.InputTuple,
+    ProceedsClaimedEvent.OutputTuple,
+    ProceedsClaimedEvent.OutputObject
   >;
   getEvent(
     key: "RoleAdminChanged"
@@ -802,45 +728,45 @@ export interface GovernanceRWA extends BaseContract {
     RoleRevokedEvent.OutputObject
   >;
   getEvent(
-    key: "VoteCast"
+    key: "UnclaimedSwept"
   ): TypedContractEvent<
-    VoteCastEvent.InputTuple,
-    VoteCastEvent.OutputTuple,
-    VoteCastEvent.OutputObject
+    UnclaimedSweptEvent.InputTuple,
+    UnclaimedSweptEvent.OutputTuple,
+    UnclaimedSweptEvent.OutputObject
   >;
 
   filters: {
-    "ProposalCancelled(uint256)": TypedContractEvent<
-      ProposalCancelledEvent.InputTuple,
-      ProposalCancelledEvent.OutputTuple,
-      ProposalCancelledEvent.OutputObject
+    "BuyoutInitiated(address,uint256,uint256,uint256)": TypedContractEvent<
+      BuyoutInitiatedEvent.InputTuple,
+      BuyoutInitiatedEvent.OutputTuple,
+      BuyoutInitiatedEvent.OutputObject
     >;
-    ProposalCancelled: TypedContractEvent<
-      ProposalCancelledEvent.InputTuple,
-      ProposalCancelledEvent.OutputTuple,
-      ProposalCancelledEvent.OutputObject
-    >;
-
-    "ProposalCreated(uint256,address,uint8,string,bytes32,uint256)": TypedContractEvent<
-      ProposalCreatedEvent.InputTuple,
-      ProposalCreatedEvent.OutputTuple,
-      ProposalCreatedEvent.OutputObject
-    >;
-    ProposalCreated: TypedContractEvent<
-      ProposalCreatedEvent.InputTuple,
-      ProposalCreatedEvent.OutputTuple,
-      ProposalCreatedEvent.OutputObject
+    BuyoutInitiated: TypedContractEvent<
+      BuyoutInitiatedEvent.InputTuple,
+      BuyoutInitiatedEvent.OutputTuple,
+      BuyoutInitiatedEvent.OutputObject
     >;
 
-    "ProposalExecuted(uint256)": TypedContractEvent<
-      ProposalExecutedEvent.InputTuple,
-      ProposalExecutedEvent.OutputTuple,
-      ProposalExecutedEvent.OutputObject
+    "MerkleRootSet(bytes32,uint256)": TypedContractEvent<
+      MerkleRootSetEvent.InputTuple,
+      MerkleRootSetEvent.OutputTuple,
+      MerkleRootSetEvent.OutputObject
     >;
-    ProposalExecuted: TypedContractEvent<
-      ProposalExecutedEvent.InputTuple,
-      ProposalExecutedEvent.OutputTuple,
-      ProposalExecutedEvent.OutputObject
+    MerkleRootSet: TypedContractEvent<
+      MerkleRootSetEvent.InputTuple,
+      MerkleRootSetEvent.OutputTuple,
+      MerkleRootSetEvent.OutputObject
+    >;
+
+    "ProceedsClaimed(address,uint256)": TypedContractEvent<
+      ProceedsClaimedEvent.InputTuple,
+      ProceedsClaimedEvent.OutputTuple,
+      ProceedsClaimedEvent.OutputObject
+    >;
+    ProceedsClaimed: TypedContractEvent<
+      ProceedsClaimedEvent.InputTuple,
+      ProceedsClaimedEvent.OutputTuple,
+      ProceedsClaimedEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<
@@ -876,15 +802,15 @@ export interface GovernanceRWA extends BaseContract {
       RoleRevokedEvent.OutputObject
     >;
 
-    "VoteCast(uint256,address,bool,uint256)": TypedContractEvent<
-      VoteCastEvent.InputTuple,
-      VoteCastEvent.OutputTuple,
-      VoteCastEvent.OutputObject
+    "UnclaimedSwept(address,uint256)": TypedContractEvent<
+      UnclaimedSweptEvent.InputTuple,
+      UnclaimedSweptEvent.OutputTuple,
+      UnclaimedSweptEvent.OutputObject
     >;
-    VoteCast: TypedContractEvent<
-      VoteCastEvent.InputTuple,
-      VoteCastEvent.OutputTuple,
-      VoteCastEvent.OutputObject
+    UnclaimedSwept: TypedContractEvent<
+      UnclaimedSweptEvent.InputTuple,
+      UnclaimedSweptEvent.OutputTuple,
+      UnclaimedSweptEvent.OutputObject
     >;
   };
 }

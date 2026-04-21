@@ -1550,8 +1550,8 @@
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\BuyoutVault.sol": {
-      "lastModificationDate": 1776703481823,
-      "contentHash": "6b2c99dbfd1a9107de338ae0f1b6b928",
+      "lastModificationDate": 1776750277376,
+      "contentHash": "ce57c118ff61cf706f4bc52f21aa8d80",
       "sourceName": "contracts/BuyoutVault.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -1587,7 +1587,8 @@
         "^0.8.20"
       ],
       "artifacts": [
-        "BuyoutVault"
+        "BuyoutVault",
+        "IGovernanceRWA"
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\node_modules\\@openzeppelin\\contracts\\utils\\cryptography\\MerkleProof.sol": {
@@ -2381,8 +2382,8 @@
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\GovernanceRWA.sol": {
-      "lastModificationDate": 1776703183759,
-      "contentHash": "78106d768ddb0258376957e196736799",
+      "lastModificationDate": 1776750080874,
+      "contentHash": "89f427d4ab2f5014b2abdd24364608e2",
       "sourceName": "contracts/GovernanceRWA.sol",
       "solcConfig": {
         "version": "0.8.20",

@@ -174,6 +174,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.BuyoutVault__factory>;
     getContractFactory(
+      name: "IGovernanceRWA",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IGovernanceRWA__factory>;
+    getContractFactory(
       name: "ComplianceRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ComplianceRegistry__factory>;
@@ -435,6 +439,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.BuyoutVault>;
     getContractAt(
+      name: "IGovernanceRWA",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IGovernanceRWA>;
+    getContractAt(
       name: "ComplianceRegistry",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -671,6 +680,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.BuyoutVault>;
     deployContract(
+      name: "IGovernanceRWA",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IGovernanceRWA>;
+    deployContract(
       name: "ComplianceRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ComplianceRegistry>;
@@ -931,6 +944,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.BuyoutVault>;
+    deployContract(
+      name: "IGovernanceRWA",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IGovernanceRWA>;
     deployContract(
       name: "ComplianceRegistry",
       args: any[],
