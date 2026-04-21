@@ -100,14 +100,27 @@ export function CyberGrid() {
 
       // Update particles
       for (const p of particles) {
-        // Mouse repulsion / attraction
+        // Mouse repulsion
         const dx = p.x - mx;
         const dy = p.y - my;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 200) {
+        if (dist < 200 && dist > 0) {
           const force = (200 - dist) / 200 * 0.6;
           p.vx += (dx / dist) * force;
           p.vy += (dy / dist) * force;
+        }
+
+        // Inter-particle separation — keep min ~50px apart
+        for (const q of particles) {
+          if (p === q) continue;
+          const sx = p.x - q.x;
+          const sy = p.y - q.y;
+          const sd = Math.sqrt(sx * sx + sy * sy);
+          if (sd < 50 && sd > 0) {
+            const repel = (50 - sd) / 50 * 0.15;
+            p.vx += (sx / sd) * repel;
+            p.vy += (sy / sd) * repel;
+          }
         }
 
         // Friction
@@ -118,11 +131,11 @@ export function CyberGrid() {
         p.y += p.vy;
         p.pulse += p.pulseSpeed;
 
-        // Wrap edges
-        if (p.x < -10) p.x = w + 10;
-        if (p.x > w + 10) p.x = -10;
-        if (p.y < -10) p.y = h + 10;
-        if (p.y > h + 10) p.y = -10;
+        // Toroidal wrap — exit one side, appear on opposite
+        if (p.x < 0) p.x += w;
+        else if (p.x > w) p.x -= w;
+        if (p.y < 0) p.y += h;
+        else if (p.y > h) p.y -= h;
 
         // Draw particle dot with pulse
         const pulsedOpacity = p.opacity * (0.5 + 0.5 * Math.sin(p.pulse)) * globalAlpha;
