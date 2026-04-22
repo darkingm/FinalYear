@@ -99,6 +99,13 @@ export class CryptoPaymentService {
     this.providers.set(42161, new ethers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL));
     this.providers.set(97, bscTestFallback);
     this.providers.set(421614, new ethers.JsonRpcProvider(process.env.ARB_SEPOLIA_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'));
+
+    logger.info('[CryptoPaymentService] Initialized RPC providers', {
+      chain_31337: localRpc,
+      chain_84532: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
+      chain_80002: amoyRpcs.join(', '),
+      total_chains: this.providers.size,
+    });
   }
 
   private getRequiredConfirmations(chainId: number) {
@@ -669,29 +676,35 @@ export class CryptoPaymentService {
         return await operation();
       } catch (error: any) {
         lastError = error;
+        const msg = error?.message || '';
 
-        // Check if this is a rate limit error
-        const isRateLimit =
+        // Retry on: rate limit, connection refused, timeout, network errors
+        const isRetryable =
           error?.error?.code === -32090 ||
-          error?.message?.includes('rate limit') ||
-          error?.message?.includes('Too many requests');
+          msg.includes('rate limit') ||
+          msg.includes('Too many requests') ||
+          msg.includes('ECONNREFUSED') ||
+          msg.includes('ETIMEDOUT') ||
+          msg.includes('ECONNRESET') ||
+          msg.includes('ENOTFOUND') ||
+          msg.includes('network error') ||
+          msg.includes('server error') ||
+          msg.includes('could not detect network') ||
+          msg.includes('missing response');
 
-        if (!isRateLimit || attempt === maxRetries - 1) {
-          // Not a rate limit error, or we've exhausted retries
+        if (!isRetryable || attempt === maxRetries - 1) {
           throw error;
         }
 
-        // Calculate delay with exponential backoff
         const delayMs = initialDelayMs * Math.pow(2, attempt);
 
-        logger.warn('RPC rate limit hit, retrying...', {
+        logger.warn('RPC error, retrying...', {
           attempt: attempt + 1,
           maxRetries,
           delayMs,
-          error: error.message,
+          error: msg,
         });
 
-        // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
@@ -700,6 +713,8 @@ export class CryptoPaymentService {
   }
 
   async verifyTransaction(txHash: string) {
+    logger.info('[verify] Starting verification', { tx_hash: txHash });
+
     // Get payment record
     const paymentResult = await query(
       'SELECT * FROM payments WHERE tx_hash = $1',
@@ -707,6 +722,7 @@ export class CryptoPaymentService {
     );
 
     if (paymentResult.rows.length === 0) {
+      logger.warn('[verify] No payment record found', { tx_hash: txHash });
       throw new AppError('Payment not found', 404);
     }
 
@@ -715,27 +731,43 @@ export class CryptoPaymentService {
     const affectedOrderIds = collectAffectedOrderIds(payments);
     const provider = this.providers.get(payment.chain_id);
 
+    logger.info('[verify] Payment record found', {
+      tx_hash: txHash,
+      chain_id: payment.chain_id,
+      payment_status: payment.status,
+      order_ids: affectedOrderIds,
+      has_provider: !!provider,
+    });
+
     if (!provider) {
+      logger.error('[verify] No provider for chain', { chain_id: payment.chain_id });
       throw new AppError('Unsupported chain', 400);
     }
 
     // Get transaction receipt with retry logic
     let receipt;
     try {
+      logger.info('[verify] Fetching tx receipt from RPC...', { tx_hash: txHash, chain_id: payment.chain_id });
       receipt = await this.retryWithBackoff(
         () => provider.getTransactionReceipt(txHash),
         5,
         1000
       );
-    } catch (error: any) {
-      logger.error('Error verifying transaction', {
+      logger.info('[verify] Receipt result', {
         tx_hash: txHash,
+        has_receipt: !!receipt,
+        receipt_status: receipt?.status,
+        block_number: receipt?.blockNumber,
+      });
+    } catch (error: any) {
+      logger.error('[verify] RPC getTransactionReceipt FAILED after retries', {
+        tx_hash: txHash,
+        chain_id: payment.chain_id,
         error: error.message,
-        service: 'payment-service',
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        error_code: error.code,
+        error_reason: error.reason,
       });
 
-      // Re-throw as AppError for consistent error handling
       throw new AppError(
         `Error verifying transaction: ${error.message}`,
         500
@@ -743,7 +775,7 @@ export class CryptoPaymentService {
     }
 
     if (!receipt) {
-      // Transaction still pending
+      logger.info('[verify] No receipt yet — tx still pending', { tx_hash: txHash });
       return {
         verified: false,
         status: 'pending',
