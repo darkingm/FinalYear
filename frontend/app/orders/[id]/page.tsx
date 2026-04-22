@@ -204,8 +204,8 @@ export default function OrderDetailPage() {
 
   // Auto poll order status while waiting for blockchain confirmation
   useEffect(() => {
-    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'];
-    const terminalStatuses = ['PAID', 'CANCELLED', 'TX_FAILED', 'REFUNDED', 'COMPLETED', 'SHIPPED', 'DELIVERED', 'DISPUTED'];
+    const pollingStatuses = ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED', 'PAID'];
+    const terminalStatuses = ['CANCELLED', 'TX_FAILED', 'REFUNDED', 'COMPLETED', 'SHIPPED', 'DELIVERED', 'DISPUTED'];
 
     if (!order?.status || terminalStatuses.includes(order.status)) return;
     if (!pollingStatuses.includes(order.status)) return;
@@ -505,7 +505,7 @@ export default function OrderDetailPage() {
 
             <OrderTrackingSnapshot status={order.status} verification={paymentSnapshot} className="mb-8" />
 
-            {order.payment_method === 'crypto' && ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(order.status) && (
+            {order.payment_method === 'crypto' && ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED', 'PAID'].includes(order.status) && (
               <div className={`${getPaymentAccentPanelClass('amber')} mb-8 p-4`}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
@@ -588,8 +588,8 @@ export default function OrderDetailPage() {
               <div className="flex items-center gap-0 text-[9px] font-bold select-none">
                 {[
                   { label: 'Đã gửi', done: ['TX_SUBMITTED','ONCHAIN_PENDING','ONCHAIN_CONFIRMED','PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
-                  { label: 'Xác nhận', done: ['ONCHAIN_PENDING','ONCHAIN_CONFIRMED','PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) },
-                  { label: 'Đang khóa', done: ['PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED','DISPUTED'].includes(order.status) },
+                  { label: 'Xác nhận', done: ['ONCHAIN_PENDING','ONCHAIN_CONFIRMED','PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED'].includes(order.status) || paymentSnapshot?.verificationState === 'confirmed' },
+                  { label: 'Đang khóa', done: ['PAYMENT_VALIDATED','PAID','SHIPPED','DELIVERED','COMPLETED','DISPUTED'].includes(order.status) || paymentSnapshot?.verificationState === 'confirmed' },
                   { label: 'Giải ngân', done: ['COMPLETED','REFUNDED'].includes(order.status) },
                 ].map((step, i, arr) => (
                   <div key={step.label} className="flex items-center flex-1">

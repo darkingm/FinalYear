@@ -28,6 +28,7 @@ import {
   createPaymentBatchSession,
   getPaymentBatchSessionQuote,
   submitPaymentBatchSessionTransaction,
+  getPaymentBatchSessionStatus,
   type PaymentBatchSession,
 } from '@/lib/payments/payment-batch-session';
 import {
@@ -335,7 +336,8 @@ export default function CartCheckoutPage() {
       });
       const hash = typeof tx === 'string' ? tx : (tx as any).hash;
 
-      toast.loading('Đang chờ xác nhận...', { id: 'tx' });
+      toast.loading('Đã gửi giao dịch, đang chờ xác nhận on-chain...', { id: 'tx' });
+      setTxHash(hash);
 
       await submitPaymentBatchSessionTransaction({
         sessionId: paymentBatchSession.session_id,
@@ -343,16 +345,62 @@ export default function CartCheckoutPage() {
         txHash: hash,
       });
 
-      toast.success('Giao dịch đã gửi thành công! 🎉', { id: 'tx' });
-      setTxHash(hash);
-      setPayStep('done');
-      setConfirmed(true);
+      // Poll for on-chain confirmation instead of immediately marking done
+      setPayStep('sending'); // keep spinner visible
+      setSubmitting(false);
+
+      const maxWaitMs = 120_000;
+      const pollStart = Date.now();
+      let pollCount = 0;
+
+      const poll = async (): Promise<void> => {
+        if (Date.now() - pollStart > maxWaitMs) {
+          // Timeout — let user know it's still processing
+          toast.info('Vẫn đang xác nhận... Kiểm tra trang đơn hàng.', { id: 'tx', duration: 8000 });
+          setPayStep('done');
+          setConfirmed(true); // allow user to navigate away
+          return;
+        }
+        try {
+          const statusRes = await getPaymentBatchSessionStatus({
+            sessionId: paymentBatchSession.session_id,
+            nonce: paymentBatchSession.nonce,
+          });
+          const verState = statusRes?.status?.verification_state || statusRes?.verification_state;
+          const sessionStatus = statusRes?.status?.status || statusRes?.session_status;
+
+          if (verState === 'confirmed' || sessionStatus === 'PAID' || sessionStatus === 'ONCHAIN_CONFIRMED') {
+            toast.success('Thanh toán batch đã xác nhận on-chain! 🎉', { id: 'tx' });
+            setPayStep('done');
+            setConfirmed(true);
+            return;
+          }
+
+          if (verState === 'failed' || sessionStatus === 'TX_FAILED') {
+            toast.error('Giao dịch thất bại trên blockchain.', { id: 'tx' });
+            setPayStep('idle');
+            return;
+          }
+        } catch (pollErr: any) {
+          console.warn('[cart poll] error:', pollErr?.message || pollErr);
+          if (pollCount > 3 && pollErr?.message) {
+            toast.error(`Kiểm tra blockchain gặp lỗi: ${pollErr.message}`, { id: 'poll-error', duration: 5000 });
+          }
+        }
+
+        pollCount++;
+        const delay = Math.min(3000 + pollCount * 500, 8000);
+        await new Promise(r => setTimeout(r, delay));
+        return poll();
+      };
+
+      poll().catch(() => { setPayStep('done'); setConfirmed(true); });
+
     } catch (e: any) {
       const msg = e.shortMessage || e.message || 'Giao dịch thất bại';
       if (e.code === 4001 || msg.includes('rejected')) toast.info('Đã hủy giao dịch');
       else toast.error(msg);
       setPayStep('idle');
-    } finally {
       setSubmitting(false);
     }
   };

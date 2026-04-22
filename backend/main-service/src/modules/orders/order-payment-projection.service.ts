@@ -61,7 +61,7 @@ export function projectOrderStatus(input: { currentStatus: string; eventType: st
     return currentStatus;
   }
 
-  if (eventType === 'payment.failed') {
+  if (eventType === 'payment.failed' || eventType === 'payment.expired') {
     if (['UNPAID', 'TX_SUBMITTED', 'TX_FAILED'].includes(currentStatus)) {
       return 'TX_FAILED';
     }

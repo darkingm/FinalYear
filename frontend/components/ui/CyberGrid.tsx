@@ -105,8 +105,8 @@ export function CyberGrid() {
         const dx = p.x - mx;
         const dy = p.y - my;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 200 && dist > 0) {
-          const force = (200 - dist) / 200 * 0.6;
+        if (dist < 120 && dist > 0) {
+          const force = (120 - dist) / 120 * 0.6;
           p.vx += (dx / dist) * force;
           p.vy += (dy / dist) * force;
         }
@@ -168,7 +168,7 @@ export function CyberGrid() {
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
             ctx.strokeStyle = `rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${alpha})`;
-            ctx.lineWidth = 0.6;
+            ctx.lineWidth = 1;
             ctx.stroke();
           }
         }
@@ -185,7 +185,7 @@ export function CyberGrid() {
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(mx, my);
           ctx.strokeStyle = `rgba(${mouseGlowColor.r}, ${mouseGlowColor.g}, ${mouseGlowColor.b}, ${alpha})`;
-          ctx.lineWidth = 0.5;
+          ctx.lineWidth = 1;
           ctx.stroke();
         }
       }

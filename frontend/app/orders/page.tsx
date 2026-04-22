@@ -70,7 +70,7 @@ const STATUS_CONFIG: Record<string, {
 const FILTERS = [
   { value: 'all', labelKey: 'orders.filterAll', statuses: [] as string[] },
   { value: 'pending', labelKey: 'orders.filterPending', statuses: ['UNPAID', 'TX_SUBMITTED', 'ONCHAIN_PENDING'] },
-  { value: 'active', labelKey: 'orders.filterActive', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PROCESSING'] },
+  { value: 'active', labelKey: 'orders.filterActive', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PROCESSING', 'SHIPPED'] },
   { value: 'shipping', labelKey: 'orders.filterShipping', statuses: ['DELIVERING', 'SHIPPED'] },
   { value: 'done', labelKey: 'orders.filterDone', statuses: ['DELIVERED', 'COMPLETED'] },
   { value: 'issue', labelKey: 'orders.filterIssue', statuses: ['CANCELLED', 'REFUNDED', 'DISPUTED', 'TX_FAILED'] },

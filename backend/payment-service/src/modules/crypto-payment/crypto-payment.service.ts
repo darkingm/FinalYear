@@ -35,6 +35,7 @@ const ESCROW_ABI = [
 ];
 
 const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000';
+const DEFAULT_STALE_PAYMENT_WINDOW_MINUTES = 60;
 
 // All supported payment chains (demo-first, then primary public testnet)
 const ALL_SUPPORTED_CHAINS = [31337, 84532, 80002, 97, 421614, 137, 42161, 56, 1];
@@ -118,6 +119,17 @@ export class CryptoPaymentService {
 
   private isIdempotentSubmittedOrder(order: { status: string; tx_hash: string | null }, txHash: string) {
     return ['PAID', 'ONCHAIN_CONFIRMED'].includes(order.status) && order.tx_hash === txHash;
+  }
+
+  private resolveStalePaymentWindowMinutes(overrideMinutes?: number) {
+    if (Number.isFinite(overrideMinutes) && Number(overrideMinutes) > 0) {
+      return Math.floor(Number(overrideMinutes));
+    }
+
+    const envMinutes = Number(process.env.CRYPTO_PAYMENT_STALE_MINUTES || DEFAULT_STALE_PAYMENT_WINDOW_MINUTES);
+    return Number.isFinite(envMinutes) && envMinutes > 0
+      ? Math.floor(envMinutes)
+      : DEFAULT_STALE_PAYMENT_WINDOW_MINUTES;
   }
 
   private async loadOrderPaymentContext(orderId: number) {
@@ -901,6 +913,136 @@ export class CryptoPaymentService {
       status: 'confirming',
       confirmations,
       required_confirmations: requiredConfirmations,
+    };
+  }
+
+  async expireStalePayments(input: {
+    olderThanMinutes?: number;
+    source?: 'worker' | 'manual' | 'system';
+  } = {}) {
+    const olderThanMinutes = this.resolveStalePaymentWindowMinutes(input.olderThanMinutes);
+    const source = input.source ?? 'system';
+    const staleBefore = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+
+    const stalePaymentsResult = await query(
+      `SELECT payment_id,
+              order_id,
+              tx_hash,
+              chain_id,
+              status,
+              created_at,
+              updated_at,
+              block_number,
+              block_timestamp
+       FROM payments
+       WHERE payment_type = 'crypto'
+         AND status = 'pending'
+         AND tx_hash IS NOT NULL
+         AND tx_hash NOT LIKE 'paypal-%'
+         AND block_number IS NULL
+         AND block_timestamp IS NULL
+         AND COALESCE(updated_at, created_at) <= $1
+       ORDER BY COALESCE(updated_at, created_at) ASC
+       LIMIT 100`,
+      [staleBefore]
+    );
+
+    const stalePayments = stalePaymentsResult.rows;
+    if (stalePayments.length === 0) {
+      return {
+        expired_payment_count: 0,
+        expired_order_count: 0,
+        expired_order_ids: [],
+        skipped_order_ids: [],
+      };
+    }
+
+    const orderIds = [...new Set(stalePayments.map((payment: any) => Number(payment.order_id)).filter(Number.isFinite))];
+    const orderStatusResult = await mainQuery(
+      `SELECT order_id, status
+       FROM orders
+       WHERE order_id = ANY($1::int[])`,
+      [orderIds]
+    );
+
+    const pendingOrderStatuses = new Set(['TX_SUBMITTED', 'ONCHAIN_PENDING']);
+    const orderStatusById = new Map<number, string>(
+      orderStatusResult.rows.map((row: any) => [Number(row.order_id), row.status])
+    );
+
+    const eligiblePayments = stalePayments.filter((payment: any) => {
+      const orderStatus = orderStatusById.get(Number(payment.order_id));
+      return orderStatus ? pendingOrderStatuses.has(orderStatus) : false;
+    });
+
+    const expiredOrderIds = [...new Set(eligiblePayments.map((payment: any) => Number(payment.order_id)))];
+    const skippedOrderIds = orderIds.filter((orderId) => !expiredOrderIds.includes(orderId));
+
+    if (eligiblePayments.length === 0) {
+      return {
+        expired_payment_count: 0,
+        expired_order_count: 0,
+        expired_order_ids: [],
+        skipped_order_ids: skippedOrderIds,
+      };
+    }
+
+    for (const payment of eligiblePayments) {
+      await this.paymentEventService.recordTransition({
+        orderId: Number(payment.order_id),
+        paymentId: Number(payment.payment_id),
+        sessionId: null,
+        txHash: payment.tx_hash,
+        chainId: payment.chain_id ?? null,
+        eventType: PAYMENT_EVENT_TYPES.EXPIRED,
+        toState: 'failed',
+        reason: 'Transaction receipt not found before expiry window',
+        metadata: {
+          source,
+          older_than_minutes: olderThanMinutes,
+          stale_before: staleBefore.toISOString(),
+          payment_created_at: payment.created_at instanceof Date
+            ? payment.created_at.toISOString()
+            : payment.created_at,
+          payment_updated_at: payment.updated_at instanceof Date
+            ? payment.updated_at.toISOString()
+            : payment.updated_at,
+        },
+      });
+    }
+
+    await mainQuery(
+      `UPDATE orders
+       SET status = 'TX_FAILED',
+           updated_at = NOW()
+       WHERE order_id = ANY($1::int[])`,
+      [expiredOrderIds]
+    );
+
+    // Also mark payment rows as failed so TxMonitorWorker stops re-processing them
+    const expiredPaymentIds = eligiblePayments.map((p: any) => Number(p.payment_id));
+    await query(
+      `UPDATE payments
+       SET status = 'failed',
+           updated_at = NOW()
+       WHERE payment_id = ANY($1::int[])
+         AND status = 'pending'`,
+      [expiredPaymentIds]
+    );
+
+    logger.warn('Expired stale crypto payments without receipts', {
+      source,
+      stale_before: staleBefore.toISOString(),
+      expired_payment_count: eligiblePayments.length,
+      expired_order_ids: expiredOrderIds,
+      skipped_order_ids: skippedOrderIds,
+    });
+
+    return {
+      expired_payment_count: eligiblePayments.length,
+      expired_order_count: expiredOrderIds.length,
+      expired_order_ids: expiredOrderIds,
+      skipped_order_ids: skippedOrderIds,
     };
   }
 

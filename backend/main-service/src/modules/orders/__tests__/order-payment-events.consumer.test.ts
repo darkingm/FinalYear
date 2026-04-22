@@ -12,6 +12,7 @@ describe('OrderPaymentEventsConsumer', () => {
 
     await consumer.start();
 
+    expect(PAYMENT_EVENT_TOPICS).toContain('payment.expired');
     expect(subscribe).toHaveBeenCalledWith(
       expect.arrayContaining(PAYMENT_EVENT_TOPICS),
       expect.any(Function),

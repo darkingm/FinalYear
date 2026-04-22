@@ -170,7 +170,7 @@ export class AdminService {
     }
 
     async updateOrderStatus(orderId: number, status: string, adminId: number, notes?: string) {
-        const validStatuses = ['UNPAID', 'TX_SUBMITTED', 'TX_FAILED', 'ONCHAIN_CONFIRMED', 'PAID', 'DELIVERING', 'COMPLETED', 'DISPUTED', 'CANCELLED', 'REFUNDED'];
+        const validStatuses = ['UNPAID', 'TX_SUBMITTED', 'TX_FAILED', 'ONCHAIN_CONFIRMED', 'PAID', 'SHIPPED', 'DELIVERED', 'COMPLETED', 'DISPUTED', 'CANCELLED', 'REFUNDED'];
         if (!validStatuses.includes(status)) {
             throw new AppError(`Invalid status: ${status}`, 400);
         }
@@ -183,7 +183,7 @@ export class AdminService {
         // Log status change with admin info
         await query(
             `INSERT INTO order_status_history (order_id, old_status, new_status, notes, changed_by)
-       SELECT status, status, $2, $3, $4 FROM orders WHERE order_id = $1`,
+       SELECT order_id, status, $2, $3, $4 FROM orders WHERE order_id = $1`,
             [orderId, status, notes || `Status updated by admin`, adminId]
         );
 

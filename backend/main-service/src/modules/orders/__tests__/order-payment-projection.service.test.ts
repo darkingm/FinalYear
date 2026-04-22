@@ -21,6 +21,20 @@ describe('projectOrderStatus', () => {
 
     expect(next).toBe('COMPLETED');
   });
+
+  it('maps payment.expired to TX_FAILED while keeping completed orders intact', () => {
+    const submittedNext = projectOrderStatus({
+      currentStatus: 'TX_SUBMITTED',
+      eventType: 'payment.expired',
+    });
+    const completedNext = projectOrderStatus({
+      currentStatus: 'COMPLETED',
+      eventType: 'payment.expired',
+    });
+
+    expect(submittedNext).toBe('TX_FAILED');
+    expect(completedNext).toBe('COMPLETED');
+  });
 });
 
 describe('OrderPaymentProjectionService', () => {

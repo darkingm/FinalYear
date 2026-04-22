@@ -23,6 +23,7 @@ import {
     getEscrowOpsHealth,
     getPaymentReconciliationCases,
     retryVerifyPayment,
+    expireStalePaymentTx,
     repairOrderPaymentProjection,
     createProduct,
     updateProductDetail,
@@ -102,6 +103,7 @@ router.get('/escrow/contracts', getEscrowContractSnapshots);
 router.get('/escrow/health', getEscrowOpsHealth);
 router.get('/payments/reconciliation', getPaymentReconciliationCases);
 router.post('/payments/reconciliation/:id/retry-verify', retryVerifyPayment);
+router.post('/payments/reconciliation/expire-stale', expireStalePaymentTx);
 router.post('/payments/reconciliation/:id/reconcile-order', repairOrderPaymentProjection);
 
 export default router;

@@ -7,6 +7,7 @@ export const PAYMENT_EVENT_TYPES = {
   CONFIRMING: 'payment.confirming',
   CONFIRMED: 'payment.confirmed',
   FAILED: 'payment.failed',
+  EXPIRED: 'payment.expired',
   RELEASED: 'payment.released',
   REFUNDED: 'payment.refunded',
 } as const;

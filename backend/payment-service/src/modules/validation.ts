@@ -108,6 +108,12 @@ export const retryVerifyOrderPaymentSchema = z.object({
   }),
 });
 
+export const expireStalePaymentsSchema = z.object({
+  body: z.object({
+    older_than_minutes: z.number().int().positive().max(1440).optional(),
+  }).optional(),
+});
+
 export const submitTransactionSchema = z.object({
   body: z.object({
     order_id: z.number().positive('order_id must be a positive number'),

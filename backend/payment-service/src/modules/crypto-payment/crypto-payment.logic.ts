@@ -1,5 +1,5 @@
 export interface PaymentRowRef {
-  order_id: number;
+  order_id: number | string; // pg BIGINT returns string
 }
 
 export function isValidEthAddress(wallet: string | null | undefined): wallet is string {
@@ -35,8 +35,10 @@ export function collectAffectedOrderIds(rows: PaymentRowRef[]): number[] {
   const uniqueIds = new Set<number>();
 
   for (const row of rows) {
-    if (Number.isInteger(row.order_id) && row.order_id > 0) {
-      uniqueIds.add(row.order_id);
+    // pg BIGINT returns string — coerce before checking
+    const id = Number(row.order_id);
+    if (Number.isFinite(id) && id > 0) {
+      uniqueIds.add(id);
     }
   }
 

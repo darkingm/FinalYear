@@ -10,6 +10,7 @@ describe('payment event contract', () => {
     expect(PAYMENT_EVENT_TYPES.CONFIRMING).toBe('payment.confirming');
     expect(PAYMENT_EVENT_TYPES.CONFIRMED).toBe('payment.confirmed');
     expect(PAYMENT_EVENT_TYPES.FAILED).toBe('payment.failed');
+    expect(PAYMENT_EVENT_TYPES.EXPIRED).toBe('payment.expired');
     expect(PAYMENT_EVENT_TYPES.RELEASED).toBe('payment.released');
     expect(PAYMENT_EVENT_TYPES.REFUNDED).toBe('payment.refunded');
   });

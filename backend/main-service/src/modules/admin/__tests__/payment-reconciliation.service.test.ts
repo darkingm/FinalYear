@@ -117,4 +117,27 @@ describe('PaymentReconciliationAdminService', () => {
     expect(health.main_service.projection.processed_24h).toBe(12);
     expect(health.main_service.projection.stale_projection_count).toBe(2);
   });
+
+  it('triggers stale payment expiry through payment-service with internal auth', async () => {
+    mockedAxios.post.mockResolvedValue({
+      data: {
+        success: true,
+        expired_payment_count: 2,
+        expired_order_count: 2,
+      },
+    } as any);
+
+    const service = new PaymentReconciliationAdminService();
+    const result = await service.expireStalePayments(90);
+
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'http://payment-service:3002/api/payments/crypto/admin/reconciliation/expire-stale',
+      { older_than_minutes: 90 },
+      expect.objectContaining({
+        headers: { 'X-Internal-Service-Key': 'internal-test-key' },
+        timeout: 30000,
+      })
+    );
+    expect(result.expired_payment_count).toBe(2);
+  });
 });

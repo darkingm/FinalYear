@@ -311,6 +311,19 @@ export async function retryVerifyPayment(req: AuthRequest, res: Response, next: 
     }
 }
 
+export async function expireStalePaymentTx(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const olderThanMinutes = req.body?.older_than_minutes
+            ? parseInt(String(req.body.older_than_minutes), 10)
+            : undefined;
+        const result = await paymentReconciliationAdminService.expireStalePayments(olderThanMinutes);
+        res.json({ success: true, ...result });
+    } catch (error: any) {
+        logger.error('Admin expire stale payments error:', error);
+        next(error);
+    }
+}
+
 export async function repairOrderPaymentProjection(req: AuthRequest, res: Response, next: NextFunction) {
     try {
         const orderId = parseInt(req.params.id, 10);

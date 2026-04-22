@@ -25,7 +25,7 @@ import { parseUnits, formatUnits, erc20Abi, type Address } from 'viem';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { resolveCheckoutProductImage } from '@/lib/checkout/images';
-import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE } from '@/lib/web3/config';
+import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE, CHAIN_TOKENS } from '@/lib/web3/config';
 import { getRecommendedCheckoutChainMetas } from '@/lib/web3/testnet-lite';
 import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
 import { getOrderPricingDisplay } from '@/lib/orders/presentation';
@@ -122,19 +122,7 @@ export const PAYMENT_NETWORKS = [
 const CHAIN_META: Record<number, typeof PAYMENT_NETWORKS[0]> =
   Object.fromEntries(PAYMENT_NETWORKS.map(n => [n.chainId, n]));
 
-/* ─── Token availability per chain ─────────────────────────────────────── */
-// Defines which tokens are valid on each chain for payment
-const CHAIN_TOKENS: Record<number, string[]> = {
-  31337: ['ETH'],                      // Hardhat VPS — only native ETH
-  80002: ['MATIC', 'ETH'],             // Polygon Amoy — MATIC native + ETH
-  97: ['BNB'],                      // BNB Testnet — native BNB
-  421614: ['ETH'],                     // Arbitrum Sepolia
-  84532: ['ETH'],                     // Base Sepolia
-  137: ['MATIC', 'USDT', 'USDC'],    // Polygon mainnet
-  42161: ['ETH', 'USDT'],             // Arbitrum mainnet
-  1: ['ETH', 'USDT', 'USDC', 'WBTC'], // Ethereum mainnet
-  56: ['BNB', 'USDT'],              // BSC mainnet
-};
+/* Chain token list: imported from @/lib/web3/config (single source of truth) */
 
 /* ─── ERC-20 Minimal ABI ────────────────────────────────────────────────── */
 const ERC20_ABI = [
@@ -475,7 +463,7 @@ export default function CheckoutPage() {
       if (typeof snapshot.status === 'string') {
         const nextStatus = snapshot.status;
         setOrder(prev => prev ? { ...prev, status: nextStatus } : prev);
-        setResumeBanner(['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(nextStatus));
+        setResumeBanner(['TX_SUBMITTED', 'ONCHAIN_PENDING', 'PAID', 'ONCHAIN_CONFIRMED'].includes(nextStatus));
       }
 
       if (manual && snapshot.verification_message) {
@@ -496,7 +484,7 @@ export default function CheckoutPage() {
   }, [orderId, paymentSession]);
 
   useEffect(() => {
-    if (!order || !['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(order.status)) {
+    if (!order || !['TX_SUBMITTED', 'ONCHAIN_PENDING', 'PAID', 'ONCHAIN_CONFIRMED'].includes(order.status)) {
       return;
     }
     refreshPaymentStatus().catch(() => null);
@@ -599,8 +587,9 @@ export default function CheckoutPage() {
         try {
           const statusSnapshot = await refreshPaymentStatus();
           const orderStatus = statusSnapshot?.status;
+          const verState = statusSnapshot?.verification_state;
 
-          if (orderStatus === 'ONCHAIN_CONFIRMED' || orderStatus === 'PAID') {
+          if (orderStatus === 'PAID' || orderStatus === 'ONCHAIN_CONFIRMED' || verState === 'confirmed') {
             // Step 4: Done!
             setPayStep('done');
             setConfirmed(true);
@@ -610,11 +599,17 @@ export default function CheckoutPage() {
             const iv = setInterval(() => {
               countdown -= 1;
               setRedirectIn(countdown);
-              if (countdown <= 0) { clearInterval(iv); router.push(`/orders/${orderId}`); }
+              if (countdown <= 0) { clearInterval(iv); try { router.push(`/orders/${orderId}`); } catch {} }
             }, 1000);
             return;
           }
-        } catch { /* network hiccup — keep polling */ }
+        } catch (pollErr: any) {
+          console.warn('[checkout poll] error:', pollErr?.message || pollErr);
+          // Surface error after 3 consecutive failures
+          if (pollCount > 3 && pollErr?.message) {
+            toast.error(`Kiểm tra blockchain gặp lỗi: ${pollErr.message}`, { id: 'poll-error', duration: 5000 });
+          }
+        }
 
         pollCount++;
         const delay = Math.min(2000 + pollCount * 500, 8000); // 2s→...max 8s

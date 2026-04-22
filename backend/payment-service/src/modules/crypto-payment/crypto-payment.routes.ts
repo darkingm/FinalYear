@@ -11,6 +11,7 @@ import {
   getPaymentReconciliationCases,
   getPaymentOpsHealth,
   retryVerifyOrderPayment,
+  expireStalePayments,
   generateQuote,
   getPaymentStatus,
   verifyTransaction,
@@ -30,6 +31,7 @@ import {
   getPaymentBatchSessionStatusSchema,
   getPaymentReconciliationCasesSchema,
   retryVerifyOrderPaymentSchema,
+  expireStalePaymentsSchema,
   generateQuoteSchema,
   getPaymentStatusSchema,
   verifyTransactionSchema,
@@ -71,6 +73,7 @@ router.get('/session-batch/:sessionId/status', authenticate, validateRequest(get
 router.get('/admin/reconciliation', authenticateOrInternalKey, validateRequest(getPaymentReconciliationCasesSchema), getPaymentReconciliationCases);
 router.get('/admin/ops-health', authenticateOrInternalKey, getPaymentOpsHealth);
 router.post('/admin/reconciliation/:orderId/retry-verify', authenticateOrInternalKey, validateRequest(retryVerifyOrderPaymentSchema), retryVerifyOrderPayment);
+router.post('/admin/reconciliation/expire-stale', authenticateOrInternalKey, validateRequest(expireStalePaymentsSchema), expireStalePayments);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
 router.get('/status/:orderId', authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);

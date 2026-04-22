@@ -89,6 +89,19 @@ export class PaymentReconciliationAdminService {
     return response.data;
   }
 
+  async expireStalePayments(olderThanMinutes?: number) {
+    const response = await this.httpPost(
+      `${this.getPaymentServiceUrl()}/api/payments/crypto/admin/reconciliation/expire-stale`,
+      olderThanMinutes ? { older_than_minutes: olderThanMinutes } : {},
+      {
+        headers: this.getInternalHeaders(),
+        timeout: 30000,
+      }
+    );
+
+    return response.data;
+  }
+
   async getOpsHealth() {
     const [paymentResponse, projectionResult] = await Promise.all([
       this.httpGet<{ success: true; health: any }>(

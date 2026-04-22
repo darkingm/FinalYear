@@ -26,6 +26,7 @@ export const PAYMENT_EVENT_TOPICS = [
   'payment.confirming',
   'payment.confirmed',
   'payment.failed',
+  'payment.expired',
   'payment.released',
   'payment.refunded',
 ];

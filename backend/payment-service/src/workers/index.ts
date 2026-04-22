@@ -2,6 +2,7 @@ import { TxMonitorWorker } from './tx-monitor.worker';
 import { PriceUpdaterWorker } from './price-updater.worker';
 import { InventoryCleanerWorker } from './inventory-cleaner.worker';
 import { PaymentOutboxWorker } from './payment-outbox.worker';
+import { StalePaymentExpiryWorker } from './stale-payment-expiry.worker';
 import { logger } from '../utils/logger';
 
 export function startWorkers() {
@@ -12,6 +13,9 @@ export function startWorkers() {
 
   const paymentOutbox = new PaymentOutboxWorker();
   paymentOutbox.start();
+
+  const stalePaymentExpiry = new StalePaymentExpiryWorker();
+  stalePaymentExpiry.start();
 
   const priceUpdater = new PriceUpdaterWorker();
   priceUpdater.start();

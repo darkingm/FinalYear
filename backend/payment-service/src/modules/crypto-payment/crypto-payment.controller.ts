@@ -373,6 +373,23 @@ export async function retryVerifyOrderPayment(req: Request, res: Response, next:
   }
 }
 
+export async function expireStalePayments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await cryptoPaymentService.expireStalePayments({
+      olderThanMinutes: req.body?.older_than_minutes,
+      source: 'manual',
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    logger.error('Expire stale payments error:', error);
+    next(error);
+  }
+}
+
 export async function generateQuote(req: Request, res: Response, next: NextFunction) {
   try {
     const { order_id, token_symbol, preferred_chain_id, buyer_wallet } = req.body;
