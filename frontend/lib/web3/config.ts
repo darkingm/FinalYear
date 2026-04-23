@@ -53,8 +53,8 @@ export const localhost = defineChain({
   name: 'Hardhat (VPS Local)',
   nativeCurrency: { decimals: 18, name: 'Ether', symbol: 'ETH' },
   rpcUrls: {
-    default: { http: [HARDHAT_RPC_URL, 'http://127.0.0.1:8545'] },
-    public: { http: [HARDHAT_RPC_URL, 'http://127.0.0.1:8545'] },
+    default: { http: [HARDHAT_RPC_URL] },
+    public: { http: [HARDHAT_RPC_URL] },
   },
   blockExplorers: {
     default: { name: 'Hardhat Local', url: 'http://103.20.96.79:8545' },
