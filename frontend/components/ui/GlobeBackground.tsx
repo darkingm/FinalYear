@@ -16,7 +16,7 @@ import { useDesktopLightMode } from '@/lib/hooks/useDesktopLightMode';
 
 const TEX_DAY   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
-const TEX_CLOUDS = 'https://unpkg.com/three-globe@2.24.0/example/img/earth-clouds.png';
+const TEX_CLOUDS = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-clouds.png';
 const TEX_TOPO   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-topology.png';
 
 /* ── GLSL — opacity is a uniform so we can toggle in light/dark ────────────── */

@@ -19,6 +19,7 @@ import {
   refundPayment
 } from './crypto-payment.controller';
 import { authenticate } from '../../middleware/auth.middleware';
+import { statusLimiter } from '../../middleware/rate-limit';
 import { validateRequest } from '../../middleware/validate.middleware';
 import {
   createPaymentSessionSchema,
@@ -76,7 +77,7 @@ router.post('/admin/reconciliation/:orderId/retry-verify', authenticateOrInterna
 router.post('/admin/reconciliation/expire-stale', authenticateOrInternalKey, validateRequest(expireStalePaymentsSchema), expireStalePayments);
 
 router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
-router.get('/status/:orderId', authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);
+router.get('/status/:orderId', statusLimiter, authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);
 router.post('/verify/:txHash', authenticate, validateRequest(verifyTransactionSchema), verifyTransaction);
 
 // Release: callable by admin (JWT) OR main-service (internal key after buyer confirms delivery)

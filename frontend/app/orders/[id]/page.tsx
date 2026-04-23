@@ -28,6 +28,20 @@ import { ensureCorrectChainRpc } from '@/lib/web3/ensure-chain';
 import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
 import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
+
+/** Translate buyerConfirmDelivery revert reasons into human-friendly messages */
+function parseConfirmRevertReason(error: Error | null | undefined): string | null {
+  if (!error) return null;
+  const msg = (error as any)?.shortMessage || error.message || '';
+  if (msg.includes('Invalid status'))  return 'Đơn hàng chưa ở trạng thái "Đã thanh toán" trên blockchain. Có thể đã được xác nhận hoặc hoàn tiền trước đó.';
+  if (msg.includes('Not the buyer'))   return 'Ví MetaMask hiện tại không phải ví buyer của đơn này. Hãy đổi sang ví đã thanh toán.';
+  if (msg.includes('Order expired'))   return 'Đơn hàng đã hết hạn trên blockchain. Liên hệ admin để xử lý.';
+  if (msg.includes('Seller transfer')) return 'Chuyển tiền cho seller thất bại. Ví seller có thể không nhận được ETH.';
+  if (msg.includes('Fee transfer'))    return 'Chuyển phí giao dịch thất bại. Liên hệ admin.';
+  if (msg.includes('rejected') || msg.includes('denied') || msg.includes('4001')) return 'Bạn đã từ chối giao dịch trong MetaMask.';
+  if (msg.includes('insufficient funds')) return 'Ví không đủ ETH để trả phí gas.';
+  return null;
+}
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 type ProductImageLike = string | { url?: string; image_url?: string; is_primary?: boolean; sort_order?: number };
@@ -214,7 +228,7 @@ export default function OrderDetailPage() {
     refreshBlockchainStatus().catch(() => null);
     const interval = setInterval(() => {
       refreshBlockchainStatus().catch(() => null);
-    }, 4000);
+    }, 15_000); // 15s — avoids 429 rate limit (100 req / 15 min)
     return () => clearInterval(interval);
   }, [order?.status, refreshBlockchainStatus]);
 
@@ -789,9 +803,14 @@ export default function OrderDetailPage() {
                   </button>
                   {/* Error detail */}
                   {(confirmError || writeError) && (
-                    <p className="text-xs text-red-400 mt-1 break-words">
-                      {(receiptError as any)?.shortMessage || writeError?.message || 'Transaction failed. Check RPC or gas balance.'}
-                    </p>
+                    <div className="mt-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                      <p className="text-sm text-red-400 font-medium">
+                        {parseConfirmRevertReason(writeError ?? receiptError as Error) || 'Giao dịch thất bại. Kiểm tra RPC hoặc số dư gas.'}
+                      </p>
+                      <p className="text-xs text-red-400/60 mt-1 break-words">
+                        {(writeError as any)?.shortMessage || (receiptError as any)?.shortMessage || ''}
+                      </p>
+                    </div>
                   )}
                 </div>
 

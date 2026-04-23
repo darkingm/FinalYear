@@ -615,7 +615,7 @@ export default function CheckoutPage() {
         }
 
         pollCount++;
-        const delay = Math.min(2000 + pollCount * 500, 8000); // 2s→...max 8s
+        const delay = Math.min(5000 + pollCount * 1000, 15_000); // 5s→...max 15s — avoids 429
         await new Promise(r => setTimeout(r, delay));
         return poll();
       };
