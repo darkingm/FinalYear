@@ -39,6 +39,7 @@ import {
 } from '@/lib/payments/cart-pricing';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+import { ensureCorrectChainRpc } from '@/lib/web3/ensure-chain';
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
 interface CryptoQuoteBatch {
@@ -327,6 +328,8 @@ export default function CartCheckoutPage() {
 
     setSubmitting(true);
     setPayStep('sending');
+    // Ensure MetaMask has correct RPC for this chain (fixes stale localhost cache)
+    await ensureCorrectChainRpc(quote.chain_id);
     try {
       const tx = await walletClient.sendTransaction({
         to: quote.escrow_contract as Address,

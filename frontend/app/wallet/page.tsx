@@ -20,6 +20,7 @@ import {
   Plus, Info,
 } from 'lucide-react';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+import { NetworkDiagnostics } from '@/components/web3/NetworkDiagnostics';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface UserWallet {
@@ -590,6 +591,11 @@ export default function WalletPage() {
                 )}
               </AnimatePresence>
             </div>
+          </div>
+
+          {/* ── Network Diagnostics ─────────────────────────────────── */}
+          <div className="mt-8">
+            <NetworkDiagnostics />
           </div>
         </div>
       </main>

@@ -42,6 +42,7 @@ import {
 } from '@/lib/payments/payment-session-guards';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+import { ensureCorrectChainRpc } from '@/lib/web3/ensure-chain';
 
 /* ─── Block Explorers per chain ─────────────────────────────────────────── */
 export const CHAIN_EXPLORERS: Record<number, { name: string; tx: string; address: string }> = {
@@ -547,6 +548,8 @@ export default function CheckoutPage() {
 
     setPayError(null);
     setSubmitting(true);
+    // Step 0: Ensure MetaMask has correct RPC for this chain (fixes stale localhost cache)
+    await ensureCorrectChainRpc(quote.chain_id);
     // Step 1: Waiting for MetaMask signature
     setPayStep('signing');
     try {
