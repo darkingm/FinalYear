@@ -32,6 +32,18 @@ router.post('/hardhat', authenticate, async (req: Request, res: Response) => {
 
         const rpcUrl = process.env.LOCALHOST_RPC_URL || 'http://103.20.96.79:8545';
         const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+        // Runtime guard: verify the RPC is actually Hardhat (chain 31337)
+        // This prevents accidental fund drain if env misconfigures RPC to a real network
+        const network = await provider.getNetwork();
+        if (Number(network.chainId) !== 31337) {
+            logger.warn('Faucet rejected: RPC chain is not Hardhat', { chainId: Number(network.chainId), rpcUrl });
+            return res.status(403).json({
+                success: false,
+                message: `Faucet only works on Hardhat (chain 31337). Connected RPC reports chain ${network.chainId}.`,
+            });
+        }
+
         const faucetWallet = new ethers.Wallet(privateKey, provider);
 
         // Check faucet wallet balance

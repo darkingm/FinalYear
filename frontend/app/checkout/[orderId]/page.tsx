@@ -1103,6 +1103,35 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
+                  {/* Low gas balance warning with faucet CTA (Hardhat only) */}
+                  {isConnected && !isWrongChain && nativeBalance && Number(nativeBalance.formatted) < 0.01 && quote?.chain_id === 31337 && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <p className="text-sm font-bold text-red-400">
+                          Gas balance too low ({Number(nativeBalance.formatted).toFixed(6)} ETH)
+                        </p>
+                      </div>
+                      <p className="text-xs text-red-300/70">
+                        You need ETH to pay gas fees for this transaction. Tap below to get 10 test ETH from the Hardhat faucet.
+                      </p>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await paymentClient.post('/api/faucet/hardhat', { wallet: address });
+                            toast.success(res.data.message || 'Sent 10 ETH test!');
+                          } catch (e: any) {
+                            toast.error(e.response?.data?.message || 'Faucet failed');
+                          }
+                        }}
+                        className="w-full py-2.5 text-xs font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        Get 10 ETH test (Hardhat Faucet)
+                      </button>
+                    </div>
+                  )}
+
                   {/* Wrong chain warning */}
                   {isWrongChain && (
                     <div className="flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
