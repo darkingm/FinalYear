@@ -21,7 +21,7 @@ import { OrderStepper, OrderStatus, OrderStatusIndicator } from '@/components/or
 import { OrderTrackingSnapshot } from '@/components/order/OrderTrackingSnapshot';
 import { NFTOwnershipCard } from '@/components/web3/NFTOwnershipCard';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
 import { parseAbi, keccak256, toBytes } from 'viem';
 import { CHAIN_META, CHAIN_TOKENS } from '@/lib/web3/config';
 import { ensureCorrectChainRpc } from '@/lib/web3/ensure-chain';
@@ -109,6 +109,8 @@ export default function OrderDetailPage() {
   // Wagmi for on-chain buyerConfirmDelivery
   const { isConnected } = useAccount();
   const CONFIRM_ABI = parseAbi(['function buyerConfirmDelivery(bytes32 orderId) external']);
+  const GETORDER_ABI = parseAbi(['function getOrder(bytes32 orderId) external view returns (address buyer, address seller, address token, uint256 amount, uint256 fee, uint8 status, uint256 createdAt, uint256 expiresAt)']);
+  const publicClient = usePublicClient();
   const { writeContract, data: confirmTxData, isPending: confirmPending, error: writeError } = useWriteContract();
   const { isLoading: confirmWaiting, isSuccess: confirmSuccess, isError: confirmError, error: receiptError } = useWaitForTransactionReceipt({ hash: confirmTxData });
 
@@ -281,6 +283,43 @@ export default function OrderDetailPage() {
     // ethers.keccak256(ethers.toUtf8Bytes(internal_order_id))
     // toBytes() from viem encodes as UTF-8, matching ethers.toUtf8Bytes()
     const orderId32 = keccak256(toBytes(order.internal_order_id));
+
+    // ── Pre-flight: read on-chain escrow state before sending write tx ──
+    // This catches "Invalid status" reverts BEFORE they hit MetaMask,
+    // giving the user a clear explanation instead of a cryptic error.
+    const STATUS_LABELS: Record<number, string> = {
+      0: 'Pending (chưa nạp tiền)',
+      1: 'Paid',
+      2: 'Completed (đã xác nhận trước đó)',
+      3: 'Refunded (đã hoàn tiền)',
+      4: 'Disputed (đang khiếu nại)',
+      5: 'Expired (đã hết hạn)',
+    };
+    try {
+      if (publicClient) {
+        const result = await publicClient.readContract({
+          address: order.escrow_contract as `0x${string}`,
+          abi: GETORDER_ABI,
+          functionName: 'getOrder',
+          args: [orderId32],
+        }) as [string, string, string, bigint, bigint, number, bigint, bigint];
+        const [onChainBuyer, , , , , onChainStatus] = result;
+        if (onChainBuyer === '0x0000000000000000000000000000000000000000') {
+          toast.error('Đơn hàng này chưa được nạp tiền vào Escrow trên blockchain. Thanh toán trước khi xác nhận.', { duration: 8000 });
+          return;
+        }
+        if (onChainStatus !== 1) { // 1 = Paid
+          const label = STATUS_LABELS[onChainStatus] ?? `Unknown (${onChainStatus})`;
+          toast.error(`Đơn hàng trên blockchain đang ở trạng thái: ${label}. Chỉ có thể xác nhận khi trạng thái là "Paid".`, { duration: 8000 });
+          return;
+        }
+      }
+    } catch (preflightErr: any) {
+      // If pre-flight fails (RPC error), let it fall through to writeContract
+      // which will show the revert error anyway.
+      console.warn('[preflight] Could not read on-chain state:', preflightErr?.message);
+    }
+
     writeContract({
       address: order.escrow_contract as `0x${string}`,
       abi: CONFIRM_ABI,
