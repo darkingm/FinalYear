@@ -878,7 +878,7 @@ export default function CheckoutPage() {
                             className="w-full py-2 text-xs font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg flex items-center justify-center gap-2 transition-colors"
                           >
                             <Zap className="w-3.5 h-3.5" />
-                            Nhận 1 ETH test (Hardhat Faucet)
+                            Nhận 10 ETH test (Hardhat Faucet)
                           </button>
                         ) : (
                           <p className="text-[10px] text-emerald-400/50">Kết nối MetaMask trước để nhận ETH test</p>

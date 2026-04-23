@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, paymentClient } from '@/lib/api/client';
 import { getRecommendedCheckoutChainMetas } from '@/lib/web3/testnet-lite';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -17,7 +17,7 @@ import {
   Wallet, Copy, QrCode, Link2, Trash2, Star,
   ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle,
   AlertCircle, Loader2, Shield, ArrowDownToLine, ExternalLink,
-  Plus, Info,
+  Plus, Info, Zap,
 } from 'lucide-react';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 import { NetworkDiagnostics } from '@/components/web3/NetworkDiagnostics';
@@ -517,6 +517,24 @@ export default function WalletPage() {
                                     >
                                       <Plus className="w-3.5 h-3.5" /> Thêm mạng này vào MetaMask
                                     </button>
+
+                                    {/* Hardhat Faucet — only for chain 31337 */}
+                                    {net.chainId === 31337 && isConnected && (
+                                      <button
+                                        onClick={async () => {
+                                          try {
+                                            const res = await paymentClient.post('/api/faucet/hardhat', { wallet: address });
+                                            toast.success(res.data.message || 'Sent 10 ETH test!');
+                                          } catch (e: any) {
+                                            toast.error(e.response?.data?.message || 'Faucet failed');
+                                          }
+                                        }}
+                                        className="w-full py-2.5 text-xs font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                      >
+                                        <Zap className="w-3.5 h-3.5" />
+                                        Nhận 10 ETH test (Hardhat Faucet)
+                                      </button>
+                                    )}
                                   </div>
                                 </motion.div>
                               )}

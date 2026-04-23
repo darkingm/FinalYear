@@ -7,8 +7,8 @@ const router = Router();
 
 /**
  * POST /api/faucet/hardhat
- * Sends 1 ETH test tokens from Hardhat account #0 to the requesting wallet.
- * Only works on chain 31337 (Hardhat VPS). Rate-limited to 1 per wallet per 24h by Redis.
+ * Sends 10 ETH test tokens from Hardhat account #0 to the requesting wallet.
+ * Only works on chain 31337 (Hardhat VPS). Rate-limited by balance check.
  * 
  * This is a TESTNET ONLY feature — disabled if TESTNET_MODE=false.
  */
@@ -37,7 +37,7 @@ router.post('/hardhat', authenticate, async (req: Request, res: Response) => {
         // Check faucet wallet balance
         const faucetBalance = await provider.getBalance(faucetWallet.address);
         const faucetEth = Number(ethers.formatEther(faucetBalance));
-        if (faucetEth < 1.1) {
+        if (faucetEth < 11) {
             return res.status(503).json({
                 success: false,
                 message: `Faucet balance too low (${faucetEth.toFixed(2)} ETH). Contact admin to refill.`,
@@ -47,15 +47,15 @@ router.post('/hardhat', authenticate, async (req: Request, res: Response) => {
         // Check recipient current balance
         const recipientBalance = await provider.getBalance(recipientWallet);
         const recipientEth = Number(ethers.formatEther(recipientBalance));
-        if (recipientEth >= 1.0) {
+        if (recipientEth >= 10.0) {
             return res.status(429).json({
                 success: false,
-                message: `Your wallet already has ${recipientEth.toFixed(4)} ETH on Hardhat chain. No refill needed.`,
+                message: `Wallet already has ${recipientEth.toFixed(4)} ETH on Hardhat chain. No refill needed.`,
             });
         }
 
-        // Send 1 ETH
-        const amountToSend = ethers.parseEther('1.0');
+        // Send 10 ETH
+        const amountToSend = ethers.parseEther('10.0');
         const tx = await faucetWallet.sendTransaction({
             to: recipientWallet,
             value: amountToSend,
@@ -64,18 +64,18 @@ router.post('/hardhat', authenticate, async (req: Request, res: Response) => {
 
         logger.info('Faucet sent ETH', {
             recipient: recipientWallet,
-            amount: '1.0 ETH',
+            amount: '10.0 ETH',
             tx_hash: tx.hash,
             chain: 31337,
         });
 
         return res.json({
             success: true,
-            message: 'Đã gửi 1 ETH test vào ví của bạn!',
+            message: 'Sent 10 ETH test to your wallet!',
             tx_hash: tx.hash,
-            amount: '1.0 ETH',
+            amount: '10.0 ETH',
             recipient: recipientWallet,
-            note: 'Token này chỉ có giá trị trên Hardhat VPS testnet. Không dùng trên mainnet được.',
+            note: 'These tokens only work on Hardhat VPS testnet (chain 31337).',
         });
     } catch (error: any) {
         logger.error('Faucet error:', error);
