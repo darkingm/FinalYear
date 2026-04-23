@@ -24,6 +24,7 @@ import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/Check
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseAbi, keccak256, toBytes } from 'viem';
 import { CHAIN_META, CHAIN_TOKENS } from '@/lib/web3/config';
+import { ensureCorrectChainRpc } from '@/lib/web3/ensure-chain';
 import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
 import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
@@ -94,8 +95,8 @@ export default function OrderDetailPage() {
   // Wagmi for on-chain buyerConfirmDelivery
   const { isConnected } = useAccount();
   const CONFIRM_ABI = parseAbi(['function buyerConfirmDelivery(bytes32 orderId) external']);
-  const { writeContract, data: confirmTxData, isPending: confirmPending } = useWriteContract();
-  const { isLoading: confirmWaiting, isSuccess: confirmSuccess } = useWaitForTransactionReceipt({ hash: confirmTxData });
+  const { writeContract, data: confirmTxData, isPending: confirmPending, error: writeError } = useWriteContract();
+  const { isLoading: confirmWaiting, isSuccess: confirmSuccess, isError: confirmError, error: receiptError } = useWaitForTransactionReceipt({ hash: confirmTxData });
 
   // After on-chain confirm, update backend
   useEffect(() => {
@@ -250,16 +251,18 @@ export default function OrderDetailPage() {
   };
 
   // On-chain buyer confirm delivery
-  const handleOnChainConfirm = () => {
+  const handleOnChainConfirm = async () => {
     if (!order?.escrow_contract || !order?.chain_id) {
       // Fallback: backend-only for non-crypto orders (PayPal, etc.)
       handleUpdateStatus('COMPLETED');
       return;
     }
     if (!isConnected) {
-      toast.error('Kết nối ví MetaMask trước');
+      toast.error('Connect MetaMask wallet first');
       return;
     }
+    // Fix stale RPC cache in MetaMask (e.g. localhost:8545 cached for chain 31337)
+    await ensureCorrectChainRpc(order.chain_id);
     // IMPORTANT: orderId32 must match exactly what the backend/contract uses:
     // ethers.keccak256(ethers.toUtf8Bytes(internal_order_id))
     // toBytes() from viem encodes as UTF-8, matching ethers.toUtf8Bytes()
@@ -770,14 +773,25 @@ export default function OrderDetailPage() {
                   </button>
                   {/* Confirm delivery button */}
                   <button
-                    className="flex-1 py-3.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-all shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] hover:-translate-y-0.5 flex items-center justify-center gap-2 disabled:opacity-70"
+                    className={`flex-1 py-3.5 px-4 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70 ${
+                      confirmError || writeError
+                        ? 'bg-red-500 hover:bg-red-600 text-white'
+                        : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] hover:-translate-y-0.5'
+                    }`}
                     onClick={handleOnChainConfirm}
                     disabled={confirmPending || confirmWaiting}
                   >
-                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />Chờ MetaMask...</> :
-                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xác nhận on-chain...</> :
-                        <><Check className="w-5 h-5" />Đã Nhận Hàng — Thanh toán cho Người Bán</>}
+                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />Waiting MetaMask...</> :
+                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />Confirming on-chain...</> :
+                        confirmError || writeError ? <><AlertTriangle className="w-4 h-4" />Transaction failed — Retry</> :
+                          <><Check className="w-5 h-5" />Confirm Delivery — Pay Seller</>}
                   </button>
+                  {/* Error detail */}
+                  {(confirmError || writeError) && (
+                    <p className="text-xs text-red-400 mt-1 break-words">
+                      {(receiptError as any)?.shortMessage || writeError?.message || 'Transaction failed. Check RPC or gas balance.'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Dispute form */}
