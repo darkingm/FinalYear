@@ -104,6 +104,8 @@ export default function OrderDetailPage() {
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [paymentSnapshot, setPaymentSnapshot] = useState<PaymentStatusSnapshot | null>(null);
   const [paymentSnapshotLoading, setPaymentSnapshotLoading] = useState(false);
+  // On-chain escrow status: null = not checked yet, 0-5 = OrderStatus enum
+  const [escrowOnChainStatus, setEscrowOnChainStatus] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Wagmi for on-chain buyerConfirmDelivery
@@ -153,6 +155,51 @@ export default function OrderDetailPage() {
     capturePayPal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, success]);
+
+  // ── Auto-sync: read on-chain escrow state when page loads for crypto orders ──
+  // If on-chain is already Completed but DB is stale (PAID/SHIPPED), auto-patch backend.
+  useEffect(() => {
+    if (!order || order.payment_method !== 'crypto') return;
+    if (!order.escrow_contract || !order.internal_order_id) return;
+    // Only check for statuses where the confirm button might show
+    if (!['PAID', 'SHIPPED', 'DELIVERED'].includes(order.status)) return;
+    if (!publicClient) return;
+
+    const orderId32 = keccak256(toBytes(order.internal_order_id));
+    publicClient.readContract({
+      address: order.escrow_contract as `0x${string}`,
+      abi: GETORDER_ABI,
+      functionName: 'getOrder',
+      args: [orderId32],
+    }).then((result: any) => {
+      const [onChainBuyer, , , , , onChainStatus] = result as [string, string, string, bigint, bigint, number, bigint, bigint];
+      setEscrowOnChainStatus(onChainStatus);
+
+      // Auto-heal: if on-chain is Completed (2) but DB still PAID/SHIPPED
+      if (onChainStatus === 2 && ['PAID', 'SHIPPED'].includes(order.status)) {
+        toast.info('Đơn hàng đã hoàn tất on-chain. Đang đồng bộ lại trạng thái...', { duration: 5000 });
+        apiClient.patch(`/api/orders/${order.order_id}/status`, {
+          status: 'COMPLETED',
+          completion_source: 'auto_sync_onchain',
+        }).then(() => {
+          toast.success('✅ Đã đồng bộ trạng thái đơn hàng thành COMPLETED.');
+          fetchOrder();
+        }).catch(() => {
+          // Non-fatal — user sees correct state via escrowOnChainStatus anyway
+          console.warn('[auto-sync] Failed to patch backend, UI will still reflect on-chain state');
+        });
+      }
+
+      // If order doesn't exist on-chain at all
+      if (onChainBuyer === '0x0000000000000000000000000000000000000000') {
+        setEscrowOnChainStatus(-1); // sentinel: not deposited
+      }
+    }).catch((err: any) => {
+      console.warn('[escrow-sync] Could not read on-chain state:', err?.message);
+      // Don't block UI — pre-flight in handleOnChainConfirm will catch it
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.order_id, order?.status, order?.escrow_contract, publicClient]);
 
   async function fetchOrder() {
     try {
@@ -795,8 +842,29 @@ export default function OrderDetailPage() {
           )}
 
           {/* ── BUYER: Confirm Delivery (on-chain) ─── */}
-          {/* Show when SHIPPED, or when PAID and buyer hasn't received goods after a while */}
-          {isBuyer && (order.status === 'SHIPPED' || order.status === 'PAID') && (
+          {/* Show when SHIPPED/PAID AND on-chain status is Paid (1) or not yet checked (null) */}
+          {/* Hide entirely if on-chain status shows Completed/Refunded/etc to prevent stale-state clicks */}
+          {isBuyer && (order.status === 'SHIPPED' || order.status === 'PAID') && escrowOnChainStatus !== 2 && escrowOnChainStatus !== -1 && (
+            // If we've checked on-chain and it's not Paid, show a warning instead of the confirm button
+            escrowOnChainStatus !== null && escrowOnChainStatus !== 1 ? (
+              <div className={`${getPaymentAccentPanelClass('amber')} p-6 rounded-3xl shadow-lg mb-6`}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-bold text-amber-600 dark:text-amber-400">Không thể xác nhận nhận hàng</h3>
+                    <p className="text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
+                      Đơn hàng trên blockchain đang ở trạng thái: <strong>{{
+                        0: 'Pending (chưa nạp tiền)',
+                        3: 'Refunded (đã hoàn tiền)',
+                        4: 'Disputed (đang khiếu nại)',
+                        5: 'Expired (đã hết hạn)',
+                      }[escrowOnChainStatus] ?? `Unknown (${escrowOnChainStatus})`}</strong>.
+                      Chỉ có thể xác nhận khi trạng thái on-chain là "Paid".
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) :
             <div className={`${getPaymentAccentPanelClass('emerald')} p-6 rounded-3xl shadow-lg shadow-emerald-500/5 mb-6 relative overflow-hidden dark:bg-gradient-to-br dark:from-emerald-500/10 dark:to-emerald-600/5`}>
               <div className="absolute top-0 right-0 hidden w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full dark:block" />
               <div className="relative z-10">
@@ -952,6 +1020,36 @@ export default function OrderDetailPage() {
                   </div>
                 )}
 
+              </div>
+            </div>
+          )}
+
+          {/* ── On-chain completed but DB stale: show auto-sync banner ─── */}
+          {isBuyer && (order.status === 'PAID' || order.status === 'SHIPPED') && escrowOnChainStatus === 2 && (
+            <div className={`${getPaymentAccentPanelClass('emerald')} p-6 rounded-3xl shadow-lg mb-6`}>
+              <div className="flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-emerald-600 dark:text-emerald-400">Đơn hàng đã hoàn tất on-chain</h3>
+                  <p className="text-sm text-emerald-700/80 dark:text-emerald-300/70 mt-1">
+                    Tiền đã được giải ngân cho người bán trên blockchain. Hệ thống đang đồng bộ trạng thái...
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── On-chain not deposited: order never made it to escrow ─── */}
+          {isBuyer && (order.status === 'PAID' || order.status === 'SHIPPED') && escrowOnChainStatus === -1 && (
+            <div className={`${getPaymentAccentPanelClass('red')} p-6 rounded-3xl shadow-lg mb-6`}>
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-red-600 dark:text-red-400">Đơn hàng chưa có trên Escrow</h3>
+                  <p className="text-sm text-red-700/80 dark:text-red-300/70 mt-1">
+                    Giao dịch deposit chưa được ghi nhận trên smart contract. Có thể do TX deposit chưa được confirm hoặc bị revert. Liên hệ admin để kiểm tra.
+                  </p>
+                </div>
               </div>
             </div>
           )}
