@@ -47,7 +47,7 @@ export const polygonAmoy = defineChain({
   },
 });
 
-const HARDHAT_RPC_URL = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://103.20.96.79:8545';
+const HARDHAT_RPC_URL = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'https://kienai.id.vn/rpc/hardhat';
 export const localhost = defineChain({
   id: 31337,
   name: 'Hardhat (VPS Local)',
@@ -57,7 +57,7 @@ export const localhost = defineChain({
     public: { http: [HARDHAT_RPC_URL] },
   },
   blockExplorers: {
-    default: { name: 'Hardhat Local', url: 'http://103.20.96.79:8545' },
+    default: { name: 'Hardhat Local', url: 'https://kienai.id.vn/rpc/hardhat' },
   },
   testnet: true,
 });
@@ -141,7 +141,7 @@ export const USDT_ADDRESSES: Record<number, `0x${string}`> = {
 };
 
 export const CHAIN_META: Record<number, { name: string; explorer: string }> = {
-  31337: { name: 'Hardhat VPS', explorer: 'http://103.20.96.79:8545' },
+  31337: { name: 'Hardhat VPS', explorer: 'https://kienai.id.vn/rpc/hardhat' },
   84532: { name: 'Base Sepolia', explorer: 'https://sepolia.basescan.org' },
   80002: { name: 'Polygon Amoy', explorer: 'https://amoy.polygonscan.com' },
   97: { name: 'BNB Testnet', explorer: 'https://testnet.bscscan.com' },

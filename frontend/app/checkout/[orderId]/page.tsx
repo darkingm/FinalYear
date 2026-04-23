@@ -849,8 +849,8 @@ export default function CheckoutPage() {
                         <div className="space-y-1.5 text-[11px] font-mono text-emerald-300/80 pl-2">
                           <div className="flex items-center gap-2">
                             <span className="text-emerald-400/50 w-20 flex-shrink-0">RPC URL:</span>
-                            <span className="flex-1 truncate">http://103.20.96.79:8545</span>
-                            <button onClick={() => copyText('http://103.20.96.79:8545', 'RPC URL')} className="flex-shrink-0 text-emerald-400/60 hover:text-emerald-400"><Copy className="w-3 h-3" /></button>
+                            <span className="flex-1 truncate">https://kienai.id.vn/rpc/hardhat</span>
+                            <button onClick={() => copyText('https://kienai.id.vn/rpc/hardhat', 'RPC URL')} className="flex-shrink-0 text-emerald-400/60 hover:text-emerald-400"><Copy className="w-3 h-3" /></button>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-emerald-400/50 w-20 flex-shrink-0">Chain ID:</span>

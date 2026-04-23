@@ -16,7 +16,7 @@
 import { getTestnetLiteChainMeta } from './testnet-lite';
 
 /* ── authoritative RPC URLs per chain ────────────────────────── */
-const HARDHAT_RPC = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://103.20.96.79:8545';
+const HARDHAT_RPC = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'https://kienai.id.vn/rpc/hardhat';
 
 interface ChainSpec {
   chainId: string;          // hex, e.g. "0x7a69"

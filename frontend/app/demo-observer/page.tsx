@@ -25,7 +25,7 @@ interface WalletSnapshot {
 /* ─── Viem public client for on-chain reads ───────────────────────────────── */
 function getPublicClient(chainId: number) {
   const meta = getRecommendedCheckoutChainMetas().find(m => m.chainId === chainId);
-  const rpcUrl = meta?.rpcUrl || 'http://103.20.96.79:8545';
+  const rpcUrl = meta?.rpcUrl || 'https://kienai.id.vn/rpc/hardhat';
   return createPublicClient({
     chain: { ...hardhat, id: chainId, rpcUrls: { default: { http: [rpcUrl] } } },
     transport: http(rpcUrl),

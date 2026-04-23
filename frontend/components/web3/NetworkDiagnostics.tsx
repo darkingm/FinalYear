@@ -257,7 +257,7 @@ export function NetworkDiagnostics() {
       <div className="p-4 border-t border-border bg-muted/30">
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           💡 <strong>Mẹo:</strong> Nếu nút "Sửa RPC" không hoạt động, mở MetaMask → Settings → Networks → chọn mạng lỗi → sửa URL RPC thành URL hiển thị ở trên.
-          Đối với chain <strong>Hardhat VPS (#31337)</strong>, RPC phải là <code className="bg-muted px-1 py-0.5 rounded text-[10px]">http://103.20.96.79:8545</code>
+          Đối với chain <strong>Hardhat VPS (#31337)</strong>, RPC phải là <code className="bg-muted px-1 py-0.5 rounded text-[10px]">https://kienai.id.vn/rpc/hardhat</code>
         </p>
       </div>
     </div>
