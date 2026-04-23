@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Eye, EyeOff, Mail, Lock, Zap, Loader2, AlertCircle,
-  ArrowRight, Shield, Coins,
+  ArrowRight, Shield, Coins, Wallet,
 } from 'lucide-react';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
@@ -19,6 +19,8 @@ import { Header } from '@/components/layout/Header';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { usePriceStore } from '@/store';
 import { getLoginNoticeForReason } from '@/lib/auth/login-redirect';
+import { useAccount, useSignMessage } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 /* ─── Crypto Ticker Data ────────────────────────────────────── */
 const COINS = [
@@ -230,8 +232,12 @@ export default function LoginClientPage() {
   const [mounted, setMounted] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authHint, setAuthHint] = useState<string | null>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
   const lastNoticeReasonRef = useRef<string | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || '';
+
+  const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
 
   const ERROR_MESSAGES: Record<string, string> = {
     INVALID_CREDENTIALS: 'Email hoặc mật khẩu không đúng',
@@ -307,6 +313,57 @@ export default function LoginClientPage() {
     catch { toast.error('Đăng nhập thất bại. Vui lòng thử lại'); setSocialLoading(null); }
   };
 
+  const handleWalletLogin = async () => {
+    if (!isConnected || !address) {
+      toast.error('Vui lòng kết nối MetaMask trước');
+      return;
+    }
+    setWalletLoading(true);
+    setAuthError(null);
+    try {
+      // Generate client-side nonce (backend verifies signature against address, not nonce content)
+      const nonce = crypto.randomUUID();
+
+      // Build SIWE message (must match backend's buildSiweMessage format)
+      const domain = typeof window !== 'undefined' ? window.location.host : 'localhost';
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const chainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || '31337';
+      const issuedAt = new Date().toISOString();
+      const expirationTime = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const message = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nSign in to Crypto Marketplace\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expirationTime}`;
+
+      // Sign
+      const signature = await signMessageAsync({ message });
+
+      // NextAuth signIn with wallet provider
+      const result = await signIn('wallet', {
+        address,
+        message,
+        signature,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        const msg = ERROR_MESSAGES[result.error] || 'Đăng nhập ví thất bại';
+        setAuthError(msg);
+        toast.error(msg);
+      } else if (result?.ok) {
+        toast.success('Đăng nhập ví thành công!');
+        router.push(searchParams?.get('callbackUrl') || '/');
+        router.refresh();
+      }
+    } catch (e: any) {
+      if (e.code === 4001) {
+        toast.info('Đã hủy ký xác nhận');
+      } else {
+        setAuthError(e.message || 'Đăng nhập ví thất bại');
+        toast.error(e.message || 'Đăng nhập ví thất bại');
+      }
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
   const inputCls = (err: boolean) =>
     `w-full pl-10 pr-4 py-3 bg-secondary border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all text-sm ${err
       ? 'border-red-500/50 focus:ring-red-500/20'
@@ -374,6 +431,38 @@ export default function LoginClientPage() {
 
             {/* Social logins */}
             <div className="space-y-3 mb-6">
+              {/* MetaMask Wallet */}
+              <ConnectButton.Custom>
+                {({ account, openConnectModal, mounted }) => {
+                  if (!mounted) return null;
+                  if (!account) return (
+                    <button
+                      onClick={openConnectModal}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#f6851b]/8 border border-[#f6851b]/20 rounded-xl text-foreground hover:bg-[#f6851b]/15 hover:border-[#f6851b]/40 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm"
+                    >
+                      <Wallet className="w-5 h-5 text-[#f6851b]" />
+                      Kết nối ví để đăng nhập
+                    </button>
+                  );
+                  return (
+                    <button
+                      onClick={handleWalletLogin}
+                      disabled={walletLoading}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#f6851b]/10 border border-[#f6851b]/30 rounded-xl text-foreground hover:bg-[#f6851b]/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm disabled:opacity-60"
+                    >
+                      {walletLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-[#f6851b]" />
+                      ) : (
+                        <Wallet className="w-5 h-5 text-[#f6851b]" />
+                      )}
+                      {walletLoading
+                        ? 'Đang xác nhận chữ ký...'
+                        : `Đăng nhập bằng ví ${account.displayName}`}
+                    </button>
+                  );
+                }}
+              </ConnectButton.Custom>
+
               {/* Google */}
               <button
                 onClick={() => handleSocialSignIn('google')}

@@ -29,7 +29,7 @@ const TESTNET_LITE_CHAIN_META: Record<number, TestnetLiteChainMeta> = {
     nativeSymbol: 'ETH',
     explorerUrl: 'http://103.20.96.79:8545',
     faucetUrl: null,
-    rpcUrl: process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://127.0.0.1:8545',
+    rpcUrl: process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://103.20.96.79:8545',
     description: 'Chain ảo trên VPS — demo nhanh, xác nhận gần như tức thì',
     badge: 'MIỄN PHÍ',
     badgeColor: 'emerald',

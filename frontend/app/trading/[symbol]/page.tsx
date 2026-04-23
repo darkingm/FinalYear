@@ -27,13 +27,7 @@ import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { usePriceStore } from '@/store';
 import { useAccount, useBalance, useReadContract } from 'wagmi';
 import { parseAbi, formatUnits } from 'viem';
-
-// USDT contract addresses (Hardhat local testnet)
-const USDT_ADDRESSES: Record<number, `0x${string}`> = {
-  31337: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707', // Hardhat local USDT mock
-  137: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',   // Polygon USDT
-  80002: '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06',  // Amoy USDT
-};
+import { USDT_ADDRESSES } from '@/lib/web3/config';
 
 const ERC20_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',

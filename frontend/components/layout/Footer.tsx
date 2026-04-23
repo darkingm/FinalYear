@@ -163,9 +163,9 @@ export function Footer() {
             <ul className="space-y-3">
               {[
                 { href: '/disputes', labelVi: 'Báo cáo vấn đề', labelEn: 'Report Issue' },
-                { href: '#', labelVi: 'FAQ', labelEn: 'FAQ' },
-                { href: '#', labelVi: 'Chính sách bảo mật', labelEn: 'Privacy Policy' },
-                { href: '#', labelVi: 'Điều khoản sử dụng', labelEn: 'Terms of Service' },
+                { href: '/faq', labelVi: 'FAQ', labelEn: 'FAQ' },
+                { href: '/privacy', labelVi: 'Chính sách bảo mật', labelEn: 'Privacy Policy' },
+                { href: '/terms', labelVi: 'Điều khoản sử dụng', labelEn: 'Terms of Service' },
               ].map(item => (
                 <li key={item.labelEn}>
                   <Link href={item.href}

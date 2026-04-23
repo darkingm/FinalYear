@@ -6,10 +6,12 @@ import { ethers } from 'ethers';
 const DOMAIN = process.env.SIWE_DOMAIN || 'localhost';
 const ORIGIN = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+const CHAIN_ID = process.env.DEFAULT_CHAIN_ID || '31337';
+
 export function buildSiweMessage(address: string, nonce: string): string {
   const issuedAt = new Date().toISOString();
   const expirationTime = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
-  return `${DOMAIN} wants you to sign in with your Ethereum account:\n${address}\n\nSign in to Crypto Marketplace\n\nURI: ${ORIGIN}\nVersion: 1\nChain ID: 1\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expirationTime}`;
+  return `${DOMAIN} wants you to sign in with your Ethereum account:\n${address}\n\nSign in to Crypto Marketplace\n\nURI: ${ORIGIN}\nVersion: 1\nChain ID: ${CHAIN_ID}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expirationTime}`;
 }
 
 export function verifySiweSignature(message: string, signature: string): string {

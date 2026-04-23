@@ -47,7 +47,7 @@ export const polygonAmoy = defineChain({
   },
 });
 
-const HARDHAT_RPC_URL = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://127.0.0.1:8545';
+const HARDHAT_RPC_URL = process.env.NEXT_PUBLIC_HARDHAT_RPC_URL || 'http://103.20.96.79:8545';
 export const localhost = defineChain({
   id: 31337,
   name: 'Hardhat (VPS Local)',
@@ -133,8 +133,15 @@ export const CHAIN_TOKENS: Record<number, string[]> = {
   1: ['ETH', 'USDT', 'USDC', 'WBTC'],
 };
 
+/** USDT contract addresses per chain — single source of truth */
+export const USDT_ADDRESSES: Record<number, `0x${string}`> = {
+  31337: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707', // Hardhat mock USDT
+  137: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',   // Polygon USDT
+  80002: '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06',  // Polygon Amoy USDT
+};
+
 export const CHAIN_META: Record<number, { name: string; explorer: string }> = {
-  31337: { name: 'Hardhat Local', explorer: 'http://localhost:8545' },
+  31337: { name: 'Hardhat VPS', explorer: 'http://103.20.96.79:8545' },
   84532: { name: 'Base Sepolia', explorer: 'https://sepolia.basescan.org' },
   80002: { name: 'Polygon Amoy', explorer: 'https://amoy.polygonscan.com' },
   97: { name: 'BNB Testnet', explorer: 'https://testnet.bscscan.com' },

@@ -378,9 +378,9 @@ export default function RegisterPage() {
                 </div>
                 <span className="text-xs text-white/40 leading-relaxed">
                   Tôi đồng ý với{' '}
-                  <Link href="#" className="text-[#9945ff] hover:underline">Điều khoản dịch vụ</Link>
+                  <Link href="/terms" className="text-[#9945ff] hover:underline" target="_blank">Điều khoản dịch vụ</Link>
                   {' '}và{' '}
-                  <Link href="#" className="text-[#9945ff] hover:underline">Chính sách bảo mật</Link>
+                  <Link href="/privacy" className="text-[#9945ff] hover:underline" target="_blank">Chính sách bảo mật</Link>
                 </span>
               </label>
               {errors.terms && <p className="text-xs text-red-400 -mt-1">{errors.terms.message}</p>}

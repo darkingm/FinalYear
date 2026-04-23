@@ -11,7 +11,7 @@ import {
   Menu, X, Wallet, Package,
   LogOut, User, Shield, Bell,
   Zap, BarChart3, ChevronDown, Copy, Check,
-  Fish,
+  Fish, AlertTriangle,
 } from 'lucide-react';
 import { useState, useEffect, memo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -129,6 +129,14 @@ export function Header() {
   const [addrCopied, setAddrCopied] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [whaleOpen, setWhaleOpen] = useState(false);
+  const [mismatchDismissed, setMismatchDismissed] = useState(false);
+
+  // Wallet mismatch detection
+  const { address: connectedWallet } = useAccount();
+  const linkedWallet = (user as any)?.walletAddress as string | undefined;
+  const showWalletMismatch = !!(isAuthenticated && connectedWallet && linkedWallet
+    && connectedWallet.toLowerCase() !== linkedWallet.toLowerCase()
+    && !mismatchDismissed);
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -591,6 +599,26 @@ export function Header() {
             </div>
           )}
         </header>
+
+        {/* Wallet mismatch warning banner */}
+        {showWalletMismatch && (
+          <div className="sticky top-16 z-40 bg-amber-500/10 border-b border-amber-500/20 px-4 py-2">
+            <div className="container mx-auto flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-amber-400">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>
+                  Ví MetaMask (<strong className="font-mono">{connectedWallet?.slice(0, 6)}…{connectedWallet?.slice(-4)}</strong>) khác ví liên kết tài khoản (<strong className="font-mono">{linkedWallet?.slice(0, 6)}…{linkedWallet?.slice(-4)}</strong>). Thanh toán sẽ dùng ví đang kết nối.
+                </span>
+              </div>
+              <button
+                onClick={() => setMismatchDismissed(true)}
+                className="text-amber-400/70 hover:text-amber-400 text-xs flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
       </>
     </TooltipProvider>
   );
