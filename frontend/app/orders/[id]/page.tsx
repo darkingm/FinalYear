@@ -273,6 +273,7 @@ export default function OrderDetailPage() {
       functionName: 'buyerConfirmDelivery',
       args: [orderId32],
       chainId: order.chain_id as any,
+      gas: 500_000n, // Explicit cap — prevents gas estimation from hitting block limit on revert
     });
   };
 
