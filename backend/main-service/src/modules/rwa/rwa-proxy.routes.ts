@@ -32,9 +32,11 @@ async function proxyToTokenization(
 }
 
 /* ── Public read routes (pass-through, no auth) ──────────────────────────── */
-router.get('/assets', async (_req: Request, res: Response) => {
+router.get('/assets', async (req: Request, res: Response) => {
     try {
-        const data = await proxyToTokenization('get', '/api/rwa/assets');
+        // Forward query params (e.g. ?status=ALL for admin)
+        const status = req.query.status ? `?status=${req.query.status}` : '';
+        const data = await proxyToTokenization('get', `/api/rwa/assets${status}`);
         res.json(data);
     } catch (err: any) {
         res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
@@ -53,6 +55,16 @@ router.get('/assets/:id', async (req: Request, res: Response) => {
 router.get('/kyc/status/:wallet', async (req: Request, res: Response) => {
     try {
         const data = await proxyToTokenization('get', `/api/rwa/kyc/status/${req.params.wallet}`);
+        res.json(data);
+    } catch (err: any) {
+        res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
+    }
+});
+
+// KYC list (admin)
+router.get('/kyc/list', authenticate, authorize('admin'), async (_req: Request, res: Response) => {
+    try {
+        const data = await proxyToTokenization('get', '/api/rwa/kyc/list');
         res.json(data);
     } catch (err: any) {
         res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });

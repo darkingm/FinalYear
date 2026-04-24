@@ -57,13 +57,41 @@ export default function BuyoutPage() {
 
     const handleClaim = async (buyoutId: number) => {
         if (!address) return toast.error('Connect wallet first');
+        if (!detail?.buyout) return toast.error('Load buyout detail first');
+
+        const buyout = detail.buyout;
+        // TODO: In production, token_balance should come from Merkle proof snapshot.
+        // For now, query on-chain token balance or use portfolio data.
+        // We need at least the user's token balance to compute their claim amount.
         try {
+            // Fetch user's holdings from the holders API
+            const holdersRes = await rwaApi.holders.list(assetId!, 100);
+            const holders = holdersRes.data.holders || [];
+            // Match by address prefix since public API masks the full address
+            const myHolding = holders.find((h: any) =>
+                address.toLowerCase().startsWith(h.wallet_address?.substring(0, 6).toLowerCase())
+            );
+
+            if (!myHolding || Number(myHolding.tokens_held) <= 0) {
+                return toast.error('You do not hold any tokens for this asset');
+            }
+
+            const tokenBalance = Number(myHolding.tokens_held);
+            // Pro-rata: (user_tokens / total_tokens) * total_price_wei
+            const totalTokens = Number(buyout.total_tokens) || 1;
+            const totalPriceWei = BigInt(buyout.total_price_wei || '0');
+            const claimAmountWei = (totalPriceWei * BigInt(tokenBalance) / BigInt(totalTokens)).toString();
+
+            if (BigInt(claimAmountWei) <= 0n) {
+                return toast.error('Computed claim amount is zero — nothing to claim');
+            }
+
             await rwaApi.buyout.claim(buyoutId, {
                 holder_address: address,
-                token_balance: 0, // Will be determined from Merkle proof
-                amount_wei: '0',
+                token_balance: tokenBalance,
+                amount_wei: claimAmountWei,
             });
-            toast.success('Claim submitted');
+            toast.success('Claim submitted! 🎉');
             loadDetail(buyoutId);
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Claim failed');

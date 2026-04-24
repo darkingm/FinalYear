@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Building, TrendingUp, Coins, Leaf, Search, Filter, RefreshCw, Percent, Users, ArrowRight } from 'lucide-react';
+import { Building, TrendingUp, Coins, Leaf, Search, Filter, RefreshCw, Percent, Users, ArrowRight, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { rwaApi } from '@/lib/api/rwa';
 import { Header } from '@/components/layout/Header';
@@ -213,6 +213,21 @@ export default function AssetsMarketplacePage() {
                 {loading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {[...Array(3)].map((_, i) => <div key={i} className="h-80 bg-card border border-border rounded-2xl animate-pulse" />)}
+                    </div>
+                ) : error ? (
+                    <div className="text-center py-16">
+                        <div className="inline-flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 px-6 py-4 rounded-2xl mb-4">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <div className="text-left">
+                                <p className="font-bold text-sm">API Connection Failed</p>
+                                <p className="text-xs text-red-400/70 mt-0.5">Unable to load assets from the server. The backend or RPC may be down.</p>
+                            </div>
+                        </div>
+                        <br />
+                        <button onClick={() => window.location.reload()}
+                            className="mt-4 px-5 py-2.5 bg-card border border-border rounded-xl text-sm font-bold hover:border-[#f0b90b]/40 transition-colors">
+                            Retry
+                        </button>
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="text-center py-24 text-muted-foreground">

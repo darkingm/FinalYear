@@ -26,26 +26,15 @@ app.use(morgan('dev'));
 // Health
 app.get('/health', (_, res) => res.json({ ok: true, service: 'tokenization-service' }));
 
-// ── Public read routes (no auth) ─────────────────────────────────────────────
-app.get('/api/rwa/assets', assetsRouter);
-app.get('/api/rwa/assets/:id', assetsRouter);
-app.get('/api/rwa/kyc/status/:wallet', kycRouter);
-app.get('/api/rwa/portfolio/:userId', portfolioRouter);
-app.get('/api/rwa/portfolio/:assetId/pending/:walletAddress', portfolioRouter);
-app.get('/api/rwa/profit/:assetId/history', profitRouter);
-app.get('/api/rwa/profit/:assetId/stats', profitRouter);
-app.use('/api/rwa/holders', holdersRouter);
-app.use('/api/rwa/governance', governanceRouter); // GET routes are public
-app.use('/api/rwa/buyout', buyoutRouter);
-app.use('/api/rwa/market', marketRouter);
-
-// ── Mutating routes (require internal service key) ───────────────────────────
-// All POST/PATCH/DELETE go through main-service proxy with X-Internal-Service-Key
+// ── All routes go through internal key middleware ────────────────────────────
+// The main-service proxy handles public vs authenticated access.
+// When accessed directly (dev), all routes require the internal service key.
 app.use('/api/rwa/assets', requireInternalKey, assetsRouter);
 app.use('/api/rwa/kyc', requireInternalKey, kycRouter);
 app.use('/api/rwa/profit', requireInternalKey, profitRouter);
 app.use('/api/rwa/portfolio', requireInternalKey, portfolioRouter);
-app.use('/api/rwa/governance', requireInternalKey, governanceRouter); // POST routes need internal key
+app.use('/api/rwa/holders', requireInternalKey, holdersRouter);
+app.use('/api/rwa/governance', requireInternalKey, governanceRouter);
 app.use('/api/rwa/buyout', requireInternalKey, buyoutRouter);
 app.use('/api/rwa/market', requireInternalKey, marketRouter);
 

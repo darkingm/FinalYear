@@ -48,3 +48,17 @@ kycRouter.get('/status/:wallet', async (req: Request, res: Response) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+/** Admin: List all KYC records */
+kycRouter.get('/list', async (_req: Request, res: Response) => {
+    try {
+        const result = await query(`
+            SELECT wallet_address, user_id, verified, jurisdiction, granted_at
+            FROM rwa_kyc
+            ORDER BY granted_at DESC NULLS LAST
+        `);
+        res.json({ records: result.rows });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
