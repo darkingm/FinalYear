@@ -5,18 +5,32 @@ import { createAssetOnChain } from '../../blockchain/factory';
 
 export const assetsRouter = Router();
 
-/* ─── List all active assets ─────────────────────────────────────────── */
-assetsRouter.get('/', async (_req: Request, res: Response) => {
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/* ─── List assets (default: ACTIVE only; ?status=ALL for admin) ───────── */
+assetsRouter.get('/', async (req: Request, res: Response) => {
     try {
-        const result = await query(`
-      SELECT asset_id, name, asset_type, description, location,
+        const statusFilter = (req.query.status as string || 'ACTIVE').toUpperCase();
+        const validStatuses = ['ACTIVE', 'PENDING', 'FAILED', 'CLOSED', 'ALL'];
+        if (!validStatuses.includes(statusFilter)) {
+            return res.status(400).json({ error: `Invalid status filter. Must be one of: ${validStatuses.join(', ')}` });
+        }
+
+        let sql = `
+      SELECT asset_id, name, symbol, asset_type, description, location,
              total_valuation_usd, price_per_token_usd, total_tokens,
              tokens_sold, token_contract_address, distributor_contract_address,
              legal_doc_ipfs, expected_apy, status, created_at
       FROM rwa_assets
-      WHERE status = 'ACTIVE'
-      ORDER BY created_at DESC
-    `);
+    `;
+        const params: any[] = [];
+        if (statusFilter !== 'ALL') {
+            sql += ` WHERE status = $1`;
+            params.push(statusFilter);
+        }
+        sql += ` ORDER BY created_at DESC`;
+
+        const result = await query(sql, params);
         res.json({ assets: result.rows });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -112,11 +126,40 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
     }
 });
 
-/* ─── Admin: Update status ───────────────────────────────────────────── */
+/* ─── Admin: Update status (with on-chain deploy guard) ──────────────── */
 assetsRouter.patch('/:id/status', async (req: Request, res: Response) => {
+    const newStatus = req.body.status;
+    const validStatuses = ['ACTIVE', 'PENDING', 'FAILED', 'CLOSED'];
+    if (!newStatus || !validStatuses.includes(newStatus)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+
     try {
-        await query(`UPDATE rwa_assets SET status = $1 WHERE asset_id = $2`, [req.body.status, req.params.id]);
-        res.json({ ok: true });
+        // Block PENDING → ACTIVE if asset has not been deployed on-chain
+        if (newStatus === 'ACTIVE') {
+            const assetResult = await query(
+                `SELECT token_contract_address FROM rwa_assets WHERE asset_id = $1`,
+                [req.params.id]
+            );
+            if (assetResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Asset not found' });
+            }
+            const addr = assetResult.rows[0].token_contract_address;
+            if (!addr || addr === ZERO_ADDRESS) {
+                return res.status(400).json({
+                    error: 'Cannot activate asset: token contract not deployed on-chain. Deploy first or retry deploy.',
+                });
+            }
+        }
+
+        const result = await query(
+            `UPDATE rwa_assets SET status = $1, updated_at = NOW() WHERE asset_id = $2 RETURNING asset_id, status`,
+            [newStatus, req.params.id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Asset not found' });
+        }
+        res.json({ ok: true, asset_id: result.rows[0].asset_id, status: result.rows[0].status });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

@@ -288,6 +288,7 @@ export default function AssetDetailPage() {
         const demoAsset = getDemoRwaAssetById(id as string);
         Promise.all([
             rwaApi.assets.get(id as string).then(r => setAsset(r.data.asset)).catch(() => {
+                // Only fallback to demo if explicitly enabled via env var
                 if (demoAsset) setAsset(demoAsset as RWAAsset);
             }),
             rwaApi.profit.stats(id as string).then(r => setStats(r.data.stats)).catch(() => { }),
@@ -295,39 +296,7 @@ export default function AssetDetailPage() {
             rwaApi.holders.list(id as string, 5).then(r => setHolders(r.data.holders || [])).catch(() => { }),
             rwaApi.holders.concentration(id as string).then(r => setConcentration(r.data.concentration)).catch(() => { }),
         ]).finally(() => {
-            if (demoAsset) {
-                setStats((current: any) => current ?? {
-                    totalDepositedWei: '0',
-                    totalDepositedEth: '0',
-                    distributionCount: 2,
-                    totalClaimedWei: '0',
-                });
-                setDistributions((current) => current.length > 0 ? current : [
-                    {
-                        distribution_id: 'demo-dist-001',
-                        amount_eth: '0.80',
-                        description: 'Quarterly rental yield distribution',
-                        distributed_at: new Date().toISOString(),
-                    },
-                    {
-                        distribution_id: 'demo-dist-002',
-                        amount_eth: '0.65',
-                        description: 'Occupancy bonus distribution',
-                        distributed_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
-                    },
-                ]);
-                setHolders((current) => current.length > 0 ? current : [
-                    { wallet_address: '0x9f2a2D5c9c784D05f4B2E7C5E1A2d2c8f17E4A11', tokens_held: 600, ownership_percent: 12, is_largest_holder: true },
-                    { wallet_address: '0x70B2C3C4c112D9447D6f75d5cD1b5eCaA8a5F211', tokens_held: 420, ownership_percent: 8.4, is_largest_holder: false },
-                    { wallet_address: '0x4A31fB8D0b4766cD6f6e3Ab10e54D1d93fb6f144', tokens_held: 315, ownership_percent: 6.3, is_largest_holder: false },
-                ]);
-                setConcentration((current: any) => current ?? {
-                    largest_holder_percent: 12,
-                    top5_percent: 34.7,
-                    top10_percent: 48.2,
-                    herfindahl_index: 412,
-                });
-            }
+            // No fake stats/holders/distributions injection — show real data or nothing
             setLoading(false);
         });
     }, [id]);

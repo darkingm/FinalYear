@@ -26,12 +26,22 @@ holdersRouter.get('/:assetId/holders', async (req: Request, res: Response) => {
             LIMIT $2
         `, [req.params.assetId, limit]);
 
-        // Mark largest holder
-        const holders = result.rows.map((h: any, i: number) => ({
-            ...h,
-            is_largest_holder: i === 0,
-            rank: i + 1,
-        }));
+        // Mask sensitive data for public API
+        const holders = result.rows.map((h: any, i: number) => {
+            const addr = h.wallet_address || '';
+            return {
+                wallet_address: addr.length >= 10
+                    ? `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
+                    : addr,
+                // user_id intentionally omitted from public response
+                tokens_held: h.tokens_held,
+                total_tokens: h.total_tokens,
+                ownership_percent: h.ownership_percent,
+                last_updated: h.last_updated,
+                is_largest_holder: i === 0,
+                rank: i + 1,
+            };
+        });
 
         res.json({ holders });
     } catch (err: any) {

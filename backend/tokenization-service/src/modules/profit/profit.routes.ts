@@ -6,7 +6,7 @@ export const profitRouter = Router();
 
 /** Admin: Deposit profit for an asset */
 profitRouter.post('/:assetId/deposit', async (req: Request, res: Response) => {
-    const { amount_eth, description } = req.body;
+    const { amount_eth, amount_usd, description } = req.body;
     if (!amount_eth) return res.status(400).json({ error: 'amount_eth required' });
 
     try {
@@ -24,8 +24,8 @@ profitRouter.post('/:assetId/deposit', async (req: Request, res: Response) => {
         // Record distribution
         await query(`
       INSERT INTO profit_distributions (asset_id, amount_eth, amount_usd, tx_hash, period_description)
-      VALUES ($1, $2, 0, $3, $4)
-    `, [req.params.assetId, amount_eth, receipt.hash, desc]);
+      VALUES ($1, $2, $3, $4, $5)
+    `, [req.params.assetId, amount_eth, amount_usd || null, receipt.hash, desc]);
 
         res.json({ ok: true, tx_hash: receipt.hash });
     } catch (err: any) {

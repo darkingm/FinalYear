@@ -119,7 +119,9 @@ marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Cannot buy your own listing' });
         }
 
-        const totalPriceWei = (BigInt(listing.price_per_token_wei) * BigInt(listing.token_amount) / BigInt(10 ** 18)).toString();
+        // price_per_token_wei is already in wei, token_amount is regular count
+        // e.g. 0.01 ETH/token = 1e16 wei × 10 tokens = 1e17 wei total
+        const totalPriceWei = (BigInt(listing.price_per_token_wei) * BigInt(listing.token_amount)).toString();
 
         // Mark listing filled
         await query(`UPDATE rwa_listings SET status = 'FILLED', updated_at = NOW() WHERE id = $1`, [req.params.id]);

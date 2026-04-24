@@ -3,7 +3,8 @@ import { publicRequestConfig } from './request-auth';
 
 export const rwaApi = {
     assets: {
-        list: () => apiClient.get('/api/rwa/assets', publicRequestConfig),
+        list: (params?: { status?: string }) =>
+            apiClient.get(`/api/rwa/assets${params?.status ? `?status=${params.status}` : ''}`, publicRequestConfig),
         get: (id: string) => apiClient.get(`/api/rwa/assets/${id}`, publicRequestConfig),
         create: (data: any) => apiClient.post('/api/rwa/assets', data),
         updateStatus: (id: string, status: string) => apiClient.patch(`/api/rwa/assets/${id}/status`, { status }),

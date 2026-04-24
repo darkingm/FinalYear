@@ -2382,8 +2382,8 @@
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\GovernanceRWA.sol": {
-      "lastModificationDate": 1776750080874,
-      "contentHash": "89f427d4ab2f5014b2abdd24364608e2",
+      "lastModificationDate": 1777052480094,
+      "contentHash": "2b6f7758b641e4654519d91d5901547d",
       "sourceName": "contracts/GovernanceRWA.sol",
       "solcConfig": {
         "version": "0.8.20",

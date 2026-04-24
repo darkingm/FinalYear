@@ -116,17 +116,25 @@ function AssetCard({ asset }: { asset: RWAAsset }) {
 export default function AssetsMarketplacePage() {
     const [assets, setAssets] = useState<RWAAsset[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState('ALL');
 
     useEffect(() => {
         const fetchAssets = async () => {
             setLoading(true);
+            setError(false);
             try {
                 const res = await rwaApi.assets.list();
                 setAssets(res.data.assets || []);
             } catch {
-                setAssets(getDemoRwaAssets() as RWAAsset[]);
+                // Only use demo data when explicitly enabled via env var
+                const demo = getDemoRwaAssets();
+                if (demo.length > 0) {
+                    setAssets(demo as RWAAsset[]);
+                } else {
+                    setError(true);
+                }
             } finally { setLoading(false); }
         };
         fetchAssets();
@@ -169,8 +177,13 @@ export default function AssetsMarketplacePage() {
                                 <p className="text-xs text-muted-foreground">Active Asset Offerings</p>
                             </div>
                             <div>
-                                <p className="text-2xl font-black">100%</p>
-                                <p className="text-xs text-muted-foreground">On-chain Settlement</p>
+                                <p className="text-2xl font-black">
+                                    {assets.filter(a =>
+                                        a.token_contract_address &&
+                                        a.token_contract_address !== '0x0000000000000000000000000000000000000000'
+                                    ).length}/{assets.length}
+                                </p>
+                                <p className="text-xs text-muted-foreground">On-chain Deployed</p>
                             </div>
                         </div>
                     </motion.div>

@@ -17,7 +17,8 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 
 const GOV_ABI = parseAbi([
-    'function createProposal(uint8 pType, string description, string ipfsDoc) external returns (uint256)',
+    // Use 4-param version — the 3-param overload has a msg.sender bug in the contract
+    'function createProposal(uint8 pType, string description, string ipfsDoc, bytes32 executionHash) external returns (uint256)',
     'function castVote(uint256 proposalId, bool support) external',
     'function executeProposal(uint256 proposalId) external',
     'function getVotingPower(address voter, uint256 proposalId) view returns (uint256)',

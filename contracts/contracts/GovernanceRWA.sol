@@ -84,8 +84,6 @@ contract GovernanceRWA is AccessControl {
         _grantRole(OPERATOR_ROLE, admin);
     }
 
-    /* ── Create Proposal ──────────────────────────────────────── */
-
     /**
      * @notice Create a proposal. Actionable proposals (INITIATE_BUYOUT, SELL_ASSET)
      *         MUST include an executionHash = keccak256(abi.encodePacked(
@@ -99,11 +97,38 @@ contract GovernanceRWA is AccessControl {
         string calldata ipfsDoc,
         bytes32 executionHash
     ) external returns (uint256) {
+        return _createProposal(msg.sender, pType, description, ipfsDoc, executionHash);
+    }
+
+    /**
+     * @notice Backward-compatible overload without executionHash (for non-actionable proposals)
+     */
+    function createProposal(
+        ProposalType pType,
+        string calldata description,
+        string calldata ipfsDoc
+    ) external returns (uint256) {
+        require(!_isActionableType(pType), "Gov: actionable proposal requires executionHash");
+        return _createProposal(msg.sender, pType, description, ipfsDoc, bytes32(0));
+    }
+
+    /**
+     * @dev Internal implementation — preserves the real caller as proposer.
+     *      Previously the 3-param overload used `this.createProposal(...)` which
+     *      made msg.sender = address(this), breaking the proposer identity.
+     */
+    function _createProposal(
+        address proposer,
+        ProposalType pType,
+        string calldata description,
+        string calldata ipfsDoc,
+        bytes32 executionHash
+    ) internal returns (uint256) {
         uint256 supply = token.totalSupply();
         require(supply > 0, "Gov: no tokens issued");
 
         // Check proposer has enough voting power
-        uint256 voterBalance = token.balanceOf(msg.sender);
+        uint256 voterBalance = token.balanceOf(proposer);
         uint256 threshold = (supply * proposalThresholdBps) / 10000;
         require(voterBalance >= threshold, "Gov: below proposal threshold");
 
@@ -117,7 +142,7 @@ contract GovernanceRWA is AccessControl {
 
         proposals[id] = Proposal({
             id:            id,
-            proposer:      msg.sender,
+            proposer:      proposer,
             proposalType:  pType,
             description:   description,
             ipfsDoc:       ipfsDoc,
@@ -130,20 +155,8 @@ contract GovernanceRWA is AccessControl {
             executed:      false
         });
 
-        emit ProposalCreated(id, msg.sender, pType, description, executionHash, block.timestamp + votingPeriod);
+        emit ProposalCreated(id, proposer, pType, description, executionHash, block.timestamp + votingPeriod);
         return id;
-    }
-
-    /**
-     * @notice Backward-compatible overload without executionHash (for non-actionable proposals)
-     */
-    function createProposal(
-        ProposalType pType,
-        string calldata description,
-        string calldata ipfsDoc
-    ) external returns (uint256) {
-        require(!_isActionableType(pType), "Gov: actionable proposal requires executionHash");
-        return this.createProposal(pType, description, ipfsDoc, bytes32(0));
     }
 
     /* ── Cast Vote ────────────────────────────────────────────── */

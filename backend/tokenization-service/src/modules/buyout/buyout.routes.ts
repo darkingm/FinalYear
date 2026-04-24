@@ -116,6 +116,13 @@ buyoutRouter.post('/:id/claim', async (req: Request, res: Response) => {
     if (!holder_address || !amount_wei) {
         return res.status(400).json({ error: 'holder_address and amount_wei required' });
     }
+    // Reject zero-value claims — these indicate frontend sent placeholder data
+    if (BigInt(amount_wei) <= 0n) {
+        return res.status(400).json({ error: 'amount_wei must be greater than 0' });
+    }
+    if (!token_balance || Number(token_balance) <= 0) {
+        return res.status(400).json({ error: 'token_balance must be greater than 0' });
+    }
     try {
         await query(`
             INSERT INTO buyout_claims (buyout_id, holder_address, token_balance, amount_wei, tx_hash)
