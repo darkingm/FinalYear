@@ -15,7 +15,10 @@ const SERVER_API_URL =
 
 const serverApi = axios.create({
   baseURL: SERVER_API_URL,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    ...(process.env.INTERNAL_SERVICE_KEY ? { 'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY } : {}),
+  },
   timeout: 10000,
   withCredentials: false,                   // Server-to-server — no cookies needed
 });

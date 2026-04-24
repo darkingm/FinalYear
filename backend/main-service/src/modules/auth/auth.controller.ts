@@ -42,8 +42,30 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         }
       } catch (err) {
         logger.error('hCaptcha verification error:', err);
-        // Allow registration if hCaptcha service is down
+        return res.status(503).json({
+          success: false,
+          message: 'CAPTCHA service unavailable. Please try again.',
+        });
       }
+    } else {
+      // hCaptcha secret not configured — block in production
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(500).json({
+          success: false,
+          message: 'CAPTCHA not configured on server',
+        });
+      }
+    }
+
+    // Validate input fields
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: 'Invalid email format' });
+    }
+    if (!password || password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters with uppercase, lowercase, and number' });
+    }
+    if (username && (username.length < 3 || username.length > 30)) {
+      return res.status(400).json({ success: false, message: 'Username must be 3-30 characters' });
     }
 
     const result = await authService.register({
@@ -105,6 +127,13 @@ export async function walletLogin(req: Request, res: Response, next: NextFunctio
 
 export async function oauthLogin(req: Request, res: Response, next: NextFunction) {
   try {
+    // SECURITY: Only accept from internal NextAuth server, not from browsers
+    const internalKey = req.headers['x-internal-service-key'] as string | undefined;
+    const expectedKey = process.env.INTERNAL_SERVICE_KEY;
+    if (!expectedKey || internalKey !== expectedKey) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+
     const body = req.body;
     if (!body || typeof body !== 'object') {
       return res.status(400).json({ success: false, message: 'Invalid request body. Expected JSON object.' });
@@ -210,8 +239,8 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
     if (!token || !password) {
       return res.status(400).json({ success: false, message: 'Token and password are required' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+    if (!password || password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters with uppercase, lowercase, and number' });
     }
     const result = await authService.resetPassword(token, password);
     res.json({ success: true, ...result });

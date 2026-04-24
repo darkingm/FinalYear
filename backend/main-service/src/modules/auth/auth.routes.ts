@@ -8,7 +8,7 @@ const router = Router();
 router.post('/register', authLimiter, register);
 router.post('/login', authLimiter, login);
 router.post('/wallet-login', authLimiter, walletLogin);
-router.post('/oauth', oauthLogin);          // No rate limit — trusted OAuth providers
+router.post('/oauth', authLimiter, oauthLogin);  // Rate limited — NextAuth server-to-server
 router.post('/refresh', refreshToken);
 router.post('/logout', logout);
 router.post('/link-wallet', authenticate, linkWallet);

@@ -79,13 +79,16 @@ export class AuthService {
   }
 
   async walletLogin(walletAddress: string, message: string, signature: string) {
-    // Verify signature
+    // 1. Verify signature
     const recoveredAddress = ethers.verifyMessage(message, signature);
     if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
       throw new AppError('Invalid signature', 401);
     }
 
-    // Find or create user
+    // 2. Parse SIWE message fields to prevent replay attacks
+    await this.validateSiweMessage(message);
+
+    // 3. Find or create user
     let result = await query(
       'SELECT * FROM users WHERE wallet_address = $1',
       [walletAddress]
@@ -93,7 +96,6 @@ export class AuthService {
 
     let user;
     if (result.rows.length === 0) {
-      // Create new user
       result = await query(
         `INSERT INTO users (email, wallet_address, role, status)
          VALUES ($1, $2, 'buyer', 'active')
@@ -105,13 +107,13 @@ export class AuthService {
       user = result.rows[0];
     }
 
-    // Generate tokens
-    const tokens = this.generateTokens(user);
+    // 4. Check account status
+    if (user.status !== 'active') {
+      throw new AppError('Account is suspended', 403);
+    }
 
-    return {
-      user: this.sanitizeUser(user),
-      ...tokens,
-    };
+    const tokens = this.generateTokens(user);
+    return { user: this.sanitizeUser(user), ...tokens };
   }
 
   /** Link a wallet to the current user (email/password account). Verifies ownership via SIWE. */
@@ -120,6 +122,10 @@ export class AuthService {
     if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
       throw new AppError('Invalid signature', 401);
     }
+
+    // Validate SIWE message to prevent replay
+    await this.validateSiweMessage(message);
+
     const normalized = walletAddress.toLowerCase();
     const existing = await query(
       'SELECT user_id FROM users WHERE LOWER(wallet_address) = $1',
@@ -181,12 +187,13 @@ export class AuthService {
       user = result.rows[0];
     }
 
-    const tokens = this.generateTokens(user);
+    // Check account status
+    if (user.status !== 'active') {
+      throw new AppError('Account is suspended', 403);
+    }
 
-    return {
-      user: this.sanitizeUser(user),
-      ...tokens,
-    };
+    const tokens = this.generateTokens(user);
+    return { user: this.sanitizeUser(user), ...tokens };
   }
 
   async refreshToken(refreshToken: string) {
@@ -239,12 +246,60 @@ export class AuthService {
   }
 
   private async blacklistToken(token: string) {
-    await setCache(`blacklist:${token}`, true, 7 * 24 * 60 * 60); // 7 days
+    try {
+      await setCache(`blacklist:${token}`, true, 7 * 24 * 60 * 60); // 7 days
+    } catch (err) {
+      logger.error('Redis blacklist failed — token NOT blacklisted:', err);
+    }
   }
 
   private async isTokenBlacklisted(token: string): Promise<boolean> {
-    const result = await getCache(`blacklist:${token}`);
-    return !!result;
+    try {
+      const result = await getCache(`blacklist:${token}`);
+      return !!result;
+    } catch (err) {
+      logger.error('Redis blacklist check failed — assuming not blacklisted:', err);
+      return false;
+    }
+  }
+
+  /** Parse and validate SIWE message fields to prevent replay attacks */
+  private async validateSiweMessage(message: string) {
+    const nonceMatch = message.match(/Nonce: (.+)/);
+    const issuedAtMatch = message.match(/Issued At: (.+)/);
+    const expirationMatch = message.match(/Expiration Time: (.+)/);
+
+    if (!nonceMatch || !issuedAtMatch || !expirationMatch) {
+      throw new AppError('Invalid message format — missing SIWE fields', 400);
+    }
+
+    const nonce = nonceMatch[1].trim();
+    const issuedAt = new Date(issuedAtMatch[1].trim());
+    const expirationTime = new Date(expirationMatch[1].trim());
+    const now = new Date();
+
+    // Check expiration
+    if (now > expirationTime) {
+      throw new AppError('Signature expired', 401);
+    }
+
+    // Check issued-at not too old (5 minutes)
+    if (now.getTime() - issuedAt.getTime() > 5 * 60 * 1000) {
+      throw new AppError('Signature too old', 401);
+    }
+
+    // Check nonce not already used (prevents replay)
+    try {
+      const nonceKey = `wallet-nonce:${nonce}`;
+      const used = await getCache(nonceKey);
+      if (used) {
+        throw new AppError('Nonce already used', 401);
+      }
+      await setCache(nonceKey, '1', 5 * 60); // expire after 5 min
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      logger.warn('Redis nonce check failed — allowing login (Redis may be down):', err);
+    }
   }
 
   private sanitizeUser(user: any) {

@@ -152,7 +152,22 @@ export function Header() {
     return () => { i18n.off('languageChanged', handler); };
   }, [i18n]);
 
-  const handleLogout = () => { disconnect(); signOut({ callbackUrl: '/' }); };
+  const handleLogout = async () => {
+    // Best-effort: blacklist refresh token on backend before clearing session
+    try {
+      const sessionRes = await fetch('/api/auth/session');
+      const session = await sessionRes.json();
+      if (session?.refreshToken) {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: session.refreshToken }),
+        }).catch(() => {}); // best-effort — don't block logout
+      }
+    } catch {} // best-effort
+    disconnect();
+    signOut({ callbackUrl: '/' });
+  };
 
   const isAdmin = (user as any)?.role === 'admin' || (user as any)?.email === 'admin@marketplace.com';
   const navGroups = buildHeaderNavGroups({ isAdmin });

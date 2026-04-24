@@ -6,10 +6,9 @@ import rateLimit from 'express-rate-limit';
  * - Skipping internal IPs prevents NextAuth from getting 429 when relaying user requests
  */
 const skipInternalNetwork = (req: any): boolean => {
-  const ip =
-    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-    req.socket?.remoteAddress ||
-    '';
+  // SECURITY: Only trust socket address, not X-Forwarded-For
+  // (attackers can spoof X-Forwarded-For to bypass rate limiting)
+  const ip = req.socket?.remoteAddress || '';
 
   return (
     ip === '127.0.0.1'          ||
