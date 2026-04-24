@@ -212,8 +212,12 @@ export class PayPalService {
   private async verifyWebhookSignature(webhookData: any, headers: any): Promise<boolean> {
     const webhookId = (process.env.PAYPAL_WEBHOOK_ID ?? '').trim();
     if (!webhookId) {
-       logger.warn('PAYPAL_WEBHOOK_ID is not configured, skipping signature verification');
-       return true; // Skip verification if not configured (useful for local dev)
+       if (process.env.PAYPAL_MODE === 'production') {
+         logger.error('PAYPAL_WEBHOOK_ID is not configured — rejecting webhook in production');
+         return false;
+       }
+       logger.warn('PAYPAL_WEBHOOK_ID not configured — skipping verify (dev/sandbox only)');
+       return true;
     }
 
     const accessToken = await this.getAccessToken();

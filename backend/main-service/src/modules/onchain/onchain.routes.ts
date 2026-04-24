@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../../config/database';
 import { redisClient } from '../../config/redis';
 import { logger } from '../../utils/logger';
+import { authenticate, AuthRequest } from '../../middleware/auth.middleware';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ function cacheKey(wallet: string, chain: string, token: string) {
  *         txType, amountToken, amountUsd, priceUsd, pairSymbol,
  *         dexName, blockNumber, txTimestamp }
  * ──────────────────────────────────────────────────────────────── */
-router.post('/tx/record', async (req: Request, res: Response) => {
+router.post('/tx/record', authenticate, async (req: Request, res: Response) => {
     const {
         walletAddress, chain, txHash,
         tokenAddress = 'native', tokenSymbol = '',
@@ -223,7 +224,7 @@ router.get('/wallet/:address/multi-stats', async (req: Request, res: Response) =
  *   priceUsd, tokenSymbol, quoteSymbol, dexId, txTimestamp }> }
  * Bulk-inserts decoded swap events (deduped by tx_hash+pair+maker)
  * ──────────────────────────────────────────────────────────────── */
-router.post('/pair/record-batch', async (req: Request, res: Response) => {
+router.post('/pair/record-batch', authenticate, async (req: Request, res: Response) => {
     const { txs } = req.body;
     if (!Array.isArray(txs) || txs.length === 0) {
         return res.status(400).json({ error: 'txs array required' });

@@ -28,9 +28,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     if (error?.name === 'JsonWebTokenError') {
       console.error('[auth] JWT verify failed:', {
         secret_len: process.env.JWT_SECRET?.length ?? 0,
-        secret_prefix: (process.env.JWT_SECRET || '').slice(0, 4) + '...',
         error: error.message,
-        token_preview: (req.headers.authorization || '').slice(7, 20) + '...',
       });
     }
     // Provide specific error message for debugging

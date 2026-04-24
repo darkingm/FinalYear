@@ -59,8 +59,14 @@ router.get('/kyc/status/:wallet', async (req: Request, res: Response) => {
     }
 });
 
-router.get('/portfolio/:userId', async (req: Request, res: Response) => {
+router.get('/portfolio/:userId', authenticate, async (req: Request, res: Response) => {
     try {
+        const authReq = req as AuthRequest;
+        const requestedId = parseInt(req.params.userId, 10);
+        // Ownership check: users can only view own portfolio; admin can view any
+        if (authReq.user!.role !== 'admin' && authReq.user!.user_id !== requestedId) {
+            return res.status(403).json({ error: 'Forbidden — you can only view your own portfolio' });
+        }
         const data = await proxyToTokenization('get', `/api/rwa/portfolio/${req.params.userId}`);
         res.json(data);
     } catch (err: any) {

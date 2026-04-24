@@ -18,7 +18,7 @@ import {
   releaseFunds,
   refundPayment
 } from './crypto-payment.controller';
-import { authenticate } from '../../middleware/auth.middleware';
+import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { statusLimiter } from '../../middleware/rate-limit';
 import { validateRequest } from '../../middleware/validate.middleware';
 import {
@@ -59,8 +59,11 @@ function authenticateOrInternalKey(req: Request, res: Response, next: NextFuncti
   if (internalKey && expectedKey && internalKey === expectedKey) {
     return next(); // trusted internal microservice call — skip JWT
   }
-  // Fall through to standard JWT auth (admin action from browser)
-  return authenticate(req as any, res, next);
+  // Fall through to JWT auth + admin role check (not just any authenticated user)
+  return authenticate(req as any, res, (err) => {
+    if (err) return next(err);
+    return authorize('admin')(req as any, res, next);
+  });
 }
 
 router.post('/session', authenticate, validateRequest(createPaymentSessionSchema), createPaymentSession);
@@ -84,6 +87,6 @@ router.post('/verify/:txHash', authenticate, validateRequest(verifyTransactionSc
 router.post('/release', authenticateOrInternalKey, validateRequest(releaseFundsSchema), releaseFunds);
 
 // Refund: admin only — triggered when admin resolves a dispute in buyer's favor
-router.post('/refund', authenticate, validateRequest(refundPaymentSchema), refundPayment);
+router.post('/refund', authenticateOrInternalKey, validateRequest(refundPaymentSchema), refundPayment);
 
 export default router;
