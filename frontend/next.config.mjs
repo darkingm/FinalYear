@@ -18,7 +18,9 @@ const nextConfig = {
   experimental: {
     staleTimes: {
       dynamic: 0,
-      static: 0,
+      // Next.js requires static stale time to be at least 30 seconds.
+      // HTML is still forced to revalidate via the page Cache-Control header below.
+      static: 30,
     },
     optimizePackageImports: [
       'lucide-react',
@@ -78,8 +80,10 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // All pages — no-cache HTML so browser always checks for updated bundles
-        source: '/:path*',
+        // Page routes only — no-cache HTML so browser always checks for updated bundles.
+        // Exclude Next internals/static assets; Next already applies the correct immutable
+        // cache policy for hashed chunks, and overriding it triggers build/dev warnings.
+        source: '/((?!api|_next/static|_next/image|favicon.ico|icon.svg|robots.txt|sitemap.xml).*)',
         headers: [
           {
             key: 'Cache-Control',
@@ -88,16 +92,6 @@ const nextConfig = {
           {
             key: 'Pragma',
             value: 'no-cache',
-          },
-        ],
-      },
-      {
-        // Static assets (_next/static) — immutable, long cache (hash in filename)
-        source: '/_next/static/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
           },
         ],
       },

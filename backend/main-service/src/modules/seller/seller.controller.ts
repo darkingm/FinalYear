@@ -32,6 +32,8 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
     const [
       revenueResult,
       ordersResult,
+      productStatsResult,
+      recentOrdersResult,
       topProductsResult,
       dailyRevenueResult,
       reviewStatsResult,
@@ -53,10 +55,51 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
            COUNT(*) AS total_orders,
            COUNT(*) FILTER (WHERE created_at > ${since}) AS period_orders,
            COUNT(*) FILTER (WHERE status IN ('PAID','COMPLETED','ONCHAIN_CONFIRMED','DELIVERING') AND created_at > ${since}) AS completed_period,
+           COUNT(*) FILTER (WHERE status = 'UNPAID') AS unpaid,
+           COUNT(*) FILTER (WHERE status IN ('TX_SUBMITTED','ONCHAIN_PENDING','ONCHAIN_CONFIRMED','PAID','PAID_PAYPAL')) AS paid_pending,
+           COUNT(*) FILTER (WHERE status = 'PROCESSING') AS processing,
+           COUNT(*) FILTER (WHERE status IN ('SHIPPED','DELIVERING')) AS shipped,
+           COUNT(*) FILTER (WHERE status = 'DELIVERED') AS delivered,
+           COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed,
            COUNT(*) FILTER (WHERE status = 'CANCELLED') AS cancelled,
            COUNT(*) FILTER (WHERE status = 'DISPUTED') AS disputed,
            COUNT(*) FILTER (WHERE status = 'UNPAID') AS pending_payment
          FROM orders WHERE seller_id = $1`,
+        [sellerId]
+      ),
+      // Product stats for the dashboard cards and low-stock alert.
+      query(
+        `SELECT
+           COUNT(*) FILTER (WHERE p.status != 'deleted') AS total_products,
+           COUNT(*) FILTER (WHERE p.status = 'active') AS active_products,
+           COUNT(*) FILTER (
+             WHERE p.status = 'active' AND COALESCE(inv.available, 0) <= 5
+           ) AS low_stock_count
+         FROM products p
+         LEFT JOIN (
+           SELECT product_id, SUM(available) AS available
+           FROM inventory
+           GROUP BY product_id
+         ) inv ON inv.product_id = p.product_id
+         WHERE p.seller_id = $1`,
+        [sellerId]
+      ),
+      query(
+        `SELECT o.*, p.name AS product_name,
+                buyer.username AS buyer_name, buyer.avatar_url AS buyer_avatar,
+                tw.symbol AS token_symbol,
+                COALESCE(pi.image_url, p.metadata->>'primaryImage') AS product_image
+         FROM orders o
+         JOIN products p ON o.product_id = p.product_id
+         JOIN users buyer ON o.buyer_id = buyer.user_id
+         LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
+         LEFT JOIN LATERAL (
+           SELECT image_url FROM product_images WHERE product_id = p.product_id
+           ORDER BY is_primary DESC, sort_order ASC LIMIT 1
+         ) pi ON true
+         WHERE o.seller_id = $1
+         ORDER BY o.created_at DESC
+         LIMIT 5`,
         [sellerId]
       ),
       // Top products by revenue
@@ -117,15 +160,47 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
       ),
     ]);
 
+    const revenue = revenueResult.rows[0] ?? {};
+    const orders = ordersResult.rows[0] ?? {};
+    const products = productStatsResult.rows[0] ?? {};
+    const reviews = reviewStatsResult.rows[0] ?? {};
+    const dashboard = {
+      orders: {
+        total_orders: Number(orders.total_orders ?? 0),
+        unpaid: Number(orders.unpaid ?? 0),
+        paid_pending: Number(orders.paid_pending ?? 0),
+        processing: Number(orders.processing ?? 0),
+        shipped: Number(orders.shipped ?? 0),
+        delivered: Number(orders.delivered ?? 0),
+        completed: Number(orders.completed ?? 0),
+        cancelled: Number(orders.cancelled ?? 0),
+        disputed: Number(orders.disputed ?? 0),
+        total_revenue: String(revenue.total_revenue ?? '0'),
+      },
+      products: {
+        total_products: Number(products.total_products ?? 0),
+        active_products: Number(products.active_products ?? 0),
+        low_stock_count: Number(products.low_stock_count ?? 0),
+      },
+      recent_orders: recentOrdersResult.rows,
+      reviews: {
+        avg_rating: String(reviews.avg_rating ?? '0'),
+        review_count: Number(reviews.total_reviews ?? 0),
+      },
+    };
+
     res.json({
       success: true,
       data: {
-        revenue: revenueResult.rows[0],
-        orders: ordersResult.rows[0],
+        revenue,
+        orders,
+        productStats: products,
+        recentOrders: recentOrdersResult.rows,
         topProducts: topProductsResult.rows,
         dailyRevenue: dailyRevenueResult.rows,
-        reviews: reviewStatsResult.rows[0],
+        reviews,
         conversion: conversionResult.rows[0],
+        dashboard,
         sellerId,
         period: days,
       },

@@ -76,12 +76,17 @@ const mainnets = [
   mainnet,
 ] as const;
 
-const allChains = [...testnets, ...mainnets] as const;
+const productionChains = [...testnets, ...mainnets] as const;
+type AppChain = (typeof productionChains)[number];
+const activeChains = (TESTNET_MODE ? testnets : productionChains) as readonly [
+  typeof localhost,
+  ...AppChain[],
+];
 
 const wagmiConfig: Config = getDefaultConfig({
   appName: 'Web3Market',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'cea17a07a0cb8c74b022c41e21294643',
-  chains: allChains as unknown as readonly [typeof localhost, ...typeof allChains],
+  chains: activeChains,
   ssr: true,
   wallets: [{
     groupName: 'Ví',
@@ -93,7 +98,7 @@ export function getWagmiConfig(): Config {
   return wagmiConfig;
 }
 
-export { allChains as chains };
+export { activeChains as chains };
 
 export const ESCROW_CONTRACTS: Record<number, string> = {
   31337: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_LOCALHOST || '0x5FbDB2315678afecb367f032d93F642f64180aa3',

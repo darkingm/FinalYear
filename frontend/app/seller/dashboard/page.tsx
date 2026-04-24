@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Store, Package, DollarSign, TrendingUp, Clock, CheckCircle,
-  XCircle, AlertCircle, Users, Star, ArrowUpRight, Plus,
+  AlertCircle, Star, ArrowUpRight, Plus,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -73,12 +73,49 @@ export default function SellerDashboardPage() {
 
   const fetchDashboard = async () => {
     try {
-      const { data } = await apiClient.get('/api/sellers/dashboard');
-      if (data.success) {
-        setStats(data.dashboard);
-      }
+      const [overviewRes, ordersRes, productsRes] = await Promise.all([
+        apiClient.get('/api/seller/overview'),
+        apiClient.get('/api/seller/orders?limit=5'),
+        apiClient.get('/api/seller/products?limit=1'),
+      ]);
+
+      const ov = overviewRes.data?.data; // { revenue, orders, reviews, topProducts, ... }
+      if (!ov) { setStats(null); return; }
+
+      const recentOrders = ordersRes.data?.orders || [];
+      const totalProducts = productsRes.data?.pagination?.total || 0;
+
+      setStats({
+        orders: {
+          total_orders: parseInt(ov.orders?.total_orders || '0'),
+          unpaid: parseInt(ov.orders?.pending_payment || '0'),
+          paid_pending: 0,
+          processing: 0,
+          shipped: 0,
+          delivered: 0,
+          completed: parseInt(ov.orders?.completed_period || '0'),
+          cancelled: parseInt(ov.orders?.cancelled || '0'),
+          disputed: parseInt(ov.orders?.disputed || '0'),
+          total_revenue: ov.revenue?.total_revenue || '0',
+        },
+        products: {
+          total_products: totalProducts,
+          active_products: totalProducts,
+          low_stock_count: 0,
+        },
+        recent_orders: recentOrders,
+        reviews: {
+          avg_rating: ov.reviews?.avg_rating || '0',
+          review_count: parseInt(ov.reviews?.total_reviews || '0'),
+        },
+      });
     } catch (error: any) {
+      if (error.response?.status === 401) {
+        router.push(buildLoginRedirectUrl('/seller/dashboard', 'reauth_required'));
+        return;
+      }
       toast.error(error.response?.data?.message || 'Failed to load dashboard');
+      setStats(null);
     } finally {
       setLoading(false);
     }

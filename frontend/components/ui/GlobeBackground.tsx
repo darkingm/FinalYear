@@ -16,7 +16,6 @@ import { useDesktopLightMode } from '@/lib/hooks/useDesktopLightMode';
 
 const TEX_DAY   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-blue-marble.jpg';
 const TEX_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-night.jpg';
-const TEX_CLOUDS = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-clouds.png';
 const TEX_TOPO   = 'https://cdn.jsdelivr.net/npm/three-globe@2.31.1/example/img/earth-topology.png';
 
 /* ── GLSL — opacity is a uniform so we can toggle in light/dark ────────────── */
@@ -151,6 +150,35 @@ export function GlobeBackground() {
                 side: THREE.DoubleSide,
                 color: 0xffffff,
             });
+            const createCloudTexture = () => {
+                const cloudCanvas = document.createElement('canvas');
+                cloudCanvas.width = 1024;
+                cloudCanvas.height = 512;
+                const ctx = cloudCanvas.getContext('2d');
+                if (!ctx) return null;
+
+                ctx.clearRect(0, 0, cloudCanvas.width, cloudCanvas.height);
+                ctx.filter = 'blur(14px)';
+                for (let i = 0; i < 260; i++) {
+                    const x = Math.random() * cloudCanvas.width;
+                    const y = Math.random() * cloudCanvas.height;
+                    const rx = 18 + Math.random() * 85;
+                    const ry = 6 + Math.random() * 28;
+                    const alpha = 0.08 + Math.random() * 0.24;
+                    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, rx, ry, Math.random() * Math.PI, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.filter = 'none';
+
+                const texture = new THREE.CanvasTexture(cloudCanvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.ClampToEdgeWrapping;
+                texture.needsUpdate = true;
+                return texture;
+            };
+            cloudMat.map = createCloudTexture();
             const cloudMesh = new THREE.Mesh(
                 new THREE.SphereGeometry(er * 1.025, 72, 72), cloudMat,
             );
@@ -158,13 +186,8 @@ export function GlobeBackground() {
             cloudMesh.visible = false;
             scene.add(cloudMesh);
 
-            // Load cloud + bump textures (non-blocking)
-            loader.load(TEX_CLOUDS, t => {
-                if (dead) return;
-                cloudMat.map = t;
-                cloudMat.alphaMap = t;
-                cloudMat.needsUpdate = true;
-            });
+            // Load bump texture (non-blocking). Clouds are generated locally to avoid
+            // depending on a CDN asset that currently returns 404.
             loader.load(TEX_TOPO, t => {
                 if (dead) return;
                 earthMat.bumpMap = t;
