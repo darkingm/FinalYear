@@ -141,7 +141,7 @@ export const USDT_ADDRESSES: Record<number, `0x${string}`> = {
 };
 
 export const CHAIN_META: Record<number, { name: string; explorer: string }> = {
-  31337: { name: 'Hardhat VPS', explorer: 'https://kienai.id.vn/rpc/hardhat' },
+  31337: { name: 'Hardhat VPS', explorer: '' },
   84532: { name: 'Base Sepolia', explorer: 'https://sepolia.basescan.org' },
   80002: { name: 'Polygon Amoy', explorer: 'https://amoy.polygonscan.com' },
   97: { name: 'BNB Testnet', explorer: 'https://testnet.bscscan.com' },

@@ -752,7 +752,7 @@ export default function OrderDetailPage() {
                     >
                       <FileText className="w-3.5 h-3.5" />
                     </button>
-                    {order.chain_id && CHAIN_META[order.chain_id]?.explorer && CHAIN_META[order.chain_id].explorer !== 'http://localhost:8545' && (
+                    {order.chain_id && CHAIN_META[order.chain_id]?.explorer && (
                       <a
                         href={`${CHAIN_META[order.chain_id].explorer}/tx/${order.tx_hash}`}
                         target="_blank" rel="noopener noreferrer"

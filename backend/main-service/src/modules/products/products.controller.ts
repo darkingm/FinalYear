@@ -195,3 +195,76 @@ export async function getHomepageProducts(req: AuthRequest, res: Response, next:
     next(error);
   }
 }
+
+export async function getSellerStore(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { slug } = req.params;
+    if (!slug) return res.status(400).json({ success: false, message: 'Seller slug is required' });
+
+    // Fetch seller profile with user info
+    const sellerRes = await query(
+      `SELECT sp.seller_id, sp.display_name, sp.description, sp.logo_url, sp.slug,
+              sp.payout_wallet, sp.rating_avg, sp.total_sales, sp.created_at AS seller_since,
+              u.username, u.avatar_url, u.email
+       FROM seller_profiles sp
+       JOIN users u ON sp.user_id = u.user_id
+       WHERE sp.slug = $1`,
+      [slug]
+    );
+
+    if (sellerRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Seller not found' });
+    }
+
+    const seller = sellerRes.rows[0];
+
+    // Fetch seller's active products with images + stock + tokens
+    const productsRes = await query(
+      `SELECT p.product_id, p.name, p.description, p.base_price_usd, p.category,
+              p.rating_avg, p.review_count, p.status, p.created_at,
+              (SELECT image_url FROM product_images WHERE product_id = p.product_id AND is_primary = TRUE LIMIT 1) AS primary_image,
+              COALESCE(SUM(i.available), 0)::int AS stock,
+              COALESCE(
+                (SELECT json_agg(json_build_object(
+                  'token_id', pat.token_id,
+                  'symbol', tw.symbol,
+                  'price_in_token', pat.price_in_token,
+                  'is_primary', pat.is_primary,
+                  'chain_id', tw.chain_id
+                ))
+                FROM product_accepted_tokens pat
+                JOIN token_whitelist tw ON pat.token_id = tw.token_id
+                WHERE pat.product_id = p.product_id), '[]'
+              ) AS accepted_tokens
+       FROM products p
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.seller_id = $1 AND p.status = 'active'
+       GROUP BY p.product_id
+       ORDER BY p.created_at DESC`,
+      [seller.seller_id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        seller: {
+          seller_id: seller.seller_id,
+          display_name: seller.display_name,
+          description: seller.description,
+          logo_url: seller.logo_url,
+          slug: seller.slug,
+          payout_wallet: seller.payout_wallet,
+          rating_avg: seller.rating_avg,
+          total_sales: seller.total_sales,
+          seller_since: seller.seller_since,
+          username: seller.username,
+          avatar_url: seller.avatar_url,
+        },
+        products: productsRes.rows,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Get seller store error:', error);
+    next(error);
+  }
+}

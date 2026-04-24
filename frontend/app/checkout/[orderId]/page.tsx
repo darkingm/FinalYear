@@ -883,18 +883,19 @@ export default function CheckoutPage() {
                         ) : (
                           <p className="text-[10px] text-emerald-400/50">Kết nối MetaMask trước để nhận ETH test</p>
                         )}
-                        <p className="text-[10px] text-emerald-400/40 pt-0.5">
-                          Hoặc import private key Hardhat Account #0 (có 10,000 ETH):
-                        </p>
-                        <div className="p-2 bg-black/20 rounded-lg">
-                          <p className="text-[10px] text-emerald-300/60">
-                            Xem tại{' '}
-                            <a href="https://hardhat.org/hardhat-network/docs/reference#initial-state" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline hover:text-emerald-300">
-                              Hardhat Docs → Account #0
-                            </a>
-                          </p>
-                        </div>
-                        <p className="text-[10px] text-emerald-400/50">⚠ Không bao giờ hiển thị private key trên giao diện web!</p>
+
+                        
+
+
+
+
+
+
+
+
+
+
+
                       </div>
                     )}
                   </div>

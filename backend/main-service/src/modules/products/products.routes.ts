@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import {
   getProducts, getProduct, createProduct, updateProduct,
   deleteProduct, uploadImages, getTokens, getMyProducts, getHomepageProducts,
+  getSellerStore,
 } from './products.controller';
 
 const router = Router();
@@ -23,6 +24,7 @@ router.get('/', getProducts);
 router.get('/homepage', getHomepageProducts);
 router.get('/tokens', getTokens);
 router.get('/my', authenticate, getMyProducts);
+router.get('/seller/:slug', getSellerStore);
 router.get('/:id', getProduct);
 router.post('/', authenticate, createProduct);
 router.put('/:id', authenticate, updateProduct);
