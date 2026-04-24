@@ -86,7 +86,7 @@ export class AuthService {
     }
 
     // 2. Parse SIWE message fields to prevent replay attacks
-    await this.validateSiweMessage(message);
+    await this.validateSiweMessage(message, walletAddress);
 
     // 3. Find or create user
     let result = await query(
@@ -124,7 +124,7 @@ export class AuthService {
     }
 
     // Validate SIWE message to prevent replay
-    await this.validateSiweMessage(message);
+    await this.validateSiweMessage(message, walletAddress);
 
     const normalized = walletAddress.toLowerCase();
     const existing = await query(
@@ -263,14 +263,48 @@ export class AuthService {
     }
   }
 
-  /** Parse and validate SIWE message fields to prevent replay attacks */
-  private async validateSiweMessage(message: string) {
+  /**
+   * Parse and validate SIWE message fields to prevent replay attacks.
+   * Checks: nonce uniqueness, expiration, issued-at freshness, address match,
+   * URI domain match (production), and chain ID whitelist.
+   */
+  private async validateSiweMessage(message: string, expectedAddress?: string) {
     const nonceMatch = message.match(/Nonce: (.+)/);
     const issuedAtMatch = message.match(/Issued At: (.+)/);
     const expirationMatch = message.match(/Expiration Time: (.+)/);
+    const addressMatch = message.match(/your Ethereum account:\n(0x[a-fA-F0-9]{40})/);
+    const uriMatch = message.match(/URI: (.+)/);
+    const chainIdMatch = message.match(/Chain ID: (\d+)/);
 
     if (!nonceMatch || !issuedAtMatch || !expirationMatch) {
       throw new AppError('Invalid message format — missing SIWE fields', 400);
+    }
+
+    // Validate address matches claimed wallet
+    if (expectedAddress && addressMatch) {
+      if (addressMatch[1].toLowerCase() !== expectedAddress.toLowerCase()) {
+        throw new AppError('SIWE address mismatch', 401);
+      }
+    }
+
+    // Validate URI domain matches expected frontend
+    if (uriMatch) {
+      const frontendUrl = process.env.FRONTEND_URL || '';
+      if (frontendUrl && process.env.NODE_ENV === 'production') {
+        const messageOrigin = uriMatch[1].trim();
+        if (!messageOrigin.startsWith(frontendUrl)) {
+          logger.warn(`SIWE URI mismatch: message=${messageOrigin}, expected=${frontendUrl}`);
+          throw new AppError('Invalid SIWE origin', 401);
+        }
+      }
+    }
+
+    // Validate chain ID against allowed chains
+    if (chainIdMatch) {
+      const allowedChains = ['31337', '80002', '137', '1']; // Hardhat, Amoy, Polygon, Mainnet
+      if (!allowedChains.includes(chainIdMatch[1])) {
+        throw new AppError('Unsupported chain ID in signature', 400);
+      }
     }
 
     const nonce = nonceMatch[1].trim();
@@ -298,7 +332,12 @@ export class AuthService {
       await setCache(nonceKey, '1', 5 * 60); // expire after 5 min
     } catch (err) {
       if (err instanceof AppError) throw err;
-      logger.warn('Redis nonce check failed — allowing login (Redis may be down):', err);
+      // SECURITY: fail-closed in production — nonce replay protection is critical
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('Redis nonce check failed in production — blocking wallet login:', err);
+        throw new AppError('Authentication service temporarily unavailable', 503);
+      }
+      logger.warn('Redis nonce check failed — allowing login (dev mode):', err);
     }
   }
 
