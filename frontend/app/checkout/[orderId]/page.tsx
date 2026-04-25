@@ -208,9 +208,23 @@ export default function CheckoutPage() {
   const [payMode, setPayMode] = useState<'crypto' | 'paypal'>('crypto');
 
   // Crypto options
-  const [selectedNet, setSelectedNet] = useState<number>(31337); // Hardhat VPS default
+  const [selectedNet, setSelectedNet] = useState<number>(31337);
   const [selectedToken, setSelectedToken] = useState('ETH');
   const [showNetDropdown, setShowNetDropdown] = useState(false);
+  const [walletChainSynced, setWalletChainSynced] = useState(false);
+
+  // Auto-sync selectedNet from wallet chain (once, before quote)
+  useEffect(() => {
+    if (walletChainSynced) return;
+    if (chainId && CHAIN_META[chainId]) {
+      setSelectedNet(chainId);
+      const chainTokens = CHAIN_TOKENS[chainId] || ['ETH'];
+      if (!chainTokens.includes(selectedToken)) {
+        setSelectedToken(chainTokens[0]);
+      }
+      setWalletChainSynced(true);
+    }
+  }, [chainId, walletChainSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Quote
   const [quote, setQuote] = useState<CryptoQuote | null>(null);

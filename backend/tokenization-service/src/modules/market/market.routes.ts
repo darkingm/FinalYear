@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../../db';
+import { isAddress } from 'ethers';
 
 export const marketRouter = Router();
 
@@ -44,8 +45,28 @@ marketRouter.get('/:assetId/trades', async (req: Request, res: Response) => {
 marketRouter.post('/:assetId/list', async (req: Request, res: Response) => {
     const { seller_address, seller_user_id, token_amount, price_per_token_wei, price_per_token_usd, onchain_listing_id, listing_tx_hash } = req.body;
 
-    if (!seller_address || !token_amount || !price_per_token_wei) {
+    const tokenAmount = Number(token_amount);
+    const onchainListingId = Number(onchain_listing_id);
+
+    if (!seller_address || !Number.isInteger(tokenAmount) || tokenAmount <= 0 || !price_per_token_wei) {
         return res.status(400).json({ error: 'seller_address, token_amount, and price_per_token_wei required' });
+    }
+    if (!isAddress(seller_address)) {
+        return res.status(400).json({ error: 'Invalid seller address' });
+    }
+    let pricePerTokenWei: bigint;
+    try {
+        pricePerTokenWei = BigInt(price_per_token_wei);
+    } catch {
+        return res.status(400).json({ error: 'price_per_token_wei must be a valid integer string' });
+    }
+    if (pricePerTokenWei <= 0n) {
+        return res.status(400).json({ error: 'price_per_token_wei must be greater than 0' });
+    }
+    if (!Number.isInteger(onchainListingId) || onchainListingId <= 0 || !listing_tx_hash) {
+        return res.status(400).json({
+            error: 'On-chain listing required before recording DB listing',
+        });
     }
 
     try {
@@ -57,9 +78,9 @@ marketRouter.post('/:assetId/list', async (req: Request, res: Response) => {
             RETURNING *
         `, [
             req.params.assetId, seller_address, seller_user_id || null,
-            token_amount, price_per_token_wei,
-            price_per_token_usd || null, onchain_listing_id || null,
-            listing_tx_hash || null,
+            tokenAmount, price_per_token_wei,
+            price_per_token_usd || null, onchainListingId,
+            listing_tx_hash,
         ]);
         res.status(201).json({ listing: result.rows[0] });
     } catch (err: any) {
@@ -72,17 +93,20 @@ marketRouter.post('/:assetId/list', async (req: Request, res: Response) => {
  * Requires seller_user_id in body (injected by rwa-proxy from auth context).
  */
 marketRouter.patch('/listings/:id/cancel', async (req: Request, res: Response) => {
-    const { seller_user_id } = req.body;
+    const { seller_user_id, cancel_tx_hash } = req.body;
     if (!seller_user_id) {
         return res.status(400).json({ error: 'seller_user_id required for cancellation' });
+    }
+    if (!cancel_tx_hash) {
+        return res.status(400).json({ error: 'On-chain cancel transaction required before recording cancellation' });
     }
 
     try {
         const result = await query(
-            `UPDATE rwa_listings SET status = 'CANCELLED', updated_at = NOW()
+            `UPDATE rwa_listings SET status = 'CANCELLED', cancel_tx_hash = $3, updated_at = NOW()
              WHERE id = $1 AND status = 'ACTIVE' AND seller_user_id = $2
              RETURNING *`,
-            [req.params.id, seller_user_id]
+            [req.params.id, seller_user_id, cancel_tx_hash]
         );
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Listing not found, already cancelled, or not owned by you' });
@@ -101,6 +125,10 @@ marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
     const { buyer_address, buyer_user_id, trade_tx_hash } = req.body;
 
     if (!buyer_address) return res.status(400).json({ error: 'buyer_address required' });
+    if (!isAddress(buyer_address)) return res.status(400).json({ error: 'Invalid buyer address' });
+    if (!trade_tx_hash) {
+        return res.status(400).json({ error: 'On-chain buy transaction required before recording trade' });
+    }
 
     try {
         // Get listing
@@ -110,6 +138,9 @@ marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
         if (listingResult.rows.length === 0) return res.status(404).json({ error: 'Listing not active' });
 
         const listing = listingResult.rows[0];
+        if (!listing.onchain_listing_id || !listing.listing_tx_hash) {
+            return res.status(400).json({ error: 'Listing is missing on-chain proof and cannot be filled' });
+        }
 
         // Prevent self-trade
         if (listing.seller_user_id && buyer_user_id && listing.seller_user_id === buyer_user_id) {
@@ -137,7 +168,7 @@ marketRouter.post('/listings/:id/buy', async (req: Request, res: Response) => {
             req.params.id, buyer_address, buyer_user_id || null,
             listing.token_amount, totalPriceWei,
             listing.price_per_token_usd ? listing.price_per_token_usd * listing.token_amount : null,
-            trade_tx_hash || null,
+            trade_tx_hash,
         ]);
 
         res.json({ trade: tradeResult.rows[0] });

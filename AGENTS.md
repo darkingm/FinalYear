@@ -6,7 +6,10 @@
 - For crypto checkout flows, never trigger a second escrow release when the buyer already confirmed delivery on-chain.
 - For crypto checkout flows, never fall back to the escrow contract address when a seller payout wallet is missing. Fail fast and ask for a valid seller wallet instead.
 - For batch crypto payments, every order sharing the same transaction hash must still get its own payment row and status update.
-- Prefer the GitHub Actions deploy path. If a manual local deploy is necessary, make sure the worktree is clean, know the current commit SHA, and use `/health` for service checks.
+- Deployment source of truth is always the local workspace at `C:\Users\Asus\Documents\FYP\FYP` unless the user explicitly says otherwise. Do not assume GitHub, VPS git state, or any remote branch is newer than local.
+- For VPS deploys, do not run `git pull`, `git reset`, `git checkout --`, branch switching, or any destructive cleanup on the VPS unless the user explicitly requests it for that command. Copy/build from the local workspace, backup overwritten VPS files first, then verify with logs, health checks, and affected flows.
+- If local and VPS differ, treat local as canonical and explain the sync/deploy steps. Never tell the user to update GitHub just to deploy their own single-developer project.
+- The VPS is a low-resource production host (2 CPU cores). Never run Docker image builds, `npm run build`, `next build`, TypeScript project builds, Hardhat compile/test, or other CPU-heavy jobs on the VPS unless the user explicitly authorizes that exact command. Build/test locally or via GitHub Actions/Docker Hub, then let the VPS only pull images, run lightweight migrations, set env, restart containers, and read logs/health checks.
 - For UI work, never ship text or important content that blends into the surface or background. Every new or edited screen must keep readable contrast in both light mode and dark mode, using semantic theme tokens instead of hard-coded light-on-light or dark-on-dark text where possible.
 
 ## Bug And Security Rules

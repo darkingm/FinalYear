@@ -14,7 +14,7 @@ description: Use when starting any task in the Web3Market FYP project (kienai.id
 | Payment Backend | Node.js 22 service, connects to both `marketplace_db` AND `payment_db` |
 | Smart Contracts | Solidity (Hardhat), EscrowCore.sol, CreditScoreSBT.sol |
 | AI Service | Python (FastAPI) |
-| Deploy | Docker Compose on VPS `103.20.96.79` — images built locally, pushed to Docker Hub (`kiendzpro/`), VPS pulls |
+| Deploy | Docker Compose on VPS `103.20.96.79` — images built locally or by GitHub Actions, pushed to Docker Hub (`kiendzpro/`), VPS only pulls/restarts |
 | Domain | `https://kienai.id.vn` (Nginx reverse proxy → Docker containers) |
 
 ## Project Structure
@@ -152,6 +152,16 @@ postgres (healthy) → db-migrator (runs migrations, exits 0)
 ```bash
 docker rm -f marketplace-db-migrator
 ```
+
+## VPS Resource Rule
+
+VPS `103.20.96.79` is a low-resource production host with 2 CPU cores.
+
+- Local workspace `C:\Users\Asus\Documents\FYP\FYP` is the source of truth unless the user explicitly says otherwise.
+- Do not use VPS Git state or GitHub branch state as the deploy authority.
+- Do not run `git pull`, `git reset`, branch switching, or destructive cleanup on VPS unless explicitly authorized for that exact command.
+- Do not run `docker build`, `npm run build`, `next build`, `npx tsc`, `hardhat compile`, `hardhat test`, or other CPU-heavy jobs on VPS unless explicitly authorized.
+- VPS deploy work should be limited to pulling pre-built images, lightweight migrations, env updates, container restart, log reads, and health checks.
 
 ## Environment Variables — Key Ones
 

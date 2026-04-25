@@ -8,13 +8,16 @@ import {
     Vote, Clock, CheckCircle, XCircle, AlertCircle,
     Plus, ChevronLeft, Users, Loader2, ArrowRight,
 } from 'lucide-react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseAbi } from 'viem';
+import { useAccount, useWriteContract } from 'wagmi';
+import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { parseAbi, parseEventLogs } from 'viem';
 import { rwaApi } from '@/lib/api/rwa';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { getWagmiConfig } from '@/lib/web3/config';
+import { isConfiguredContractAddress } from '@/lib/rwa/onchain';
 
 const GOV_ABI = parseAbi([
     // Use 4-param version — the 3-param overload has a msg.sender bug in the contract
@@ -22,7 +25,11 @@ const GOV_ABI = parseAbi([
     'function castVote(uint256 proposalId, bool support) external',
     'function executeProposal(uint256 proposalId) external',
     'function getVotingPower(address voter, uint256 proposalId) view returns (uint256)',
+    'function getProposal(uint256 id) view returns ((uint256 id,address proposer,uint8 proposalType,string description,string ipfsDoc,bytes32 executionHash,uint256 snapshotBlock,uint256 forVotes,uint256 againstVotes,uint256 deadline,uint8 status,bool executed))',
+    'event ProposalCreated(uint256 indexed id, address indexed proposer, uint8 pType, string description, bytes32 executionHash, uint256 deadline)',
+    'event VoteCast(uint256 indexed proposalId, address indexed voter, bool support, uint256 weight)',
 ]);
+const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
 const PROPOSAL_TYPES = [
     { value: 'GENERAL', label: 'General', typeIndex: 0 },
@@ -72,6 +79,7 @@ export default function GovernancePage() {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [asset, setAsset] = useState<any>(null);
+    const [txBusy, setTxBusy] = useState(false);
 
     // Create form
     const [newType, setNewType] = useState('GENERAL');
@@ -90,35 +98,118 @@ export default function GovernancePage() {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const handleCreateProposal = async () => {
+        if (!isConnected || !address) return toast.error('Connect wallet first');
         if (!newTitle.trim()) return toast.error('Title is required');
+        if (!isConfiguredContractAddress(asset?.governance_contract_address)) {
+            return toast.error('This asset has no on-chain governance contract');
+        }
+        const proposalType = PROPOSAL_TYPES.find(t => t.value === newType);
+        if (!proposalType) return toast.error('Invalid proposal type');
+        if (['SELL_ASSET', 'INITIATE_BUYOUT'].includes(newType)) {
+            return toast.error('Actionable proposals need an execution hash flow before they can be submitted');
+        }
         try {
+            setTxBusy(true);
+            const hash = await writeContractAsync({
+                address: asset.governance_contract_address,
+                abi: GOV_ABI,
+                functionName: 'createProposal',
+                args: [proposalType.typeIndex, newDesc || newTitle, '', ZERO_BYTES32],
+            });
+            const receipt = await waitForTransactionReceipt(getWagmiConfig(), { hash });
+            const createdLogs = parseEventLogs({
+                abi: GOV_ABI,
+                eventName: 'ProposalCreated',
+                logs: receipt.logs,
+            }) as any[];
+            const onchainId = createdLogs[0]?.args?.id;
+            if (!onchainId) throw new Error('ProposalCreated event not found in receipt');
+
             await rwaApi.governance.createProposal(assetId!, {
                 proposer_address: address,
                 proposal_type: newType,
                 title: newTitle,
                 description: newDesc,
+                onchain_id: Number(onchainId),
+                tx_hash: hash,
             });
             toast.success('Proposal created!');
             setShowCreate(false);
             setNewTitle(''); setNewDesc('');
             fetchData();
         } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Failed to create proposal');
+            toast.error(err.shortMessage || err.response?.data?.error || err.message || 'Failed to create proposal');
+        } finally {
+            setTxBusy(false);
         }
     };
 
     const handleVote = async (proposal: any, support: boolean) => {
         if (!isConnected || !address) return toast.error('Connect wallet first');
+        if (!isConfiguredContractAddress(asset?.governance_contract_address)) {
+            return toast.error('This asset has no on-chain governance contract');
+        }
+        if (!proposal.onchain_id) return toast.error('Proposal is missing on-chain id');
         try {
+            setTxBusy(true);
+            const hash = await writeContractAsync({
+                address: asset.governance_contract_address,
+                abi: GOV_ABI,
+                functionName: 'castVote',
+                args: [BigInt(proposal.onchain_id), support],
+            });
+            await waitForTransactionReceipt(getWagmiConfig(), { hash });
             await rwaApi.governance.vote(proposal.id, {
                 voter_address: address,
                 support,
-                weight: 1, // Weight will be calculated from token balance on-chain
+                weight: 1,
+                tx_hash: hash,
             });
             toast.success(`Vote ${support ? 'FOR' : 'AGAINST'} recorded!`);
             fetchData();
         } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Failed to vote');
+            toast.error(err.shortMessage || err.response?.data?.error || err.message || 'Failed to vote');
+        } finally {
+            setTxBusy(false);
+        }
+    };
+
+    const handleFinalizeProposal = async (proposal: any) => {
+        if (!isConnected || !address) return toast.error('Connect wallet first');
+        if (!isConfiguredContractAddress(asset?.governance_contract_address)) {
+            return toast.error('This asset has no on-chain governance contract');
+        }
+        if (!proposal.onchain_id) return toast.error('Proposal is missing on-chain id');
+        try {
+            setTxBusy(true);
+            const hash = await writeContractAsync({
+                address: asset.governance_contract_address,
+                abi: GOV_ABI,
+                functionName: 'executeProposal',
+                args: [BigInt(proposal.onchain_id)],
+            });
+            await waitForTransactionReceipt(getWagmiConfig(), { hash });
+
+            const onChainProposal = await readContract(getWagmiConfig(), {
+                address: asset.governance_contract_address,
+                abi: GOV_ABI,
+                functionName: 'getProposal',
+                args: [BigInt(proposal.onchain_id)],
+            }) as any;
+            const statusIndex = Number(onChainProposal.status ?? onChainProposal[9]);
+            const finalStatus = statusIndex === 1 ? 'PASSED' : statusIndex === 2 ? 'REJECTED' : null;
+            if (!finalStatus) throw new Error('On-chain proposal did not finalize to PASSED or REJECTED');
+
+            await rwaApi.governance.execute(proposal.id, {
+                execute_tx_hash: hash,
+                final_status: finalStatus,
+            });
+            toast.success(`Proposal finalized as ${finalStatus}`);
+            fetchData();
+        } catch (err: any) {
+            toast.error(err.shortMessage || err.response?.data?.error || err.message || 'Failed to finalize proposal');
+        } finally {
+            setTxBusy(false);
         }
     };
 
@@ -141,13 +232,19 @@ export default function GovernancePage() {
                                     {asset?.name || 'Loading...'} — Token holder proposals & voting
                                 </p>
                             </div>
-                            {isConnected && (
+                            {isConnected && isConfiguredContractAddress(asset?.governance_contract_address) && (
                                 <button onClick={() => setShowCreate(!showCreate)}
                                     className="flex items-center gap-2 px-4 py-2.5 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/20 rounded-xl text-sm font-bold transition-all">
                                     <Plus className="w-4 h-4" /> New Proposal
                                 </button>
                             )}
                         </div>
+                        {!isConfiguredContractAddress(asset?.governance_contract_address) && (
+                            <div className="mt-5 flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-300">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                <span>This asset has no on-chain governance contract. Governance actions are locked to prevent DB-only proposals/votes.</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -182,8 +279,9 @@ export default function GovernancePage() {
                             </div>
                             <div className="flex gap-3">
                                 <button onClick={handleCreateProposal}
-                                    className="px-5 py-2 bg-violet-500 text-white font-bold text-sm rounded-xl hover:bg-violet-600 transition-colors">
-                                    Submit Proposal
+                                    disabled={txBusy}
+                                    className="px-5 py-2 bg-violet-500 text-white font-bold text-sm rounded-xl hover:bg-violet-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                                    {txBusy ? 'Confirming...' : 'Submit Proposal'}
                                 </button>
                                 <button onClick={() => setShowCreate(false)}
                                     className="px-5 py-2 text-muted-foreground text-sm hover:text-foreground transition-colors">
@@ -208,6 +306,11 @@ export default function GovernancePage() {
                             const forPercent = totalVotes > 0 ? (Number(p.for_votes) / totalVotes) * 100 : 0;
                             const againstPercent = totalVotes > 0 ? (Number(p.against_votes) / totalVotes) * 100 : 0;
                             const isActive = p.status === 'ACTIVE' && new Date(p.voting_deadline) > new Date();
+                            const canFinalize = p.status === 'ACTIVE'
+                                && new Date(p.voting_deadline) <= new Date()
+                                && isConnected
+                                && isConfiguredContractAddress(asset?.governance_contract_address)
+                                && p.onchain_id;
                             const isSupermajority = ['SELL_ASSET', 'INITIATE_BUYOUT', 'REPLACE_OPERATOR'].includes(p.proposal_type);
 
                             return (
@@ -251,17 +354,26 @@ export default function GovernancePage() {
                                     </div>
 
                                     {/* Vote buttons */}
-                                    {isActive && isConnected && (
+                                    {isActive && isConnected && isConfiguredContractAddress(asset?.governance_contract_address) && (
                                         <div className="flex gap-3 mt-4 pt-3 border-t border-border">
                                             <button onClick={() => handleVote(p, true)}
-                                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold transition-all">
+                                                disabled={txBusy || !p.onchain_id}
+                                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                                                 <CheckCircle className="w-3.5 h-3.5" /> Vote For
                                             </button>
                                             <button onClick={() => handleVote(p, false)}
-                                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition-all">
+                                                disabled={txBusy || !p.onchain_id}
+                                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                                                 <XCircle className="w-3.5 h-3.5" /> Vote Against
                                             </button>
                                         </div>
+                                    )}
+                                    {canFinalize && (
+                                        <button onClick={() => handleFinalizeProposal(p)}
+                                            disabled={txBusy}
+                                            className="w-full mt-4 py-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/20 rounded-xl text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                            {txBusy ? 'Finalizing...' : 'Finalize on-chain result'}
+                                        </button>
                                     )}
                                 </motion.div>
                             );

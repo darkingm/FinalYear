@@ -53,6 +53,15 @@ VALUES
 ON CONFLICT (token_address, chain_id) DO UPDATE
   SET is_active = TRUE;
 
+-- ─── Base Sepolia (chain_id: 84532) ──────────────────────────────────────
+-- Faucet: various Alchemy/QuickNode faucets
+INSERT INTO token_whitelist (symbol, token_address, chain_id, decimals, is_active, metadata)
+VALUES
+  ('ETH', '0x0000000000000000000000000000000000000000', 84532, 18, TRUE,
+   '{"name": "Ether (Base Sepolia)", "type": "native", "chain": "Base Sepolia"}')
+ON CONFLICT (token_address, chain_id) DO UPDATE
+  SET is_active = TRUE, metadata = EXCLUDED.metadata;
+
 COMMIT;
 
 -- Kiểm tra lại:

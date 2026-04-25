@@ -4,7 +4,8 @@ import { ethers } from "hardhat";
  * Deploy the full RWA tokenization stack:
  *   1. ComplianceRegistry
  *   2. RWAFactory (references ComplianceRegistry)
- *   3. (Optional) A demo asset for testing
+ *   3. RWAMarketEscrow (secondary market escrow)
+ *   4. (Optional) A demo asset for testing
  *
  * Usage:
  *   npx hardhat run scripts/deploy-rwa.ts --network vps
@@ -25,7 +26,7 @@ async function main() {
   console.log("Operator :", OPERATOR);
 
   // ── 1. ComplianceRegistry ─────────────────────────────────────
-  console.log("\n[1/3] Deploying ComplianceRegistry...");
+  console.log("\n[1/4] Deploying ComplianceRegistry...");
   const ComplianceRegistry = await ethers.getContractFactory("ComplianceRegistry");
   const registry = await ComplianceRegistry.deploy(deployer.address) as any;
   await registry.waitForDeployment();
@@ -37,7 +38,7 @@ async function main() {
   console.log("   KYC_OPERATOR_ROLE → OPERATOR wallet");
 
   // ── 2. RWAFactory ─────────────────────────────────────────────
-  console.log("\n[2/3] Deploying RWAFactory...");
+  console.log("\n[2/4] Deploying RWAFactory...");
   const RWAFactory = await ethers.getContractFactory("RWAFactory");
   const factory = await RWAFactory.deploy(registryAddr, deployer.address) as any;
   await factory.waitForDeployment();
@@ -48,9 +49,17 @@ async function main() {
   await (await factory.grantRole(ISSUER_ROLE, OPERATOR)).wait(1);
   console.log("   ISSUER_ROLE → OPERATOR wallet");
 
-  // ── 3. Optional demo asset ────────────────────────────────────
+  // ── 3. Secondary market escrow ────────────────────────────────
+  console.log("\n[3/4] Deploying RWAMarketEscrow...");
+  const RWAMarketEscrow = await ethers.getContractFactory("RWAMarketEscrow");
+  const marketEscrow = await RWAMarketEscrow.deploy(registryAddr) as any;
+  await marketEscrow.waitForDeployment();
+  const marketEscrowAddr = await marketEscrow.getAddress();
+  console.log("✅ RWAMarketEscrow:", marketEscrowAddr);
+
+  // ── 4. Optional demo asset ────────────────────────────────────
   if (process.env.DEPLOY_DEMO_ASSET === "true") {
-    console.log("\n[3/3] Creating demo RWA asset (Real Estate)...");
+    console.log("\n[4/4] Creating demo RWA asset (Real Estate)...");
 
     await (await registry.batchSetKYC([deployer.address, OPERATOR], "VN")).wait(1);
     console.log("   KYC: whitelisted deployer + operator");
@@ -68,7 +77,7 @@ async function main() {
     await tx.wait(1);
     console.log("✅ Demo asset created (5,000 tokens @ $100)");
   } else {
-    console.log("\n[3/3] Demo asset skipped (DEPLOY_DEMO_ASSET=true to enable)");
+    console.log("\n[4/4] Demo asset skipped (DEPLOY_DEMO_ASSET=true to enable)");
   }
 
   // ── Summary ───────────────────────────────────────────────────
@@ -79,9 +88,10 @@ async function main() {
 Add to docker/.env on VPS:
   COMPLIANCE_REGISTRY_ADDRESS=${registryAddr}
   RWA_FACTORY_ADDRESS=${factoryAddr}
+  RWA_MARKET_ESCROW_ADDRESS=${marketEscrowAddr}
 
 Quick update:
-  ssh root@103.20.96.79 "echo COMPLIANCE_REGISTRY_ADDRESS=${registryAddr} >> /root/services/FinalYear/docker/.env && echo RWA_FACTORY_ADDRESS=${factoryAddr} >> /root/services/FinalYear/docker/.env"
+  ssh root@103.20.96.79 "echo COMPLIANCE_REGISTRY_ADDRESS=${registryAddr} >> /root/services/FinalYear/docker/.env && echo RWA_FACTORY_ADDRESS=${factoryAddr} >> /root/services/FinalYear/docker/.env && echo RWA_MARKET_ESCROW_ADDRESS=${marketEscrowAddr} >> /root/services/FinalYear/docker/.env"
 `);
 }
 

@@ -126,6 +126,20 @@ export default function CartCheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [selectedNet, setSelectedNet] = useState<number>(31337);
   const [selectedToken, setSelectedToken] = useState('ETH');
+  const [walletChainSynced, setWalletChainSynced] = useState(false);
+
+  // Auto-sync selectedNet from wallet chain (once, before quote)
+  useEffect(() => {
+    if (walletChainSynced) return;
+    if (chainId && CHAIN_META[chainId]) {
+      setSelectedNet(chainId);
+      const chainTokens = CHAIN_TOKENS[chainId] || ['ETH'];
+      if (!chainTokens.includes(selectedToken)) {
+        setSelectedToken(chainTokens[0]);
+      }
+      setWalletChainSynced(true);
+    }
+  }, [chainId, walletChainSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [quote, setQuote] = useState<CryptoQuoteBatch | null>(null);
   const [createdOrderIds, setCreatedOrderIds] = useState<number[]>([]);

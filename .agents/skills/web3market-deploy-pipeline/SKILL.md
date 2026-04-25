@@ -5,28 +5,37 @@ description: Use when deploying Web3Market to VPS (103.20.96.79), building Docke
 
 # Web3Market — Deploy Pipeline
 
-## ⛔ CRITICAL RULE: NEVER BUILD IMAGES ON VPS
+## ⛔ Critical Rules: Local Source, No Heavy Work On VPS
 
-**NEVER run `docker build` on the VPS (103.20.96.79).** The VPS has limited resources and building images WILL crash it.
+**Local workspace is the source of truth.** For this single-developer project, treat `C:\Users\Asus\Documents\FYP\FYP` as newer than GitHub, VPS git state, or any remote branch unless the user explicitly says otherwise.
+
+**NEVER run `git pull`, `git reset`, branch switching, or destructive cleanup on the VPS** unless the user explicitly authorizes that exact command. The VPS repo can be dirty and production-specific. Sync from local by copying selected files or by pulling pre-built Docker images, not by making VPS Git the authority.
+
+**NEVER run CPU-heavy work on the VPS (103.20.96.79).** It has only 2 CPU cores. Do not run Docker image builds, `npm run build`, `next build`, TypeScript project builds, Hardhat compile/test, or similar heavy jobs there unless the user explicitly authorizes that exact command. These can spike CPU and make production unresponsive.
 
 **How it works:**
-1. Push code to GitHub (`git push origin main`)
-2. **GitHub Actions CI/CD** automatically builds Docker images and pushes to Docker Hub (`kiendzpro/*`)
-3. On VPS: only `docker pull` + restart containers
+1. Make and verify code in local workspace.
+2. Build/test locally or via GitHub Actions as a build worker.
+3. Push pre-built Docker images to Docker Hub (`kiendzpro/*`) if images changed.
+4. On VPS: only copy lightweight config/migrations if needed, `docker pull`, run lightweight DB migrations, set env, restart containers, and read logs/health checks.
 
 ```bash
-# ✅ CORRECT: Pull pre-built images on VPS
+# ✅ CORRECT on VPS: pull pre-built images and restart
 docker pull kiendzpro/marketplace-frontend:latest
 docker compose -f docker-compose.prod.yml --env-file .env up -d frontend
 
-# ❌ WRONG: NEVER do this on VPS
+# ❌ WRONG on VPS: heavy jobs
 docker build -t ... -f frontend/Dockerfile frontend  # WILL CRASH VPS!
+npm run build                                      # too heavy for VPS
+npx hardhat test                                   # too heavy for VPS
+npx hardhat compile                                # too heavy for VPS
+git pull origin main                               # wrong authority unless user explicitly asks
 ```
 
 ## Quick Reference
 
 ```bash
-# Full deploy (code changes + possible schema changes)
+# Full deploy from local/GitHub-built images, never VPS build
 bash scripts/deploy.sh
 
 # Only schema migration (no code changes)
@@ -176,8 +185,9 @@ Before deploying:
 - [ ] TypeScript compiles: `npx tsc --noEmit` (frontend + both services)
 - [ ] New DB columns/tables → create migration file in `init_database.sql/migrations/`
 - [ ] New env vars → add to `docker-compose.prod.yml` AND VPS `.env`
-- [ ] Docker is running locally
-- [ ] Logged in to Docker Hub: `docker login`
+- [ ] Docker build/test happens locally or in GitHub Actions, never on the VPS
+- [ ] Logged in to Docker Hub locally or CI has push credentials
+- [ ] If syncing files manually, back up overwritten VPS files first and do not use `git pull` on VPS
 
 After deploying:
 - [ ] `docker logs marketplace-db-migrator` — migrations applied

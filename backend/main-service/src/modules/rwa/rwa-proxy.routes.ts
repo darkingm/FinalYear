@@ -199,6 +199,15 @@ router.post('/portfolio/purchase', authenticate, async (req: AuthRequest, res: R
     }
 });
 
+router.post('/portfolio/reconcile/:assetId', authenticate, authorize('admin'), async (req: Request, res: Response) => {
+    try {
+        const data = await proxyToTokenization('post', `/api/rwa/portfolio/reconcile/${req.params.assetId}`, req.body);
+        res.json(data);
+    } catch (err: any) {
+        res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
+    }
+});
+
 /* ── Governance routes ───────────────────────────────────────────────── */
 
 // Public: list proposals
@@ -278,10 +287,28 @@ router.get('/buyout/detail/:id', async (req: Request, res: Response) => {
     }
 });
 
+router.get('/buyout/:id/proof/:wallet', authenticate, async (req: Request, res: Response) => {
+    try {
+        const data = await proxyToTokenization('get', `/api/rwa/buyout/${req.params.id}/proof/${req.params.wallet}`);
+        res.json(data);
+    } catch (err: any) {
+        res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
+    }
+});
+
 router.post('/buyout/:assetId/propose', authenticate, async (req: Request, res: Response) => {
     try {
         const data = await proxyToTokenization('post', `/api/rwa/buyout/${req.params.assetId}/propose`, req.body);
         res.status(201).json(data);
+    } catch (err: any) {
+        res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
+    }
+});
+
+router.post('/buyout/:id/snapshot', authenticate, authorize('admin'), async (req: Request, res: Response) => {
+    try {
+        const data = await proxyToTokenization('post', `/api/rwa/buyout/${req.params.id}/snapshot`, req.body);
+        res.json(data);
     } catch (err: any) {
         res.status(err.response?.status || 500).json(err.response?.data || { error: err.message });
     }
@@ -341,6 +368,7 @@ router.post('/market/:assetId/list', authenticate, async (req: AuthRequest, res:
 router.patch('/market/listings/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
     try {
         const data = await proxyToTokenization('patch', `/api/rwa/market/listings/${req.params.id}/cancel`, {
+            ...req.body,
             seller_user_id: req.user!.user_id,
         });
         res.json(data);

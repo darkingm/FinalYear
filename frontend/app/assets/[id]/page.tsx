@@ -23,6 +23,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import type { RWAAsset } from '../page';
 import { getDemoRwaAssetById } from '@/lib/rwa/demo-assets';
+import { formatRwaTokenBalance } from '@/lib/rwa/onchain';
 
 /* ── ABIs ───────────────────────────────────────────────────────────────── */
 const ERC20_ABI = parseAbi([
@@ -144,7 +145,7 @@ function InvestPanel({ asset, kycStatus, onInvestSuccess }: {
             {isConnected && userTokenBalance !== undefined && (
                 <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl p-3 text-sm flex items-center gap-2">
                     <Coins className="w-4 h-4 text-[#f0b90b]" />
-                    <span>Đang nắm giữ: <span className="font-black text-[#f0b90b]">{userTokenBalance.toString()} {asset.symbol}</span></span>
+                    <span>Đang nắm giữ: <span className="font-black text-[#f0b90b]">{formatRwaTokenBalance(userTokenBalance)} {asset.symbol}</span></span>
                 </div>
             )}
 

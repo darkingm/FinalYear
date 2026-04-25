@@ -1261,8 +1261,8 @@
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\RWAToken.sol": {
-      "lastModificationDate": 1776702531320,
-      "contentHash": "e5b9099c8aed417f066086902bb1c2af",
+      "lastModificationDate": 1777138669930,
+      "contentHash": "421ca39753476d846a036be19764abb4",
       "sourceName": "contracts/RWAToken.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -1427,8 +1427,8 @@
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\RWAFactory.sol": {
-      "lastModificationDate": 1776703241144,
-      "contentHash": "c60097b7501e8876232d8e1228faa8ef",
+      "lastModificationDate": 1777139372656,
+      "contentHash": "ecca53ce313e8049b7f898c623d0316b",
       "sourceName": "contracts/RWAFactory.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -2336,8 +2336,8 @@
       ]
     },
     "C:\\Users\\Asus\\Documents\\FYP\\FYP\\contracts\\contracts\\RWATokenV2.sol": {
-      "lastModificationDate": 1776703148507,
-      "contentHash": "92d8b5e4e005a352c81b1cbc92ccdabc",
+      "lastModificationDate": 1777138825713,
+      "contentHash": "4f0f693b88a9aa25e7476468b3709967",
       "sourceName": "contracts/RWATokenV2.sol",
       "solcConfig": {
         "version": "0.8.20",

@@ -194,7 +194,7 @@ contract RWAToken is ERC20, AccessControl, Pausable {
     /// @notice Total tokens that should be issued = totalValuation / pricePerToken
     function maxSupply() external view returns (uint256) {
         if (pricePerTokenUSD == 0) return 0;
-        return totalValuationUSD / pricePerTokenUSD;
+        return (totalValuationUSD * 10 ** decimals()) / pricePerTokenUSD;
     }
 
     /// @notice Tokens remaining to be sold

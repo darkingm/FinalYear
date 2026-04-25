@@ -11,7 +11,12 @@ import { query } from '../db';
  * including wallet-to-wallet transfers not initiated through the purchase API.
  */
 
-const TRANSFER_EVENT_ABI = ['event Transfer(address indexed from, address indexed to, uint256 value)'];
+const TOKEN_INDEXER_ABI = [
+    'event Transfer(address indexed from, address indexed to, uint256 value)',
+    'function balanceOf(address account) view returns (uint256)',
+    'function totalSupply() view returns (uint256)',
+];
+const TOKEN_DECIMALS = 10n ** 18n;
 const POLL_INTERVAL_MS = 15_000; // 15 seconds
 const BATCH_SIZE = 1000; // max blocks per poll
 
@@ -31,7 +36,7 @@ async function indexAsset(
     fromBlock: number,
     currentBlock: number
 ): Promise<number> {
-    const contract = new ethers.Contract(tokenAddress, TRANSFER_EVENT_ABI, provider);
+    const contract = new ethers.Contract(tokenAddress, TOKEN_INDEXER_ABI, provider);
     const toBlock = Math.min(fromBlock + BATCH_SIZE, currentBlock);
 
     if (fromBlock >= toBlock) return fromBlock;
@@ -48,25 +53,28 @@ async function indexAsset(
             const from = log.args[0] as string;
             const to = log.args[1] as string;
             const value = log.args[2] as bigint;
-            const tokenAmount = Number(value / 10n ** 18n); // RWAToken has 18 decimals
 
             // Skip zero transfers
-            if (tokenAmount === 0) continue;
+            if (value === 0n) continue;
 
-            // Mint (from = 0x0) — increase 'to' holdings
+            // Mint (from = 0x0) — sync receiver balance from chain
             if (from === ethers.ZeroAddress) {
-                await upsertHolding(assetId, to, tokenAmount);
+                await syncHoldingBalance(contract, assetId, to);
             }
-            // Burn (to = 0x0) — decrease 'from' holdings
+            // Burn (to = 0x0) — sync sender balance from chain
             else if (to === ethers.ZeroAddress) {
-                await decreaseHolding(assetId, from, tokenAmount);
+                await syncHoldingBalance(contract, assetId, from);
             }
-            // Transfer — decrease 'from', increase 'to'
+            // Transfer — sync both sides from chain.
+            // This makes the indexer an idempotent projection instead of an
+            // incremental counter, so replay/retry cannot double-count holdings.
             else {
-                await decreaseHolding(assetId, from, tokenAmount);
-                await upsertHolding(assetId, to, tokenAmount);
+                await syncHoldingBalance(contract, assetId, from);
+                await syncHoldingBalance(contract, assetId, to);
             }
         }
+
+        await syncTokensSold(contract, assetId);
 
         // Update indexer state
         await query(
@@ -88,9 +96,22 @@ async function indexAsset(
     }
 }
 
-async function upsertHolding(assetId: string, walletAddress: string, tokenAmount: number) {
-    // Use (asset_id, wallet_address) as the conflict key — prevents merging
-    // multiple unlinked wallets into user_id=0 per asset.
+async function syncHoldingBalance(contract: ethers.Contract, assetId: string, walletAddress: string) {
+    const normalizedWallet = walletAddress.toLowerCase();
+    const balanceWei = await contract.balanceOf(walletAddress);
+    const tokenAmount = Number(balanceWei / TOKEN_DECIMALS); // RWAToken has 18 decimals
+
+    if (tokenAmount <= 0) {
+        await query(`
+            DELETE FROM investor_holdings
+            WHERE asset_id = $1 AND wallet_address = $2
+        `, [assetId, normalizedWallet]);
+        return;
+    }
+
+    // Use (asset_id, wallet_address) as the conflict key and SET exact balance.
+    // Keeping avg_cost_usd untouched preserves purchase metadata written by the
+    // purchase endpoint while ownership remains chain-derived.
     await query(`
         INSERT INTO investor_holdings (user_id, asset_id, tokens_held, wallet_address, last_updated)
         VALUES (
@@ -98,24 +119,62 @@ async function upsertHolding(assetId: string, walletAddress: string, tokenAmount
             $1, $3, $2, NOW()
         )
         ON CONFLICT (asset_id, wallet_address) DO UPDATE SET
-            tokens_held = investor_holdings.tokens_held + $3,
+            tokens_held = $3,
+            user_id = COALESCE(investor_holdings.user_id, EXCLUDED.user_id),
             last_updated = NOW()
-    `, [assetId, walletAddress.toLowerCase(), tokenAmount]);
+    `, [assetId, normalizedWallet, tokenAmount]);
 }
 
-async function decreaseHolding(assetId: string, walletAddress: string, tokenAmount: number) {
-    // Decrease, and remove if balance drops to zero
-    await query(`
-        UPDATE investor_holdings
-        SET tokens_held = GREATEST(tokens_held - $3, 0), last_updated = NOW()
-        WHERE asset_id = $1 AND wallet_address = $2
-    `, [assetId, walletAddress.toLowerCase(), tokenAmount]);
+async function syncTokensSold(contract: ethers.Contract, assetId: string) {
+    const totalSupplyWei = await contract.totalSupply();
+    const tokensSold = Number(totalSupplyWei / TOKEN_DECIMALS);
 
-    // Clean up zero-balance rows
     await query(`
-        DELETE FROM investor_holdings
-        WHERE asset_id = $1 AND wallet_address = $2 AND tokens_held <= 0
-    `, [assetId, walletAddress.toLowerCase()]);
+        UPDATE rwa_assets
+        SET tokens_sold = $2, updated_at = NOW()
+        WHERE asset_id = $1
+    `, [assetId, tokensSold]);
+}
+
+export async function reconcileAssetHoldings(assetId: string, tokenAddress: string) {
+    if (!ethers.isAddress(tokenAddress) || tokenAddress === ethers.ZeroAddress) {
+        throw new Error('Invalid token contract address');
+    }
+
+    const provider = getProvider();
+    const contract = new ethers.Contract(tokenAddress, TOKEN_INDEXER_ABI, provider);
+    const currentBlock = await provider.getBlockNumber();
+    const wallets = new Set<string>();
+
+    for (let fromBlock = 0; fromBlock <= currentBlock; fromBlock += BATCH_SIZE + 1) {
+        const toBlock = Math.min(fromBlock + BATCH_SIZE, currentBlock);
+        const events = await contract.queryFilter(contract.filters.Transfer(), fromBlock, toBlock);
+        for (const event of events) {
+            const log = event as ethers.EventLog;
+            const from = (log.args[0] as string).toLowerCase();
+            const to = (log.args[1] as string).toLowerCase();
+            if (from !== ethers.ZeroAddress.toLowerCase()) wallets.add(from);
+            if (to !== ethers.ZeroAddress.toLowerCase()) wallets.add(to);
+        }
+    }
+
+    const existing = await query(
+        `SELECT wallet_address FROM investor_holdings WHERE asset_id = $1`,
+        [assetId]
+    );
+    for (const row of existing.rows) {
+        if (row.wallet_address) wallets.add(String(row.wallet_address).toLowerCase());
+    }
+
+    for (const wallet of wallets) {
+        await syncHoldingBalance(contract, assetId, wallet);
+    }
+    await syncTokensSold(contract, assetId);
+
+    return {
+        wallets_checked: wallets.size,
+        current_block: currentBlock,
+    };
 }
 
 /**

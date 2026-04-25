@@ -140,6 +140,13 @@ contract RWATokenV2 is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausable {
             _isHolder[from] = false;
             if (currentInvestorCount > 0) currentInvestorCount--;
         }
+
+        // Make governance usable for demo/default holders. If a wallet has not
+        // explicitly delegated yet, delegate its votes to itself after receiving
+        // tokens. Users can still override this later with delegate().
+        if (to != address(0) && amount > 0 && delegates(to) == address(0)) {
+            _delegate(to, to);
+        }
     }
 
     /* ── ERC20Votes overrides ─────────────────────────────────── */
@@ -188,7 +195,7 @@ contract RWATokenV2 is ERC20, ERC20Permit, ERC20Votes, AccessControl, Pausable {
     /* ── View ─────────────────────────────────────────────────── */
     function maxSupply() external view returns (uint256) {
         if (pricePerTokenUSD == 0) return 0;
-        return totalValuationUSD / pricePerTokenUSD;
+        return (totalValuationUSD * 10 ** decimals()) / pricePerTokenUSD;
     }
 
     function tokensAvailable() external view returns (uint256) {

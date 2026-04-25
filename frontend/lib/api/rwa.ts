@@ -24,6 +24,7 @@ export const rwaApi = {
     portfolio: {
         get: (userId: number) => apiClient.get(`/api/rwa/portfolio/${userId}`),
         pending: (assetId: string, wallet: string) => apiClient.get(`/api/rwa/portfolio/${assetId}/pending/${wallet}`),
+        reconcile: (assetId: string) => apiClient.post(`/api/rwa/portfolio/reconcile/${assetId}`, {}),
         purchase: (data: { asset_id: string; user_id: number; wallet_address: string; token_amount: number; cost_usd: number; idempotency_key?: string }) =>
             apiClient.post('/api/rwa/portfolio/purchase', data),
     },
@@ -40,13 +41,15 @@ export const rwaApi = {
             apiClient.post(`/api/rwa/governance/${assetId}/proposals`, data),
         vote: (proposalId: number, data: { voter_address: string; support: boolean; weight: number; tx_hash?: string }) =>
             apiClient.post(`/api/rwa/governance/proposals/${proposalId}/vote`, data),
-        execute: (proposalId: number, data?: { execute_tx_hash?: string }) =>
+        execute: (proposalId: number, data?: { execute_tx_hash?: string; final_status?: 'PASSED' | 'REJECTED' }) =>
             apiClient.post(`/api/rwa/governance/proposals/${proposalId}/execute`, data || {}),
     },
     buyout: {
         list: (assetId: string) => apiClient.get(`/api/rwa/buyout/${assetId}/proposals`, publicRequestConfig),
         detail: (id: number) => apiClient.get(`/api/rwa/buyout/detail/${id}`, publicRequestConfig),
+        proof: (id: number, wallet: string) => apiClient.get(`/api/rwa/buyout/${id}/proof/${wallet}`),
         propose: (assetId: string, data: any) => apiClient.post(`/api/rwa/buyout/${assetId}/propose`, data),
+        snapshot: (id: number) => apiClient.post(`/api/rwa/buyout/${id}/snapshot`, {}),
         updateStatus: (id: number, data: any) => apiClient.patch(`/api/rwa/buyout/${id}/status`, data),
         claim: (id: number, data: any) => apiClient.post(`/api/rwa/buyout/${id}/claim`, data),
     },
@@ -55,7 +58,8 @@ export const rwaApi = {
             apiClient.get(`/api/rwa/market/${assetId}/listings${status ? `?status=${status}` : ''}`, publicRequestConfig),
         trades: (assetId: string) => apiClient.get(`/api/rwa/market/${assetId}/trades`, publicRequestConfig),
         createListing: (assetId: string, data: any) => apiClient.post(`/api/rwa/market/${assetId}/list`, data),
-        cancelListing: (id: number) => apiClient.patch(`/api/rwa/market/listings/${id}/cancel`, {}),
+        cancelListing: (id: number, cancelTxHash: string) =>
+            apiClient.patch(`/api/rwa/market/listings/${id}/cancel`, { cancel_tx_hash: cancelTxHash }),
         buy: (listingId: number, data: any) => apiClient.post(`/api/rwa/market/listings/${listingId}/buy`, data),
     },
 };

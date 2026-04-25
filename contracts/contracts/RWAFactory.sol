@@ -81,7 +81,10 @@ contract RWAFactory is AccessControl {
         require(pricePerToken <= totalVal, "RWAFactory: price > valuation");
 
         bytes32 assetId = keccak256(abi.encodePacked(assetIdStr));
-        require(assets[assetId].token == address(0), "RWAFactory: asset already exists");
+        require(
+            assets[assetId].token == address(0) && assetsV2[assetId].token == address(0),
+            "RWAFactory: asset already exists"
+        );
 
         /* ── 1. Deploy RWAToken ──────────────────────────────────────*/
         RWAToken newToken = new RWAToken(
@@ -206,7 +209,16 @@ contract RWAFactory is AccessControl {
     }
 
     function deactivateAsset(bytes32 assetId) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        assets[assetId].active = false;
+        require(
+            assets[assetId].token != address(0) || assetsV2[assetId].token != address(0),
+            "RWAFactory: asset not found"
+        );
+        if (assets[assetId].token != address(0)) {
+            assets[assetId].active = false;
+        }
+        if (assetsV2[assetId].token != address(0)) {
+            assetsV2[assetId].active = false;
+        }
         emit AssetDeactivated(assetId);
     }
 

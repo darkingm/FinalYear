@@ -20,6 +20,7 @@ assetsRouter.get('/', async (req: Request, res: Response) => {
       SELECT asset_id, name, symbol, asset_type, description, location,
              total_valuation_usd, price_per_token_usd, total_tokens,
              tokens_sold, token_contract_address, distributor_contract_address,
+             governance_contract_address, token_version,
              legal_doc_ipfs, expected_apy, status, created_at
       FROM rwa_assets
     `;
@@ -66,8 +67,20 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const valuationUsd = Number(total_valuation_usd);
+    const tokenPriceUsd = Number(price_per_token_usd);
+    if (!Number.isFinite(valuationUsd) || !Number.isFinite(tokenPriceUsd) || valuationUsd <= 0 || tokenPriceUsd <= 0) {
+        return res.status(400).json({ error: 'total_valuation_usd and price_per_token_usd must be positive numbers' });
+    }
+    if (tokenPriceUsd > valuationUsd) {
+        return res.status(400).json({ error: 'price_per_token_usd cannot exceed total_valuation_usd' });
+    }
+
     const assetId = uuidv4();
-    const totalTokens = Math.floor(Number(total_valuation_usd) / Number(price_per_token_usd));
+    const totalTokens = Math.floor(valuationUsd / tokenPriceUsd);
+    if (totalTokens <= 0) {
+        return res.status(400).json({ error: 'Asset must issue at least one token' });
+    }
 
     try {
         // 1. Create DB record first (always succeeds)
@@ -79,13 +92,15 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'PENDING')
     `, [
             assetId, name, symbol, asset_type, description || '', location || '',
-            total_valuation_usd, price_per_token_usd, totalTokens,
+            valuationUsd, tokenPriceUsd, totalTokens,
             legal_doc_ipfs || '', expected_apy || null,
         ]);
 
         // 2. Try blockchain deploy — optional, skip if unavailable (local dev)
         let tokenAddress = '0x0000000000000000000000000000000000000000';
-        let distributorAddress = '0x0000000000000000000000000000000000000000';
+        let distributorAddress = ZERO_ADDRESS;
+        let governanceAddress = ZERO_ADDRESS;
+        let tokenVersion = 1;
         let onChain = false;
 
         try {
@@ -96,11 +111,17 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
             const result = await createAssetOnChain({
                 assetId, name, symbol, assetType: assetTypeEnum,
                 legalDocIPFS: legal_doc_ipfs || '',
-                totalValUSD: BigInt(Math.round(Number(total_valuation_usd) * 1e6)),
-                pricePerTokenUSD: BigInt(Math.round(Number(price_per_token_usd) * 1e6)),
+                totalValUSD: BigInt(Math.round(valuationUsd * 1e6)),
+                pricePerTokenUSD: BigInt(Math.round(tokenPriceUsd * 1e6)),
+                withGovernance: true,
+                quorum: Number(req.body.control_threshold || 50),
+                supermajority: Number(req.body.supermajority_threshold || 67),
+                votingPeriodSeconds: Number(req.body.voting_period_seconds || 48 * 60 * 60),
             });
             tokenAddress = result.tokenAddress;
             distributorAddress = result.distributorAddress;
+            governanceAddress = result.governanceAddress;
+            tokenVersion = result.tokenVersion;
             onChain = true;
         } catch (_blockchainErr) {
             // Blockchain not available (Hardhat not running locally) — continue with placeholder
@@ -110,14 +131,19 @@ assetsRouter.post('/', async (req: Request, res: Response) => {
         // 3. Update with contract addresses (placeholder or real)
         await query(`
       UPDATE rwa_assets
-      SET token_contract_address = $1, distributor_contract_address = $2
-      WHERE asset_id = $3
-    `, [tokenAddress, distributorAddress, assetId]);
+      SET token_contract_address = $1,
+          distributor_contract_address = $2,
+          governance_contract_address = $3,
+          token_version = $4
+      WHERE asset_id = $5
+    `, [tokenAddress, distributorAddress, governanceAddress, tokenVersion, assetId]);
 
         res.status(201).json({
             asset_id: assetId,
             token_contract_address: tokenAddress,
             distributor_contract_address: distributorAddress,
+            governance_contract_address: governanceAddress,
+            token_version: tokenVersion,
             on_chain: onChain,
         });
     } catch (err: any) {

@@ -2,8 +2,29 @@ import { Router, Request, Response } from 'express';
 import { pool, query } from '../../db';
 import { getPendingReward, mintTokens } from '../../blockchain/factory';
 import { v4 as uuidv4 } from 'uuid';
+import { isAddress } from 'ethers';
+import { reconcileAssetHoldings } from '../../indexer/transfer-indexer';
 
 export const portfolioRouter = Router();
+
+/** Admin recovery: rebuild holdings/tokens_sold from on-chain state */
+portfolioRouter.post('/reconcile/:assetId', async (req: Request, res: Response) => {
+    try {
+        const assetResult = await query(
+            `SELECT token_contract_address FROM rwa_assets WHERE asset_id = $1`,
+            [req.params.assetId]
+        );
+        if (assetResult.rows.length === 0) return res.status(404).json({ error: 'Asset not found' });
+
+        const result = await reconcileAssetHoldings(
+            req.params.assetId,
+            assetResult.rows[0].token_contract_address
+        );
+        res.json({ ok: true, ...result });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /** Get a user's holdings across all assets */
 portfolioRouter.get('/:userId', async (req: Request, res: Response) => {
@@ -61,15 +82,19 @@ portfolioRouter.get('/:assetId/pending/:walletAddress', async (req: Request, res
 /**
  * Record token purchase — atomic: row-lock asset → mint on-chain → update DB
  *
- * Requires: asset_id, user_id, wallet_address, token_amount, cost_usd
+ * Requires: asset_id, user_id, wallet_address, token_amount
  * Optional: idempotency_key (auto-generated if not provided)
  */
 portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
-    const { asset_id, user_id, wallet_address, token_amount, cost_usd } = req.body;
+    const { asset_id, user_id, wallet_address, token_amount } = req.body;
     const idempotencyKey = req.body.idempotency_key || uuidv4();
+    const requestedTokenAmount = Number(token_amount);
 
-    if (!asset_id || !user_id || !wallet_address || !token_amount || token_amount <= 0) {
+    if (!asset_id || !user_id || !wallet_address || !Number.isInteger(requestedTokenAmount) || requestedTokenAmount <= 0) {
         return res.status(400).json({ error: 'Missing or invalid required fields' });
+    }
+    if (!isAddress(wallet_address)) {
+        return res.status(400).json({ error: 'Invalid wallet address' });
     }
 
     const normalizedWallet = wallet_address.toLowerCase();
@@ -94,7 +119,7 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
 
         // ── 2. Lock asset row + validate supply ───────────────────────
         const assetRow = await client.query(
-            `SELECT token_contract_address, total_tokens, tokens_sold
+            `SELECT token_contract_address, total_tokens, tokens_sold, price_per_token_usd, status
              FROM rwa_assets WHERE asset_id = $1 FOR UPDATE`,
             [asset_id]
         );
@@ -103,12 +128,25 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Asset not found' });
         }
 
-        const { token_contract_address, total_tokens, tokens_sold } = assetRow.rows[0];
+        const { token_contract_address, total_tokens, tokens_sold, price_per_token_usd, status } = assetRow.rows[0];
+        const totalTokens = Number(total_tokens);
+        const tokensSold = Number(tokens_sold);
+        const pricePerTokenUsd = Number(price_per_token_usd);
 
-        if (tokens_sold + token_amount > total_tokens) {
+        if (status !== 'ACTIVE') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Asset is not active for purchase' });
+        }
+
+        if (!Number.isFinite(pricePerTokenUsd) || pricePerTokenUsd <= 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Asset has invalid token price' });
+        }
+
+        if (tokensSold + requestedTokenAmount > totalTokens) {
             await client.query('ROLLBACK');
             return res.status(400).json({
-                error: `Insufficient supply: ${total_tokens - tokens_sold} tokens remaining`,
+                error: `Insufficient supply: ${totalTokens - tokensSold} tokens remaining`,
             });
         }
 
@@ -117,12 +155,21 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Asset not yet deployed on-chain' });
         }
 
+        const kycResult = await client.query(
+            `SELECT verified FROM rwa_kyc WHERE wallet_address = $1`,
+            [normalizedWallet]
+        );
+        if (kycResult.rows.length === 0 || kycResult.rows[0].verified !== true) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: 'Wallet is not KYC verified for RWA purchase' });
+        }
+
         // ── 2b. Write idempotency row BEFORE minting (status=PENDING) ─
         // If mint succeeds but DB commit fails, retry sees this row and rejects.
         await client.query(
             `INSERT INTO purchase_idempotency (idempotency_key, asset_id, user_id, wallet_address, token_amount, status)
              VALUES ($1, $2, $3, $4, $5, 'PENDING')`,
-            [idempotencyKey, asset_id, user_id, normalizedWallet, token_amount]
+            [idempotencyKey, asset_id, user_id, normalizedWallet, requestedTokenAmount]
         );
         await client.query('COMMIT');
 
@@ -131,7 +178,7 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             const receipt = await mintTokens(
                 token_contract_address,
                 normalizedWallet,
-                BigInt(token_amount) * 10n ** 18n
+                BigInt(requestedTokenAmount) * 10n ** 18n
             );
             mintTxHash = receipt.hash;
         } catch (mintErr: any) {
@@ -144,34 +191,16 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             await query(
                 `INSERT INTO failed_mint_recovery (asset_id, user_id, wallet_address, token_amount, error_message)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [asset_id, user_id, normalizedWallet, token_amount, mintErr.message]
+                [asset_id, user_id, normalizedWallet, requestedTokenAmount, mintErr.message]
             ).catch(() => {});
             return res.status(500).json({ error: `On-chain mint failed: ${mintErr.message}` });
         }
 
-        // ── 4. Mint succeeded — update DB in a new transaction ────────
+        // ── 4. Mint succeeded — record tx hash only ───────────────────
+        // Holdings and tokens_sold are projected from on-chain Transfer events
+        // by transfer-indexer.ts. Keeping one source of truth prevents double
+        // counts when the indexer catches up after this request returns.
         await client.query('BEGIN');
-
-        // Upsert holdings (wallet-first PK)
-        await client.query(`
-            INSERT INTO investor_holdings (user_id, asset_id, tokens_held, avg_cost_usd, wallet_address)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (asset_id, wallet_address) DO UPDATE SET
-                tokens_held = investor_holdings.tokens_held + $3,
-                avg_cost_usd = CASE
-                    WHEN investor_holdings.tokens_held + $3 > 0
-                    THEN (investor_holdings.avg_cost_usd * investor_holdings.tokens_held + $4 * $3) / (investor_holdings.tokens_held + $3)
-                    ELSE $4
-                END,
-                user_id = COALESCE(investor_holdings.user_id, $1),
-                last_updated = NOW()
-        `, [user_id, asset_id, token_amount, cost_usd / token_amount, normalizedWallet]);
-
-        // Update tokens_sold
-        await client.query(
-            `UPDATE rwa_assets SET tokens_sold = tokens_sold + $1, updated_at = NOW() WHERE asset_id = $2`,
-            [token_amount, asset_id]
-        );
 
         // Mark idempotency as COMPLETED with tx hash
         await client.query(
@@ -185,6 +214,8 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
             ok: true,
             mint_tx_hash: mintTxHash,
             idempotency_key: idempotencyKey,
+            unit_price_usd: pricePerTokenUsd,
+            charged_cost_usd: pricePerTokenUsd * requestedTokenAmount,
         });
     } catch (err: any) {
         await client.query('ROLLBACK').catch(() => {});
@@ -203,4 +234,3 @@ portfolioRouter.post('/purchase', async (req: Request, res: Response) => {
         client.release();
     }
 });
-

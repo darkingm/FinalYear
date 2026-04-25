@@ -8,13 +8,22 @@ import {
     Gavel, ChevronLeft, Loader2, Clock, CheckCircle, AlertCircle,
     Wallet, Shield, ArrowRight,
 } from 'lucide-react';
-import { useAccount } from 'wagmi';
-import { formatEther } from 'viem';
+import { useAccount, useWriteContract } from 'wagmi';
+import { formatEther, parseAbi, parseEventLogs } from 'viem';
+import { waitForTransactionReceipt } from '@wagmi/core';
 import { rwaApi } from '@/lib/api/rwa';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { getWagmiConfig } from '@/lib/web3/config';
+import { isConfiguredContractAddress } from '@/lib/rwa/onchain';
+
+const BUYOUT_VAULT_ABI = parseAbi([
+    'function setMerkleRoot(bytes32 root) external',
+    'function claimProceeds(uint256 tokenBalance, bytes32[] proof) external',
+    'event MerkleRootSet(bytes32 root, uint256 deadline)',
+]);
 
 const STATUS_STYLE: Record<string, string> = {
     PROPOSED: 'bg-amber-400/10 text-amber-400 border-amber-400/20',
@@ -33,6 +42,9 @@ export default function BuyoutPage() {
     const [asset, setAsset] = useState<any>(null);
     const [selectedBuyout, setSelectedBuyout] = useState<any>(null);
     const [detail, setDetail] = useState<any>(null);
+    const [claimBusy, setClaimBusy] = useState<number | null>(null);
+    const [snapshotBusy, setSnapshotBusy] = useState<number | null>(null);
+    const { writeContractAsync } = useWriteContract();
 
     const fetchData = useCallback(() => {
         if (!assetId) return;
@@ -57,44 +69,81 @@ export default function BuyoutPage() {
 
     const handleClaim = async (buyoutId: number) => {
         if (!address) return toast.error('Connect wallet first');
-        if (!detail?.buyout) return toast.error('Load buyout detail first');
-
-        const buyout = detail.buyout;
-        // TODO: In production, token_balance should come from Merkle proof snapshot.
-        // For now, query on-chain token balance or use portfolio data.
-        // We need at least the user's token balance to compute their claim amount.
         try {
-            // Fetch user's holdings from the holders API
-            const holdersRes = await rwaApi.holders.list(assetId!, 100);
-            const holders = holdersRes.data.holders || [];
-            // Match by address prefix since public API masks the full address
-            const myHolding = holders.find((h: any) =>
-                address.toLowerCase().startsWith(h.wallet_address?.substring(0, 6).toLowerCase())
-            );
+            setClaimBusy(buyoutId);
+            const proofResponse = await rwaApi.buyout.proof(buyoutId, address);
+            const claim = proofResponse.data.claim;
 
-            if (!myHolding || Number(myHolding.tokens_held) <= 0) {
-                return toast.error('You do not hold any tokens for this asset');
+            if (!isConfiguredContractAddress(claim.vault_address)) {
+                return toast.error('Buyout vault is not configured for this proposal');
+            }
+            if (!claim.proof || !Array.isArray(claim.proof)) {
+                return toast.error('Invalid Merkle proof returned by backend');
             }
 
-            const tokenBalance = Number(myHolding.tokens_held);
-            // Pro-rata: (user_tokens / total_tokens) * total_price_wei
-            const totalTokens = Number(buyout.total_tokens) || 1;
-            const totalPriceWei = BigInt(buyout.total_price_wei || '0');
-            const claimAmountWei = (totalPriceWei * BigInt(tokenBalance) / BigInt(totalTokens)).toString();
-
-            if (BigInt(claimAmountWei) <= 0n) {
-                return toast.error('Computed claim amount is zero — nothing to claim');
-            }
+            const hash = await writeContractAsync({
+                address: claim.vault_address,
+                abi: BUYOUT_VAULT_ABI,
+                functionName: 'claimProceeds',
+                args: [BigInt(claim.token_balance_wei), claim.proof],
+            });
+            await waitForTransactionReceipt(getWagmiConfig(), { hash });
 
             await rwaApi.buyout.claim(buyoutId, {
                 holder_address: address,
-                token_balance: tokenBalance,
-                amount_wei: claimAmountWei,
+                amount_wei: claim.amount_wei,
+                tx_hash: hash,
             });
-            toast.success('Claim submitted! 🎉');
-            loadDetail(buyoutId);
+
+            toast.success('Buyout proceeds claimed!');
+            await loadDetail(buyoutId);
         } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Claim failed');
+            toast.error(err.shortMessage || err.response?.data?.error || err.message || 'Failed to claim buyout proceeds');
+        } finally {
+            setClaimBusy(null);
+        }
+    };
+
+    const handlePublishSnapshot = async (buyout: any) => {
+        if (!address) return toast.error('Connect wallet first');
+        if (!isConfiguredContractAddress(buyout.vault_address)) {
+            return toast.error('Buyout vault address is missing');
+        }
+
+        try {
+            setSnapshotBusy(buyout.id);
+            const snapshotResponse = await rwaApi.buyout.snapshot(buyout.id);
+            const root = snapshotResponse.data.merkle_root;
+            if (!root) throw new Error('Snapshot did not return a Merkle root');
+
+            const hash = await writeContractAsync({
+                address: buyout.vault_address,
+                abi: BUYOUT_VAULT_ABI,
+                functionName: 'setMerkleRoot',
+                args: [root],
+            });
+            const receipt = await waitForTransactionReceipt(getWagmiConfig(), { hash });
+            const logs = parseEventLogs({
+                abi: BUYOUT_VAULT_ABI,
+                eventName: 'MerkleRootSet',
+                logs: receipt.logs,
+            }) as any[];
+            const deadline = logs[0]?.args?.deadline;
+
+            await rwaApi.buyout.updateStatus(buyout.id, {
+                status: 'FINALIZED',
+                merkle_root: root,
+                finalize_tx_hash: hash,
+                claim_deadline: deadline ? new Date(Number(deadline) * 1000).toISOString() : undefined,
+            });
+
+            toast.success(`Merkle root published for ${snapshotResponse.data.holder_count} holders`);
+            fetchData();
+            await loadDetail(buyout.id);
+        } catch (err: any) {
+            toast.error(err.shortMessage || err.response?.data?.error || err.message || 'Failed to publish Merkle snapshot');
+        } finally {
+            setSnapshotBusy(null);
         }
     };
 
@@ -214,6 +263,15 @@ export default function BuyoutPage() {
                                                     </div>
                                                 )}
 
+                                                {b.status === 'DEPOSITED' && isConnected && (
+                                                    <button onClick={() => handlePublishSnapshot(b)}
+                                                        disabled={snapshotBusy === b.id || !isConfiguredContractAddress(b.vault_address)}
+                                                        className="w-full py-3 bg-violet-500/10 text-violet-300 border border-violet-500/20 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                                                        {snapshotBusy === b.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                                                        Build snapshot & publish Merkle root
+                                                    </button>
+                                                )}
+
                                                 {/* Claims list */}
                                                 {detail.claims && detail.claims.length > 0 && (
                                                     <div className="space-y-1">
@@ -230,8 +288,10 @@ export default function BuyoutPage() {
 
                                                 {b.status === 'FINALIZED' && isConnected && (
                                                     <button onClick={() => handleClaim(b.id)}
-                                                        className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2">
-                                                        <Wallet className="w-4 h-4" /> Claim My Proceeds
+                                                        disabled={claimBusy === b.id || !isConfiguredContractAddress(b.vault_address) || !b.merkle_root}
+                                                        className="w-full py-3 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                                                        {claimBusy === b.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                                                        Claim buyout proceeds
                                                     </button>
                                                 )}
                                             </motion.div>

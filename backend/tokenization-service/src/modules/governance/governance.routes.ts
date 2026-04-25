@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../../db';
+import { isAddress } from 'ethers';
 
 export const governanceRouter = Router();
 
@@ -62,6 +63,12 @@ governanceRouter.post('/:assetId/proposals', async (req: Request, res: Response)
     if (!proposer_address || !proposal_type || !title) {
         return res.status(400).json({ error: 'Missing required fields: proposer_address, proposal_type, title' });
     }
+    if (!isAddress(proposer_address)) {
+        return res.status(400).json({ error: 'Invalid proposer address' });
+    }
+    if (!Number.isInteger(Number(onchain_id)) || Number(onchain_id) <= 0 || !tx_hash) {
+        return res.status(400).json({ error: 'On-chain proposal transaction required before recording proposal' });
+    }
 
     try {
         // Look up asset quorum thresholds
@@ -108,6 +115,12 @@ governanceRouter.post('/proposals/:id/vote', async (req: Request, res: Response)
 
     if (!voter_address || support === undefined) {
         return res.status(400).json({ error: 'Missing required fields: voter_address, support' });
+    }
+    if (!isAddress(voter_address)) {
+        return res.status(400).json({ error: 'Invalid voter address' });
+    }
+    if (!tx_hash) {
+        return res.status(400).json({ error: 'On-chain vote transaction required before recording vote' });
     }
 
     try {
@@ -165,19 +178,25 @@ governanceRouter.post('/proposals/:id/vote', async (req: Request, res: Response)
     }
 });
 
-/** Execute a passed proposal (update status) */
+/** Finalize a proposal after on-chain executeProposal() tallies PASSED/REJECTED */
 governanceRouter.post('/proposals/:id/execute', async (req: Request, res: Response) => {
-    const { execute_tx_hash } = req.body;
+    const { execute_tx_hash, final_status } = req.body;
+    if (!execute_tx_hash) {
+        return res.status(400).json({ error: 'On-chain execute transaction required before marking executed' });
+    }
+    if (!['PASSED', 'REJECTED'].includes(final_status)) {
+        return res.status(400).json({ error: 'final_status must be PASSED or REJECTED' });
+    }
     try {
         const result = await query(`
             UPDATE governance_proposals
-            SET status = 'EXECUTED', execute_tx_hash = $2, updated_at = NOW()
-            WHERE id = $1 AND status = 'PASSED'
+            SET status = $2, execute_tx_hash = $3, updated_at = NOW()
+            WHERE id = $1 AND status = 'ACTIVE'
             RETURNING *
-        `, [req.params.id, execute_tx_hash || null]);
+        `, [req.params.id, final_status, execute_tx_hash]);
 
         if (result.rows.length === 0) {
-            return res.status(400).json({ error: 'Proposal not found or not in PASSED status' });
+            return res.status(400).json({ error: 'Proposal not found or not in ACTIVE status' });
         }
 
         res.json({ proposal: result.rows[0] });

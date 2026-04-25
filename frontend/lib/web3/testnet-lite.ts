@@ -68,7 +68,7 @@ const TESTNET_LITE_CHAIN_META: Record<number, TestnetLiteChainMeta> = {
     name: 'BNB Testnet',
     shortName: 'BNB',
     icon: '🟡',
-    nativeSymbol: 'tBNB',
+    nativeSymbol: 'BNB',
     explorerUrl: 'https://testnet.bscscan.com',
     faucetUrl: 'https://www.bnbchain.org/en/testnet-faucet',
     rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545',
