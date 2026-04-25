@@ -5,11 +5,12 @@ import { getOrderStatusMeta, type OrderVerificationContext } from '@/lib/orders/
 interface OrderTrackingSnapshotProps {
   status: string;
   verification?: OrderVerificationContext | null;
+  paymentMethod?: string | null;
   className?: string;
 }
 
-export function OrderTrackingSnapshot({ status, verification, className = '' }: OrderTrackingSnapshotProps) {
-  const meta = getOrderStatusMeta(status, verification);
+export function OrderTrackingSnapshot({ status, verification, paymentMethod, className = '' }: OrderTrackingSnapshotProps) {
+  const meta = getOrderStatusMeta(status, verification, paymentMethod);
 
   const items = [
     {

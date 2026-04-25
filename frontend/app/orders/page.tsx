@@ -56,6 +56,7 @@ const STATUS_CONFIG: Record<string, {
   ONCHAIN_CONFIRMED: { labelKey: 'orders.statusOnchainConfirmed', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
   PAYMENT_VALIDATED: { labelKey: 'orders.statusPaymentValidated', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', icon: CheckCircle, step: 2 },
   PAID: { labelKey: 'orders.statusPaid', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', icon: CheckCircle, step: 2 },
+  PAID_PAYPAL: { labelKey: 'orders.statusPaid', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: CheckCircle, step: 2 },
   PROCESSING: { labelKey: 'orders.statusProcessing', textColor: 'text-violet-400', bgColor: 'bg-violet-500/10', borderColor: 'border-violet-500/30', icon: Package, step: 2 },
   DELIVERING: { labelKey: 'orders.statusDelivering', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
   SHIPPED: { labelKey: 'orders.statusShipped', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Truck, step: 3 },
@@ -70,7 +71,7 @@ const STATUS_CONFIG: Record<string, {
 const FILTERS = [
   { value: 'all', labelKey: 'orders.filterAll', statuses: [] as string[] },
   { value: 'pending', labelKey: 'orders.filterPending', statuses: ['UNPAID', 'TX_SUBMITTED', 'ONCHAIN_PENDING'] },
-  { value: 'active', labelKey: 'orders.filterActive', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PROCESSING', 'SHIPPED'] },
+  { value: 'active', labelKey: 'orders.filterActive', statuses: ['ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PAID_PAYPAL', 'PROCESSING', 'SHIPPED'] },
   { value: 'shipping', labelKey: 'orders.filterShipping', statuses: ['DELIVERING', 'SHIPPED'] },
   { value: 'done', labelKey: 'orders.filterDone', statuses: ['DELIVERED', 'COMPLETED'] },
   { value: 'issue', labelKey: 'orders.filterIssue', statuses: ['CANCELLED', 'REFUNDED', 'DISPUTED', 'TX_FAILED'] },

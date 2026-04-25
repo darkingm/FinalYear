@@ -152,7 +152,7 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (!order || !success || !order.paypal_order_id || capturing) return;
-    if (order.status === 'PAID' || order.status === 'COMPLETED') return; // already done
+    if (order.status === 'PAID' || order.status === 'PAID_PAYPAL' || order.status === 'COMPLETED') return; // already done
     capturePayPal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, success]);
@@ -612,7 +612,7 @@ export default function OrderDetailPage() {
               <OrderStepper currentStatus={order.status} paymentMethod={order.payment_method} className="py-2" />
             </div>
 
-            <OrderTrackingSnapshot status={order.status} verification={paymentSnapshot} className="mb-8" />
+            <OrderTrackingSnapshot status={order.status} verification={paymentSnapshot} paymentMethod={order.payment_method} className="mb-8" />
 
             {order.payment_method === 'crypto' && ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED', 'PAID'].includes(order.status) && (
               <div className={`${getPaymentAccentPanelClass('amber')} mb-8 p-4`}>
@@ -825,7 +825,7 @@ export default function OrderDetailPage() {
           )}
 
           {/* ── SELLER: Mark SHIPPED ─── */}
-          {isSeller && (order.status === 'PAID' || order.status === 'ONCHAIN_CONFIRMED') && (
+          {isSeller && (order.status === 'PAID' || order.status === 'PAID_PAYPAL' || order.status === 'ONCHAIN_CONFIRMED') && (
             <div className={`${getPaymentAccentPanelClass('blue')} p-6 rounded-3xl shadow-lg shadow-blue-500/5 mb-6 relative overflow-hidden dark:bg-gradient-to-br dark:from-blue-500/10 dark:to-blue-600/5`}>
               <div className="absolute top-0 right-0 hidden w-32 h-32 bg-blue-500/20 blur-3xl rounded-full dark:block" />
               <div className="relative z-10">
@@ -857,7 +857,7 @@ export default function OrderDetailPage() {
           {/* ── BUYER: Confirm Delivery (on-chain) ─── */}
           {/* Show when SHIPPED/PAID AND on-chain status is Paid (1) or not yet checked (null) */}
           {/* Hide entirely if on-chain status shows Completed/Refunded/etc to prevent stale-state clicks */}
-          {isBuyer && (order.status === 'SHIPPED' || order.status === 'PAID') && escrowOnChainStatus !== 2 && escrowOnChainStatus !== -1 && (
+          {isBuyer && (order.status === 'SHIPPED' || order.status === 'PAID' || order.status === 'PAID_PAYPAL') && escrowOnChainStatus !== 2 && escrowOnChainStatus !== -1 && (
             // If we've checked on-chain and it's not Paid, show a warning instead of the confirm button
             escrowOnChainStatus !== null && escrowOnChainStatus !== 1 ? (
               <div className={`${getPaymentAccentPanelClass('amber')} p-6 rounded-3xl shadow-lg mb-6`}>
@@ -884,7 +884,7 @@ export default function OrderDetailPage() {
                 <h3 className="font-bold text-lg mb-2 text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5" /> Xác nhận nhận hàng
                 </h3>
-                {order.status === 'PAID' && (
+                {(order.status === 'PAID' || order.status === 'PAID_PAYPAL') && (
                   <div className={`${getPaymentAccentPanelClass('amber')} mb-3 p-3 rounded-xl`}>
                     <p className="text-xs text-amber-700 dark:text-amber-300">⚠️ Người bán chưa cập nhật trạng thái giao hàng. Nếu bạn đã nhận được hàng, bạn vẫn có thể xác nhận để giải ngân cho người bán.</p>
                   </div>

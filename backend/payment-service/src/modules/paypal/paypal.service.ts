@@ -120,7 +120,7 @@ export class PayPalService {
     // Update order
     await mainQuery(
       `UPDATE orders 
-       SET paypal_capture_id = $1, status = 'PAID', updated_at = NOW()
+       SET paypal_capture_id = $1, status = 'PAID_PAYPAL', updated_at = NOW()
        WHERE order_id = $2`,
       [captureId, order.order_id]
     );
