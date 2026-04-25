@@ -26,6 +26,7 @@ import { CoinImage } from '@/components/ui/CoinImage';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { resolveCheckoutProductImage } from '@/lib/checkout/images';
 import { ESCROW_CONTRACTS, DEFAULT_CHAIN_ID, TESTNET_MODE, CHAIN_TOKENS } from '@/lib/web3/config';
+import { CheckoutSwapWidget } from '@/components/checkout/CheckoutSwapWidget';
 import { getRecommendedCheckoutChainMetas } from '@/lib/web3/testnet-lite';
 import { formatUSD, formatCrypto, calcPlatformFee, PLATFORM_FEE_LABEL } from '@/lib/utils/format-price';
 import { getOrderPricingDisplay } from '@/lib/orders/presentation';
@@ -260,7 +261,7 @@ export default function CheckoutPage() {
     return () => clearInterval(iv);
   }, [quote]);
 
-  const acceptedCrypto = order?.product_metadata?.accepted_tokens?.crypto || ['ETH', 'MATIC', 'USDT'];
+  const acceptedCrypto = order?.product_metadata?.accepted_tokens?.crypto || ['ETH', 'MATIC', 'BNB', 'USDT', 'USDC'];
   const acceptPayPal = order?.product_metadata?.accepted_tokens?.fiat?.includes('paypal') ?? true;
   const coinPrice = useCoinPrice(selectedToken);
   const currentNet = CHAIN_META[selectedNet] || PAYMENT_NETWORKS[0];
@@ -962,6 +963,9 @@ export default function CheckoutPage() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Swap & Bridge Widget */}
+                  <CheckoutSwapWidget chainId={selectedNet} />
 
                   {/* Estimate */}
                   <div className={`${paymentPageTheme.subSurface} p-4 flex items-center justify-between`}>
