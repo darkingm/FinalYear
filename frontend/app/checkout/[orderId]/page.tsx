@@ -311,10 +311,17 @@ export default function CheckoutPage() {
             toast.info('Đơn hàng đã xử lý'); router.push(`/orders/${o.order_id}`); return;
           }
           setOrder(o);
-          // Show resume banner if payment already submitted on-chain
-          if (['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(o.status)) {
+          // Show resume banner if payment already submitted on-chain (crypto only)
+          if (o.payment_method === 'crypto' && ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED'].includes(o.status)) {
             setResumeBanner(true);
             setStep(3);
+          }
+          // PayPal TX_SUBMITTED = user started PayPal but didn't finish → redirect to order page
+          // where they can continue the PayPal approval or cancel
+          if (o.payment_method === 'paypal' && o.status === 'TX_SUBMITTED') {
+            toast.info('Đơn hàng đang chờ thanh toán PayPal. Chuyển đến trang đơn hàng.');
+            router.push(`/orders/${o.order_id}`);
+            return;
           }
           const tokens = o.product_metadata?.accepted_tokens?.crypto;
           if (tokens?.length) setSelectedToken(tokens[0]);
@@ -489,6 +496,8 @@ export default function CheckoutPage() {
     if (!order || !['TX_SUBMITTED', 'ONCHAIN_PENDING', 'PAID', 'ONCHAIN_CONFIRMED'].includes(order.status)) {
       return;
     }
+    // Don't poll crypto status for non-crypto orders (e.g. PayPal pending)
+    if (order.payment_method !== 'crypto') return;
     refreshPaymentStatus().catch(() => null);
   }, [order?.order_id, order?.status, refreshPaymentStatus]);
 
@@ -1504,10 +1513,13 @@ export default function CheckoutPage() {
                       Theo dõi đơn hàng
                     </button>
                   </Link>
-                  <button onClick={handleCancel}
-                    className="w-full py-2 text-red-400 hover:bg-red-500/10 rounded-xl text-sm transition-colors">
-                    Hủy đơn hàng
-                  </button>
+                  {/* Only show cancel when order can actually be cancelled */}
+                  {order && (order.status === 'UNPAID' || (order.status === 'TX_SUBMITTED' && order.payment_method === 'paypal')) && (
+                    <button onClick={handleCancel}
+                      className="w-full py-2 text-red-400 hover:bg-red-500/10 rounded-xl text-sm transition-colors">
+                      {order.payment_method === 'paypal' ? 'Hủy phiên PayPal' : 'Hủy đơn hàng'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

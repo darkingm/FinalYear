@@ -355,7 +355,12 @@ export async function cancelOrder(req: AuthRequest, res: Response, next: NextFun
     if (orderResult.rows.length === 0) throw new AppError('Order not found', 404);
 
     const order = orderResult.rows[0];
-    if (order.status !== 'UNPAID') throw new AppError('Order cannot be cancelled', 400);
+    if (order.status !== 'UNPAID'
+      && !(order.status === 'TX_SUBMITTED' && order.payment_method === 'paypal')) {
+      // PayPal TX_SUBMITTED = order created but money not captured → safe to cancel
+      // Crypto TX_SUBMITTED = blockchain tx may be in flight → NOT safe
+      throw new AppError('Order cannot be cancelled', 400);
+    }
 
     await query(`UPDATE orders SET status = 'CANCELLED', updated_at = NOW() WHERE order_id = $1`, [orderId]);
     // Use UPDATE + status='released' (not DELETE) so the DB trigger release_inventory() fires correctly

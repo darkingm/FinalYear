@@ -139,15 +139,16 @@ export async function getSellerOverview(req: AuthRequest, res: Response, next: N
       // Review stats
       query(
         `SELECT
-           COALESCE(ROUND(AVG(rating)::numeric, 2), 0) AS avg_rating,
+           COALESCE(ROUND(AVG(r.rating)::numeric, 2), 0) AS avg_rating,
            COUNT(*) AS total_reviews,
-           COUNT(*) FILTER (WHERE rating = 5) AS star5,
-           COUNT(*) FILTER (WHERE rating = 4) AS star4,
-           COUNT(*) FILTER (WHERE rating = 3) AS star3,
-           COUNT(*) FILTER (WHERE rating = 2) AS star2,
-           COUNT(*) FILTER (WHERE rating = 1) AS star1
-         FROM reviews
-         WHERE seller_id = $1 AND status = 'published'`,
+           COUNT(*) FILTER (WHERE r.rating = 5) AS star5,
+           COUNT(*) FILTER (WHERE r.rating = 4) AS star4,
+           COUNT(*) FILTER (WHERE r.rating = 3) AS star3,
+           COUNT(*) FILTER (WHERE r.rating = 2) AS star2,
+           COUNT(*) FILTER (WHERE r.rating = 1) AS star1
+         FROM reviews r
+         JOIN products p ON r.product_id = p.product_id
+         WHERE p.seller_id = $1 AND r.status = 'published'`,
         [sellerId]
       ),
       // Conversion stats

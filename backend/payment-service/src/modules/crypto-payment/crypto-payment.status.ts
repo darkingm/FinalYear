@@ -85,7 +85,7 @@ export function buildPaymentVerificationMeta(input: PaymentVerificationMetaInput
 
   return {
     verification_state: 'pending',
-    verification_message: 'Giao dịch đã gửi lên blockchain và đang chờ block đầu tiên được xác nhận.',
+    verification_message: 'Giao dịch đang chờ xác nhận trên blockchain.',
     confirmations,
     required_confirmations: requiredConfirmations,
   };

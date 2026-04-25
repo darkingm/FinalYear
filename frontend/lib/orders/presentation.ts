@@ -72,6 +72,14 @@ const ORDER_STATUS_META: Record<string, OrderStatusMeta> = {
     nextStep: 'Chờ blockchain xác nhận để tiền được khóa trong escrow.',
     escrowCopy: 'Giao dịch đã gửi lên blockchain. Hệ thống đang chờ xác nhận on-chain.',
   },
+  // Virtual key — used by getOrderStatusMeta when payment_method=paypal + TX_SUBMITTED
+  TX_SUBMITTED_PAYPAL: {
+    label: 'Chờ thanh toán PayPal',
+    summary: 'Phiên PayPal đã được tạo nhưng chưa hoàn tất thanh toán.',
+    waitingOn: 'Người mua',
+    nextStep: 'Hoàn tất thanh toán trên PayPal hoặc hủy đơn hàng.',
+    escrowCopy: 'Tiền chưa được thu. Hoàn tất thanh toán trên PayPal hoặc hủy đơn.',
+  },
   ONCHAIN_PENDING: {
     label: 'Đang xác nhận on-chain',
     summary: 'Hệ thống đang chờ blockchain hoàn tất xác nhận.',
@@ -181,8 +189,14 @@ function normalizeSymbol(symbol: string | null | undefined): string | null {
 export function getOrderStatusMeta(
   status: string | null | undefined,
   verification?: OrderVerificationContext | null,
+  paymentMethod?: string | null,
 ): OrderStatusMeta {
-  const base = ORDER_STATUS_META[String(status ?? '').trim().toUpperCase()] ?? DEFAULT_STATUS_META;
+  const key = String(status ?? '').trim().toUpperCase();
+  // PayPal TX_SUBMITTED → use PayPal-specific copy instead of blockchain language
+  const effectiveKey = (key === 'TX_SUBMITTED' && paymentMethod === 'paypal')
+    ? 'TX_SUBMITTED_PAYPAL'
+    : key;
+  const base = ORDER_STATUS_META[effectiveKey] ?? DEFAULT_STATUS_META;
 
   if (!verification) {
     return base;

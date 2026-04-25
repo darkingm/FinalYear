@@ -26,33 +26,36 @@ interface OrderStepperProps {
     className?: string;
 }
 
-// Steps chung cho mọi đơn hàng
-const orderSteps = [
-    {
-        statuses: ['UNPAID'],
-        label: 'Đặt hàng',
-        description: 'Đang chờ thanh toán',
-        icon: '🛒',
-    },
-    {
-        statuses: ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PAID_PAYPAL', 'PROCESSING'],
-        label: 'Đã thanh toán',
-        description: 'Tiền đang trong Escrow',
-        icon: '💳',
-    },
-    {
-        statuses: ['SHIPPED'],
-        label: 'Đang giao hàng',
-        description: 'Người bán đã gửi hàng',
-        icon: '🚚',
-    },
-    {
-        statuses: ['DELIVERED', 'COMPLETED'],
-        label: 'Hoàn thành',
-        description: 'Giao hàng thành công',
-        icon: '✅',
-    },
-];
+// Steps chung cho mọi đơn hàng — step 2 adapts to payment method
+function getOrderSteps(paymentMethod?: string | null) {
+    const isPayPal = paymentMethod === 'paypal';
+    return [
+        {
+            statuses: ['UNPAID'],
+            label: 'Đặt hàng',
+            description: 'Đang chờ thanh toán',
+            icon: '🛒',
+        },
+        {
+            statuses: ['TX_SUBMITTED', 'ONCHAIN_PENDING', 'ONCHAIN_CONFIRMED', 'PAYMENT_VALIDATED', 'PAID', 'PAID_PAYPAL', 'PROCESSING'],
+            label: isPayPal ? 'Thanh toán' : 'Đã thanh toán',
+            description: isPayPal ? 'Chờ PayPal xác nhận' : 'Tiền đang trong Escrow',
+            icon: '💳',
+        },
+        {
+            statuses: ['SHIPPED'],
+            label: 'Đang giao hàng',
+            description: 'Người bán đã gửi hàng',
+            icon: '🚚',
+        },
+        {
+            statuses: ['DELIVERED', 'COMPLETED'],
+            label: 'Hoàn thành',
+            description: 'Giao hàng thành công',
+            icon: '✅',
+        },
+    ];
+}
 
 const cancelledStatuses = ['CANCELLED', 'REFUNDED', 'DISPUTED', 'TX_FAILED'];
 
@@ -65,6 +68,7 @@ const cancelledMessages: Record<string, { title: string; desc: string; emoji: st
 
 export function OrderStepper({ currentStatus, paymentMethod, className }: OrderStepperProps) {
     const isCancelled = cancelledStatuses.includes(currentStatus);
+    const orderSteps = getOrderSteps(paymentMethod);
 
     const getCurrentStepIndex = () => {
         for (let i = 0; i < orderSteps.length; i++) {
@@ -231,13 +235,14 @@ export function OrderStepper({ currentStatus, paymentMethod, className }: OrderS
 // ── Compact badge for order list ─────────────────────────────────────────────
 interface OrderStatusIndicatorProps {
     status: OrderStatus;
+    paymentMethod?: string | null;
     showLabel?: boolean;
 }
 
-export function OrderStatusIndicator({ status, showLabel = true }: OrderStatusIndicatorProps) {
+export function OrderStatusIndicator({ status, paymentMethod, showLabel = true }: OrderStatusIndicatorProps) {
     const statusConfig: Record<OrderStatus, { color: string; bgColor: string; label: string; pulse?: boolean }> = {
         UNPAID: { color: 'text-amber-400', bgColor: 'bg-amber-400/10 border border-amber-400/20', label: 'Chờ thanh toán', pulse: true },
-        TX_SUBMITTED: { color: 'text-blue-400', bgColor: 'bg-blue-400/10 border border-blue-400/20', label: 'Đang gửi TX', pulse: true },
+        TX_SUBMITTED: { color: 'text-blue-400', bgColor: 'bg-blue-400/10 border border-blue-400/20', label: paymentMethod === 'paypal' ? 'Chờ PayPal' : 'Đang gửi TX', pulse: true },
         TX_FAILED: { color: 'text-red-400', bgColor: 'bg-red-400/10 border border-red-400/20', label: 'TX Thất bại' },
         ONCHAIN_PENDING: { color: 'text-blue-400', bgColor: 'bg-blue-400/10 border border-blue-400/20', label: 'Chờ blockchain', pulse: true },
         ONCHAIN_CONFIRMED: { color: 'text-emerald-400', bgColor: 'bg-emerald-400/10 border border-emerald-400/20', label: 'On-chain ✓', pulse: true },

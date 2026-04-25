@@ -274,6 +274,8 @@ export default function OrderDetailPage() {
 
     if (!order?.status || terminalStatuses.includes(order.status)) return;
     if (!pollingStatuses.includes(order.status)) return;
+    // Skip blockchain polling for non-crypto orders (e.g. PayPal pending)
+    if (order.payment_method !== 'crypto') return;
 
     refreshBlockchainStatus().catch(() => null);
     const interval = setInterval(() => {
@@ -424,7 +426,7 @@ export default function OrderDetailPage() {
 
   const isBuyer = session?.user?.id === String(order?.buyer_id);
   const isSeller = session?.user?.id === String(order?.seller_id);
-  const statusMeta = order ? getOrderStatusMeta(order.status, paymentSnapshot) : null;
+  const statusMeta = order ? getOrderStatusMeta(order.status, paymentSnapshot, order.payment_method) : null;
   const pricingDisplay = order ? getOrderPricingDisplay(order) : null;
   const orderImage = order ? resolveOrderProductImage(order) : null;
   const orderTokenSymbol = order?.token_symbol ?? (order?.chain_id ? CHAIN_TOKENS[order.chain_id]?.[0] : null) ?? null;
@@ -433,9 +435,11 @@ export default function OrderDetailPage() {
   const showPaymentCta = Boolean(order && isBuyer && ['UNPAID', 'TX_FAILED', 'TX_SUBMITTED'].includes(order.status));
   const paymentCtaLabel = order?.status === 'TX_FAILED'
     ? 'Thử thanh toán lại'
-    : order?.status === 'TX_SUBMITTED'
-      ? 'Mở lại trang thanh toán'
-      : 'Tiếp tục thanh toán an toàn';
+    : order?.status === 'TX_SUBMITTED' && order?.payment_method === 'paypal'
+      ? 'Tiếp tục PayPal'
+      : order?.status === 'TX_SUBMITTED'
+        ? 'Mở lại trang thanh toán'
+        : 'Tiếp tục thanh toán an toàn';
   const trackingTitle = order?.status === 'COMPLETED'
     ? 'Đơn hàng đã hoàn tất'
     : order?.status === 'DELIVERED'
@@ -538,7 +542,7 @@ export default function OrderDetailPage() {
           <div className={`${paymentPageTheme.primarySurface} p-6 mb-6`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-white/5 pb-6">
               <div className="space-y-3">
-                <OrderStatusIndicator status={order.status} />
+                <OrderStatusIndicator status={order.status} paymentMethod={order.payment_method} />
                 <div>
                   <p className="text-sm font-semibold text-foreground">{statusMeta?.summary}</p>
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
@@ -605,7 +609,7 @@ export default function OrderDetailPage() {
             </div>
 
             <div className={`${paymentPageTheme.mutedSurface} p-5 mb-8`}>
-              <OrderStepper currentStatus={order.status} className="py-2" />
+              <OrderStepper currentStatus={order.status} paymentMethod={order.payment_method} className="py-2" />
             </div>
 
             <OrderTrackingSnapshot status={order.status} verification={paymentSnapshot} className="mb-8" />

@@ -139,11 +139,17 @@ export async function getSellerReviews(req: AuthRequest, res: Response, next: Ne
          FROM reviews r
          JOIN products p ON r.product_id = p.product_id
          JOIN users u ON r.buyer_id = u.user_id
-         WHERE r.seller_id = $1 AND r.status = 'published'
+         WHERE p.seller_id = $1 AND r.status = 'published'
          ORDER BY r.created_at DESC LIMIT $2 OFFSET $3`,
         [sellerId, limit, offset]
       ),
-      query('SELECT COUNT(*) AS total FROM reviews WHERE seller_id = $1 AND status = \'published\'', [sellerId]),
+      query(
+        `SELECT COUNT(*) AS total
+         FROM reviews r
+         JOIN products p ON r.product_id = p.product_id
+         WHERE p.seller_id = $1 AND r.status = 'published'`,
+        [sellerId]
+      ),
     ]);
 
     const total = parseInt(countResult.rows[0].total);
@@ -166,7 +172,8 @@ export async function getOrderReview(req: AuthRequest, res: Response, next: Next
     const result = await query(
       `SELECT r.* FROM reviews r
        JOIN orders o ON r.order_id = o.order_id
-       WHERE r.order_id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)`,
+       LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
+       WHERE r.order_id = $1 AND (o.buyer_id = $2 OR sp.user_id = $2)`,
       [orderId, userId]
     );
 

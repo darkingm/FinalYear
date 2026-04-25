@@ -6,13 +6,16 @@ import { publishEvent } from '../config/rabbitmq';
 export function initCronJobs() {
     logger.info('Initializing cron jobs...');
 
-    // Run every minute — cancel UNPAID orders older than 10 minutes and restore inventory
+    // Run every minute — cancel UNPAID orders (+ PayPal TX_SUBMITTED with no money captured) older than 10 minutes
     cron.schedule('* * * * *', async () => {
         try {
             const expiredOrdersResult = await query(`
                 SELECT order_id, product_id, quantity
                 FROM orders
-                WHERE status = 'UNPAID'
+                WHERE (
+                    status = 'UNPAID'
+                    OR (status = 'TX_SUBMITTED' AND payment_method = 'paypal')
+                )
                 AND created_at < NOW() - INTERVAL '10 minutes'
             `);
 

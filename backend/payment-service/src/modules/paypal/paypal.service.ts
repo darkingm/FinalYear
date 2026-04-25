@@ -251,7 +251,7 @@ export class PayPalService {
     const captureId = resource.id;
     
     // Find order by capture ID
-    const orderResult = await query(
+    const orderResult = await mainQuery(
       'SELECT * FROM orders WHERE paypal_capture_id = $1',
       [captureId]
     );
@@ -259,8 +259,8 @@ export class PayPalService {
     if (orderResult.rows.length > 0) {
       const order = orderResult.rows[0];
       
-      await query(
-        `UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE order_id = $1`,
+      await mainQuery(
+        `UPDATE orders SET status = 'PAID_PAYPAL', updated_at = NOW() WHERE order_id = $1`,
         [order.order_id]
       );
 
