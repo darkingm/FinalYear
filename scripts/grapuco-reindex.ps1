@@ -9,6 +9,10 @@ New-Item -ItemType Directory -Force -Path $statusDir | Out-Null
 $startedAt = (Get-Date).ToUniversalTime().ToString('o')
 $commit = (& git -C $repoRoot rev-parse --short HEAD 2>$null)
 if (-not $commit) { $commit = 'unknown' }
+$grapucoCommand = 'grapuco ingest'
+if (-not (Get-Command grapuco -ErrorAction SilentlyContinue)) {
+    $grapucoCommand = 'npx -y @bitsness/grapuco-cli ingest'
+}
 
 function Write-Status {
     param(
@@ -24,7 +28,7 @@ function Write-Status {
         finished_at = (Get-Date).ToUniversalTime().ToString('o')
         commit = $commit
         cwd = $repoRoot
-        command = 'npx grapuco ingest'
+        command = $grapucoCommand
         exit_code = $ExitCode
     }
 
@@ -35,7 +39,12 @@ Write-Status -State 'running' -Message 'Grapuco reindex started'
 
 try {
     Push-Location $repoRoot
-    & npx grapuco ingest
+    if (Get-Command grapuco -ErrorAction SilentlyContinue) {
+        & grapuco ingest
+    }
+    else {
+        & npx -y @bitsness/grapuco-cli ingest
+    }
     $exitCode = $LASTEXITCODE
     Pop-Location
 

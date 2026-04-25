@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web3Market Deploy"
+  short_description: "VPS deploy, Docker, and migration flow"
+  brand_color: "#2563EB"
+  default_prompt: "Use $web3market-deploy-pipeline to debug or plan a Web3Market deployment safely."
+policy:
+  allow_implicit_invocation: true

@@ -7,7 +7,8 @@ description: Use when building or editing frontend components, pages, or UI in t
 
 ## Tech Stack
 
-- **Framework:** Next.js 14, App Router (NOT Pages Router)
+- **Framework:** Next.js 16, App Router (NOT Pages Router)
+- **React:** React 19
 - **Language:** TypeScript strict
 - **Styling:** Tailwind CSS + CSS variables (dark mode default)
 - **Web3:** wagmi v2 + viem + RainbowKit
@@ -26,7 +27,9 @@ apiClient.get('/api/orders')
 apiClient.post('/api/orders/:id/status', { status: 'COMPLETED' })
 
 // payment-service (port 3002)
-paymentClient.post('/api/payments/crypto/quote', { ... })
+paymentClient.post('/api/payments/crypto/session', { ... })
+paymentClient.post('/api/payments/crypto/session/:sessionId/quote', { ... })
+paymentClient.post('/api/payments/crypto/session/:sessionId/submit', { ... })
 paymentClient.get('/api/payments/crypto/status/:orderId')
 ```
 
@@ -55,6 +58,13 @@ import { keccak256, toBytes } from 'viem';   // ← CORRECT encoding
 const orderId32 = keccak256(toBytes(order.internal_order_id));
 // NOT: keccak256(stringToHex(...)) — different encoding, causes contract failures
 ```
+
+## Hardhat Checkout UI
+
+- Chain `31337` is the demo Hardhat chain.
+- Browser/MetaMask RPC should use `https://kienai.id.vn/rpc/hardhat` in production.
+- Local development can set `NEXT_PUBLIC_HARDHAT_RPC_URL=http://127.0.0.1:8545` in `frontend/.env.local`.
+- Checkout CTA should say `Tạo hóa đơn trên Hardhat`; avoid showing `VPS` on the primary purchase button.
 
 ## Icon Rules
 

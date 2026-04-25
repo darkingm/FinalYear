@@ -89,3 +89,21 @@ description: Use when debugging any bug or unexpected behavior in Web3Market —
 - **Symptom**: TypeScript compilation errors in `tokenization-service`
 - **Fix**: Check for missing type imports, ensure `tsconfig.json` includes all source files
 - **Date found**: 2026-03-20
+
+### 14. Checkout invoice creation hits rate limit during demo
+- **Symptom**: Checkout shows `Too many requests for this action, please try again later` after buying several test products.
+- **Root cause**: `strictLimiter` was applied to the whole `/api/payments/crypto` router, so polling/status/quote/submit requests shared the same quota as invoice creation.
+- **Fix**: Remove router-level `strictLimiter`; apply `invoiceLimiter` to `/session`, `/session-batch`, and legacy `/quote`; apply `statusLimiter` to status reads; keep `strictLimiter` on verify/release/refund/admin/sensitive write routes. Default invoice limit is `10` per 5 minutes via `PAYMENT_INVOICE_RATE_LIMIT_MAX`.
+- **Date found**: 2026-04-25
+
+### 15. Seller cannot see or update their own orders
+- **Symptom**: Seller dashboard/order detail misses orders or seller cannot mark `SHIPPED`/`DELIVERED`.
+- **Root cause**: `orders.seller_id` stores `seller_profiles.seller_id`, but some order queries compared it directly to authenticated `users.user_id`.
+- **Fix**: Join `seller_profiles sp ON o.seller_id = sp.seller_id` and compare `sp.user_id` to the authenticated user. Only compare `o.seller_id` after resolving the user's seller profile id.
+- **Date found**: 2026-04-25
+
+### 16. Buyer confirm delivery must not double-release escrow
+- **Symptom**: Risk of backend trying to release an order after the buyer already released funds on-chain.
+- **Root cause**: There are two valid release paths: frontend `buyerConfirmDelivery(orderId32)` and backend/admin `releasePayment(orderId32)`. Triggering both causes an invalid status/revert.
+- **Fix**: When frontend sends `completion_source:'buyer_onchain'` with `release_tx_hash`, main-service should store the hash and set `COMPLETED`; do not call payment-service `/release`.
+- **Date found**: 2026-04-25

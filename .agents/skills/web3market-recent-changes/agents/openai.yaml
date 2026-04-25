@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web3Market Changes"
+  short_description: "Recent changes to avoid regressions"
+  brand_color: "#A855F7"
+  default_prompt: "Use $web3market-recent-changes to check recent Web3Market edits before starting new work."
+policy:
+  allow_implicit_invocation: true

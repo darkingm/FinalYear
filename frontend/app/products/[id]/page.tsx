@@ -379,9 +379,18 @@ export default function ProductDetailPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="cursor-pointer text-lg font-bold text-foreground transition-colors hover:text-primary">
-                      {product.seller_name}
-                    </p>
+                    {product.seller_slug ? (
+                      <Link
+                        href={`/seller/${product.seller_slug}`}
+                        className="block text-lg font-bold text-foreground transition-colors hover:text-primary"
+                      >
+                        {product.seller_name}
+                      </Link>
+                    ) : (
+                      <p className="text-lg font-bold text-foreground">
+                        {product.seller_name}
+                      </p>
+                    )}
                     {product.seller_username && (
                       <p className="mb-1 text-sm text-muted-foreground">@{product.seller_username}</p>
                     )}

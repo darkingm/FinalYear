@@ -7,6 +7,11 @@ STATUS_DIR="$REPO_ROOT/.grapuco"
 STATUS_FILE="$STATUS_DIR/status.json"
 STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || printf "unknown")
+if command -v grapuco >/dev/null 2>&1; then
+  GRAPUCO_COMMAND="grapuco ingest"
+else
+  GRAPUCO_COMMAND="npx -y @bitsness/grapuco-cli ingest"
+fi
 
 mkdir -p "$STATUS_DIR"
 
@@ -22,7 +27,7 @@ write_status() {
   "finished_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "commit": "$COMMIT",
   "cwd": "$REPO_ROOT",
-  "command": "npx grapuco ingest",
+  "command": "$GRAPUCO_COMMAND",
   "exit_code": $EXIT_CODE
 }
 EOF
@@ -30,7 +35,13 @@ EOF
 
 write_status "running" "Grapuco reindex started" 0
 
-if (cd "$REPO_ROOT" && npx grapuco ingest); then
+if [ "$GRAPUCO_COMMAND" = "grapuco ingest" ]; then
+  GRAPUCO_RUN='grapuco ingest'
+else
+  GRAPUCO_RUN='npx -y @bitsness/grapuco-cli ingest'
+fi
+
+if (cd "$REPO_ROOT" && sh -c "$GRAPUCO_RUN"); then
   write_status "success" "Grapuco reindex completed" 0
 else
   write_status "failed" "Grapuco reindex failed" 1

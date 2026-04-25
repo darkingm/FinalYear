@@ -1,5 +1,7 @@
 import rateLimit from 'express-rate-limit';
 
+const invoiceLimitMax = Number.parseInt(process.env.PAYMENT_INVOICE_RATE_LIMIT_MAX || '10', 10);
+
 // General API rate limiting
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -21,6 +23,19 @@ export const strictLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many requests for this action, please try again later',
+  },
+});
+
+// Demo-friendly limiter for creating checkout invoices.
+// Keep this separate from status polling so read-only polling cannot consume invoice quota.
+export const invoiceLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: Number.isFinite(invoiceLimitMax) && invoiceLimitMax > 0 ? invoiceLimitMax : 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many invoice requests, please try again later',
   },
 });
 

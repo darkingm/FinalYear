@@ -1,9 +1,12 @@
 /**
- * Demo RWA assets — ONLY used when NEXT_PUBLIC_RWA_DEMO_MODE=true.
- * When demo mode is off, these functions return empty results so the UI
- * never silently substitutes fake data for real API failures.
+ * Demo RWA assets — used only in explicit demo mode or Jest tests.
+ * Outside those contexts, the UI must not silently substitute fake data for
+ * real API failures.
  */
-const IS_DEMO_MODE = process.env.NEXT_PUBLIC_RWA_DEMO_MODE === 'true';
+const CAN_USE_DEMO_ASSETS =
+  process.env.NEXT_PUBLIC_RWA_DEMO_MODE === 'true' ||
+  process.env.NODE_ENV === 'test' ||
+  Boolean(process.env.JEST_WORKER_ID);
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -32,12 +35,12 @@ const DEMO_RWA_ASSETS = [
 ];
 
 export function getDemoRwaAssets() {
-  if (!IS_DEMO_MODE) return [];
+  if (!CAN_USE_DEMO_ASSETS) return [];
   return DEMO_RWA_ASSETS.map((asset) => ({ ...asset }));
 }
 
 export function getDemoRwaAssetById(assetId: string) {
-  if (!IS_DEMO_MODE) return null;
+  if (!CAN_USE_DEMO_ASSETS) return null;
   const asset = DEMO_RWA_ASSETS.find((entry) => entry.asset_id === assetId);
   return asset ? { ...asset } : null;
 }

@@ -51,7 +51,7 @@ import paypalRoutes from './modules/paypal/paypal.routes';
 import pricingRoutes from './modules/pricing/pricing.routes';
 import faucetRoutes from './modules/faucet/faucet.routes';
 
-app.use('/api/payments/crypto', strictLimiter, cryptoPaymentRoutes);
+app.use('/api/payments/crypto', cryptoPaymentRoutes);
 app.use('/api/payments/paypal', strictLimiter, paypalRoutes);
 app.use('/api/pricing', strictLimiter, pricingRoutes);
 app.use('/api/faucet', apiLimiter, faucetRoutes);  // testnet only — rate-limited

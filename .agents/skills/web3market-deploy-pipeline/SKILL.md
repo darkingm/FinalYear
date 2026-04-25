@@ -139,6 +139,9 @@ NEXTAUTH_SECRET=...
 PAYPAL_CLIENT_ID=...
 PAYPAL_SECRET=...
 ESCROW_CONTRACT_LOCALHOST=0x5FbDB2315678afecb367f032d93F642f64180aa3
+LOCALHOST_RPC_URL=http://hardhat-node:8545
+NEXT_PUBLIC_HARDHAT_RPC_URL=https://kienai.id.vn/rpc/hardhat
+PAYMENT_INVOICE_RATE_LIMIT_MAX=10
 ```
 
 ## Nginx Config (System Nginx — NOT in Docker)
@@ -157,9 +160,10 @@ Full routing table:
 | `/api/auth/*` | frontend (NextAuth) | 3000 |
 | `/api/payments/*` | payment-api | 3002 |
 | `/payment/*` | payment-api (legacy) | 3002 |
+| `/rpc/hardhat` | hardhat-node | 8545 |
 | `/api/*` | main-api | 3001 |
 | `/*` | frontend (Next.js) | 3000 |
-| `:8545` (direct) | hardhat-node | 8545 |
+| `:8545` (direct, if exposed) | hardhat-node | 8545 |
 
 **Health endpoints** (NOT `/api/health`):
 - main-api: `curl http://127.0.0.1:3001/health`

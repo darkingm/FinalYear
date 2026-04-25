@@ -4,8 +4,8 @@ A production-grade hybrid e-commerce marketplace supporting both Web3 cryptocurr
 
 ## 🏗️ Architecture
 
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, TailwindCSS, Framer Motion
-- **Backend**: Node.js + Express.js (2 microservices: Main + Payment Service)
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, TailwindCSS, Framer Motion
+- **Backend**: Node.js 22 + Express.js (2 microservices: Main + Payment Service)
 - **Database**: PostgreSQL
 - **Message Queue**: RabbitMQ (event-driven architecture)
 - **Caching**: Redis
@@ -49,7 +49,7 @@ A production-grade hybrid e-commerce marketplace supporting both Web3 cryptocurr
 
 ```
 fyp-ecommerce/
-├── frontend/              # Next.js 14 application
+├── frontend/              # Next.js 16 application
 ├── backend/
 │   ├── main-service/      # Core marketplace API
 │   └── payment-service/   # Payment processing
@@ -62,7 +62,7 @@ fyp-ecommerce/
 
 ### Prerequisites
 
-1. **Node.js 18+**: Download from [nodejs.org](https://nodejs.org/)
+1. **Node.js 22+**: Download from [nodejs.org](https://nodejs.org/)
 2. **Docker Desktop**: Download from [docker.com](https://www.docker.com/products/docker-desktop)
 3. **PostgreSQL**: Included in Docker Compose
 4. **MetaMask**: Browser extension from [metamask.io](https://metamask.io/)
@@ -197,7 +197,7 @@ npm run reindex
 ```
 
 What it does:
-- runs `npx grapuco ingest` from the repo root
+- runs `grapuco ingest` from the repo root, falling back to `npx -y @bitsness/grapuco-cli ingest` when the CLI is not installed globally
 - writes the latest run result to `.grapuco/status.json`
 - records the commit SHA that was indexed
 

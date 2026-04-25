@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web3Market Backend"
+  short_description: "Backend API and service conventions"
+  brand_color: "#14B8A6"
+  default_prompt: "Use $web3market-backend-patterns to implement or review a backend API change safely."
+policy:
+  allow_implicit_invocation: true

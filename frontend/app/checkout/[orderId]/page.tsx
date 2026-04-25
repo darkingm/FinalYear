@@ -71,7 +71,7 @@ interface Order {
   order_id: number; internal_order_id: string; product_id: number;
   product_name: string; quantity: number; price_usd: number;
   total_amount?: number | string; status: string; payment_method: string | null;
-  buyer_name: string; seller_name: string;
+  buyer_name: string; seller_name: string; seller_slug?: string | null;
   primary_image?: string | null;
   token_symbol?: string | null;
   amount_token?: number | string | null;
@@ -250,6 +250,7 @@ export default function CheckoutPage() {
   const acceptPayPal = order?.product_metadata?.accepted_tokens?.fiat?.includes('paypal') ?? true;
   const coinPrice = useCoinPrice(selectedToken);
   const currentNet = CHAIN_META[selectedNet] || PAYMENT_NETWORKS[0];
+  const checkoutNetworkName = currentNet.name.replace(/\s+VPS\b/i, '');
   const quoteNet = quote ? CHAIN_META[quote.chain_id] : null;
   const isWrongChain = !!quote && !!chainId && chainId !== quote.chain_id;
   const isNative = !quote?.token_address || quote.token_address === '0x0000000000000000000000000000000000000000'
@@ -760,7 +761,20 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-sm truncate">{order.product_name}</h3>
-                  <p className="text-xs text-muted-foreground">Người bán: {order.seller_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Người bán:{' '}
+                    {order.seller_slug ? (
+                      <Link
+                        href={`/seller/${order.seller_slug}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="font-semibold hover:text-[#f0b90b] hover:underline"
+                      >
+                        {order.seller_name}
+                      </Link>
+                    ) : (
+                      order.seller_name
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">Số lượng: {order.quantity}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -984,7 +998,7 @@ export default function CheckoutPage() {
                   >
                     {quoteLoading
                       ? <><Loader2 className="w-5 h-5 animate-spin" />Đang tạo hóa đơn...</>
-                      : <><Shield className="w-5 h-5" />Tạo hóa đơn trên {currentNet.name}</>}
+                      : <><Shield className="w-5 h-5" />Tạo hóa đơn trên {checkoutNetworkName}</>}
                   </button>
 
                   {quoteError && (
@@ -1402,7 +1416,13 @@ export default function CheckoutPage() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                       <div className="absolute bottom-3 left-3 right-3">
                         <p className="font-bold text-white text-xs leading-tight line-clamp-2">{order.product_name}</p>
-                        <p className="text-[10px] text-white/70 mt-0.5">{order.seller_name}</p>
+                        {order.seller_slug ? (
+                          <Link href={`/seller/${order.seller_slug}`} className="mt-0.5 block text-[10px] text-white/70 hover:text-white hover:underline">
+                            {order.seller_name}
+                          </Link>
+                        ) : (
+                          <p className="text-[10px] text-white/70 mt-0.5">{order.seller_name}</p>
+                        )}
                       </div>
                     </>
                   ) : (

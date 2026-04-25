@@ -52,23 +52,23 @@ if (!allowed) throw new AppError('Cannot transition from X to Y', 400);
 ## Auth Middleware
 
 ```typescript
-import { authenticate } from '../../../middleware/auth';
-import { requireRole } from '../../../middleware/roles'; // optional
+import { authenticate } from '../../middleware/auth.middleware';
+import { authorize } from '../../middleware/auth.middleware'; // optional role check
 
 // Protect route:
 router.get('/protected', authenticate, controller);
 
 // Role-based:
-router.post('/admin', authenticate, requireRole('admin'), controller);
+router.post('/admin', authenticate, authorize('admin'), controller);
 
 // Internal service key OR user JWT:
 const authenticateOrInternalKey = (req, res, next) => {
   const internalKey = req.headers['x-internal-service-key'];
-  if (internalKey && internalKey === process.env.INTERNAL_SERVICE_KEY) {
-    req.user = { id: 0, role: 'system' };
+  const expectedKey = process.env.INTERNAL_SERVICE_KEY;
+  if (internalKey && expectedKey && internalKey === expectedKey) {
     return next();
   }
-  return authenticate(req, res, next);
+  return authenticate(req, res, () => authorize('admin')(req, res, next));
 };
 ```
 
@@ -115,9 +115,9 @@ Always use `INTERNAL_SERVICE_KEY`, never forward user tokens:
 ```typescript
 import axios from 'axios';
 
-const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || 'http://localhost:5001';
+const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || 'http://payment-api:3002';
 
-await axios.post(`${paymentApiUrl}/api/crypto-payment/release`, 
+await axios.post(`${paymentApiUrl}/api/payments/crypto/release`,
   { order_id: orderId },
   {
     headers: { 'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY },
@@ -135,8 +135,13 @@ await axios.post(`${paymentApiUrl}/api/crypto-payment/release`,
 // Always validate transition before updating
 const validTransitions: Record<string, string[]> = {
   UNPAID: ['CANCELLED'],
-  PAID: ['SHIPPED', 'DISPUTED'],
+  TX_SUBMITTED: [],
+  TX_FAILED: [],
+  ONCHAIN_CONFIRMED: ['SHIPPED', 'COMPLETED', 'DISPUTED'],
+  PAID: ['SHIPPED', 'COMPLETED', 'DISPUTED'],
+  PAID_PAYPAL: ['SHIPPED', 'COMPLETED', 'DISPUTED'],
   SHIPPED: ['COMPLETED', 'DISPUTED'],
+  DELIVERED: ['COMPLETED', 'DISPUTED'],
   // ...
 };
 
@@ -145,6 +150,20 @@ if (!allowedNext.includes(newStatus)) {
   throw new AppError(`Cannot transition from ${order.status} to ${newStatus}`, 400);
 }
 ```
+
+### Seller permission checks
+`orders.seller_id` stores `seller_profiles.seller_id`. It is not a user id.
+
+```sql
+-- Correct seller order ownership check
+SELECT o.*, sp.user_id AS seller_user_id
+FROM orders o
+LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
+WHERE o.order_id = $1
+  AND (o.buyer_id = $2 OR sp.user_id = $2);
+```
+
+Never write `WHERE o.seller_id = $userId` unless you have already resolved the authenticated user's `seller_id` from `seller_profiles`.
 
 ### ON CONFLICT upsert pattern
 ```typescript
@@ -180,6 +199,20 @@ After successful release, update BOTH fields:
 UPDATE orders SET status = 'COMPLETED', release_tx_hash = $1, updated_at = NOW()
 WHERE order_id = $2
 ```
+
+If buyer confirmation is already done on-chain through `buyerConfirmDelivery(orderId32)`, main-service should only store `release_tx_hash` and update status. Do not call payment-service `/release` again.
+
+## Crypto Payment Route Limiters
+
+Payment-service intentionally applies rate limits per route, not to the entire `/api/payments/crypto` router:
+
+| Route type | Limiter | Purpose |
+|---|---|---|
+| `POST /session`, `/session-batch`, legacy `/quote` | `invoiceLimiter` | Demo-friendly invoice creation, default `10` per 5 minutes via `PAYMENT_INVOICE_RATE_LIMIT_MAX` |
+| `GET /status/:orderId`, `/session/:id/status` | `statusLimiter` | Polling/read-only status checks |
+| quote submit, tx submit, verify, release, refund, admin ops | `strictLimiter` | Sensitive write/action endpoints |
+
+Do not wrap the whole crypto router with `strictLimiter`; polling will consume the invoice quota and checkout will show false rate-limit errors.
 
 ## Logger Pattern
 
@@ -229,7 +262,16 @@ await axios.post(url, data, { headers: {...} });
 await axios.post(url, data, { headers: {...}, timeout: 30000 });
 ```
 
-### 5. Query without error handling for optional operations
+### 5. Comparing seller profile id to user id
+```typescript
+// WRONG: orders.seller_id is seller_profiles.seller_id
+where o.seller_id = userId
+
+// Correct: join seller_profiles and compare sp.user_id to the auth user
+where sp.user_id = userId
+```
+
+### 6. Query without error handling for optional operations
 ```typescript
 // ✅ Use .catch() for non-critical operations (dispute creation, logging)
 await query(`INSERT INTO disputes...`).catch(err =>

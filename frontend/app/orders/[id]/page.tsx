@@ -65,6 +65,7 @@ interface Order {
   seller_id: number;
   buyer_name: string;
   seller_name: string;
+  seller_slug?: string | null;
   created_at: string;
   paypal_order_id?: string;
   tx_hash?: string;
@@ -645,7 +646,15 @@ export default function OrderDetailPage() {
                 <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
                   Trợ lý / Bán {isSeller && <span className="text-emerald-400 normal-case font-medium tracking-normal">(Bạn)</span>}
                 </dt>
-                <dd className="font-medium text-sm text-foreground truncate">{order.seller_name}</dd>
+                <dd className="truncate text-sm font-medium text-foreground">
+                  {order.seller_slug ? (
+                    <Link href={`/seller/${order.seller_slug}`} className="transition-colors hover:text-primary hover:underline">
+                      {order.seller_name}
+                    </Link>
+                  ) : (
+                    order.seller_name
+                  )}
+                </dd>
               </div>
               <div className={`${paymentPageTheme.mutedSurface} p-4 rounded-xl`}>
                 <dt className="text-muted-foreground text-[10px] uppercase tracking-widest font-bold mb-1.5">Phương thức</dt>

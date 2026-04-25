@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web3Market Frontend"
+  short_description: "Next.js UI and web3 conventions"
+  brand_color: "#FACC15"
+  default_prompt: "Use $web3market-frontend-conventions to build or review a frontend feature in Web3Market."
+policy:
+  allow_implicit_invocation: true

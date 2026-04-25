@@ -7,6 +7,25 @@ description: Use when starting any new task in Web3Market — check recent chang
 
 > **Agent instruction**: Read this before starting work. Update this file after completing any significant change (new feature, bug fix, deploy, schema change).
 
+## 2026-04-25: Skill Metadata, Grapuco Guardrails, RWA Demo Test Fallback
+- Added `agents/openai.yaml` metadata for Web3Market skills so the UI can display clear skill names, descriptions, and default prompts.
+- Clarified Grapuco usage: use MCP when available, otherwise inspect `.grapuco/status.json` and fall back to local code search instead of blocking.
+- Updated Grapuco reindex wrappers to prefer `grapuco ingest` and fall back to `npx -y @bitsness/grapuco-cli ingest`.
+- Renamed the Hardhat context heading to `Hardhat Demo Node` to avoid leaking infrastructure wording into UI guidance.
+- RWA demo assets are available in Jest tests without enabling production demo mode.
+
+## 2026-04-25: Agent Context Sync With Current Checkout/Seller System
+- Updated Web3Market agent context to match the current Next 16 frontend, session-based crypto checkout, route-level payment rate limiters, Hardhat RPC expectations, seller identity model, and no-double-release escrow rule.
+- **Files**: `.agents/skills/web3market-project-context/SKILL.md`, `.agents/skills/web3market-backend-patterns/SKILL.md`, `.agents/skills/web3market-frontend-conventions/SKILL.md`, `.agents/skills/web3market-known-issues/SKILL.md`, `.agents/skills/web3market-decisions/SKILL.md`
+
+## 2026-04-25: Checkout Demo Rate Limit, Seller Links, Public Seller Holdings
+- Split crypto payment rate limits by route: `invoiceLimiter` for invoice/session creation, `statusLimiter` for polling, `strictLimiter` for sensitive actions.
+- Checkout button now displays `Hardhat` instead of `Hardhat VPS`.
+- Seller names in product cards/details/checkout/order detail link to public seller storefronts.
+- Public seller storefront shows payout wallet holdings for demo verification.
+- Fixed order seller ownership checks by joining `seller_profiles` instead of comparing `orders.seller_id` to `users.user_id`.
+- **Files**: `backend/payment-service/src/middleware/rate-limit.ts`, `backend/payment-service/src/modules/crypto-payment/crypto-payment.routes.ts`, `backend/main-service/src/modules/orders/orders.controller.ts`, `frontend/app/checkout/[orderId]/page.tsx`, `frontend/app/seller/[slug]/page.tsx`, `frontend/components/product/ProductCard.tsx`
+
 ## 2026-03-24: Whale Tracker Dashboard Overhaul
 - Redesigned transaction feed for full-width layout
 - Added real-time buy/sell counters per wallet address

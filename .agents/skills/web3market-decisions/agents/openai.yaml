@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web3Market ADRs"
+  short_description: "Architecture decisions and constraints"
+  brand_color: "#0F766E"
+  default_prompt: "Use $web3market-decisions to check existing architecture decisions before changing core infrastructure."
+policy:
+  allow_implicit_invocation: true

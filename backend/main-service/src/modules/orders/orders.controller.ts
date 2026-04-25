@@ -228,13 +228,27 @@ export async function getOrders(req: AuthRequest, res: Response, next: NextFunct
            WHERE product_id = p.product_id
            ORDER BY is_primary DESC, sort_order ASC LIMIT 1
          ) pi ON true
-         WHERE o.buyer_id = $1 OR o.seller_id = $1
+          WHERE o.buyer_id = $1
+             OR EXISTS (
+               SELECT 1
+               FROM seller_profiles sp_owner
+               WHERE sp_owner.seller_id = o.seller_id
+                 AND sp_owner.user_id = $1
+             )
          ORDER BY o.created_at DESC
          LIMIT $2 OFFSET $3`,
         [userId, limit, offset]
       ),
       query(
-        `SELECT COUNT(*) AS total FROM orders WHERE buyer_id = $1 OR seller_id = $1`,
+        `SELECT COUNT(*) AS total
+         FROM orders o
+         WHERE o.buyer_id = $1
+            OR EXISTS (
+              SELECT 1
+              FROM seller_profiles sp_owner
+              WHERE sp_owner.seller_id = o.seller_id
+                AND sp_owner.user_id = $1
+            )`,
         [userId]
       ),
     ]);
@@ -266,19 +280,21 @@ export async function getOrder(req: AuthRequest, res: Response, next: NextFuncti
          p.price_in_token,
          tw.symbol        AS token_symbol,
          buyer.username   AS buyer_name,
-         seller_u.username AS seller_name,
+         COALESCE(sp.display_name, seller_u.username) AS seller_name,
+         sp.slug AS seller_slug,
          COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
        LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
-       LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
-       LEFT JOIN users seller_u ON o.seller_id = seller_u.user_id
+        LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
+        LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
+        LEFT JOIN users seller_u ON sp.user_id = seller_u.user_id
        LEFT JOIN LATERAL (
          SELECT image_url FROM product_images
          WHERE product_id = p.product_id
          ORDER BY is_primary DESC, sort_order ASC LIMIT 1
        ) pi ON true
-       WHERE o.order_id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)`,
+       WHERE o.order_id = $1 AND (o.buyer_id = $2 OR sp.user_id = $2)`,
       [orderId, userId]
     );
 
@@ -299,19 +315,22 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
     const result = await query(
       `SELECT o.*, p.name AS product_name, p.metadata AS product_metadata,
               tw.symbol AS token_symbol,
-              buyer.username AS buyer_name, seller_u.username AS seller_name,
+              buyer.username AS buyer_name,
+              COALESCE(sp.display_name, seller_u.username) AS seller_name,
+              sp.slug AS seller_slug,
               COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
        LEFT JOIN token_whitelist tw ON o.token_id = tw.token_id
         LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
-        LEFT JOIN users seller_u ON o.seller_id = seller_u.user_id
+        LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
+        LEFT JOIN users seller_u ON sp.user_id = seller_u.user_id
        LEFT JOIN LATERAL (
          SELECT image_url FROM product_images
          WHERE product_id = p.product_id
          ORDER BY is_primary DESC, sort_order ASC LIMIT 1
        ) pi ON true
-       WHERE o.internal_order_id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)`,
+       WHERE o.internal_order_id = $1 AND (o.buyer_id = $2 OR sp.user_id = $2)`,
       [internalOrderId, userId]
     );
 
@@ -376,7 +395,10 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     if (!allowedStatuses.includes(status)) throw new AppError('Invalid status update', 400);
 
     const orderResult = await query(
-      'SELECT * FROM orders WHERE order_id = $1 AND (buyer_id = $2 OR seller_id = $2)',
+      `SELECT o.*, sp.user_id AS seller_user_id
+       FROM orders o
+       LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
+       WHERE o.order_id = $1 AND (o.buyer_id = $2 OR sp.user_id = $2)`,
       [orderId, userId]
     );
     if (orderResult.rows.length === 0) throw new AppError('Order not found', 404);
@@ -384,10 +406,13 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     const order = orderResult.rows[0];
 
     // Role-based permission check
-    if (order.seller_id === userId && !['SHIPPED', 'DELIVERED'].includes(status)) {
+    const isSeller = Number(order.seller_user_id) === userId;
+    const isBuyer = Number(order.buyer_id) === userId;
+
+    if (isSeller && !['SHIPPED', 'DELIVERED'].includes(status)) {
       throw new AppError('Sellers can only mark SHIPPED or DELIVERED', 403);
     }
-    if (order.buyer_id === userId && !['COMPLETED', 'DISPUTED'].includes(status)) {
+    if (isBuyer && !['COMPLETED', 'DISPUTED'].includes(status)) {
       throw new AppError('Buyers can only mark COMPLETED or DISPUTED', 403);
     }
 
@@ -498,7 +523,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
         await query(`UPDATE orders SET status = $1, updated_at = NOW() WHERE order_id = $2`, [finalStatus, orderId]);
       } else {
         try {
-          const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || process.env.PAYMENT_API_URL || 'http://localhost:5001';
+          const paymentApiUrl = process.env.PAYMENT_SERVICE_URL || process.env.PAYMENT_API_URL || 'http://payment-api:3002';
           await axios.post(`${paymentApiUrl}/api/payments/crypto/release`, {
             order_id: orderId
           }, {

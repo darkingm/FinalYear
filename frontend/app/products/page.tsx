@@ -41,6 +41,7 @@ interface TokenProduct {
     is_primary: boolean;
   }>;
   seller_name: string;
+  seller_slug?: string | null;
   seller_username: string;
   seller_user_avatar: string;
 }
@@ -90,6 +91,7 @@ function NFTProductCard({ product, index }: { product: TokenProduct; index: numb
     category: product.category,
     rating_avg: product.rating_avg,
     seller_name: product.seller_name,
+    seller_slug: product.seller_slug,
     seller_user_avatar: product.seller_user_avatar,
     accepted_tokens: product.accepted_tokens,
   };

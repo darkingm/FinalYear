@@ -28,6 +28,10 @@ import { usePriceStore } from '@/store';
 import { useAccount, useBalance, useReadContract } from 'wagmi';
 import { parseAbi, formatUnits } from 'viem';
 import { USDT_ADDRESSES } from '@/lib/web3/config';
+import { useTokenBalances, useSwapQuote, useSwapExecute } from '@/lib/web3/useSwap';
+import { getSwapTokensForChain, getDexRouter, type SwapToken } from '@/lib/web3/swap';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { Loader2 } from 'lucide-react';
 
 const ERC20_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
@@ -460,64 +464,79 @@ function SpotTradingPanel({ coinName, currentPrice }: { coinName: string; curren
   );
 }
 
-/* ─── Swap Coin Widget ───────────────────────────── */
+/* ─── Swap Coin Widget (Sidebar) — ON-CHAIN ──────── */
 function SwapCoinWidget({ coinName, currentPrice }: { coinName: string; currentPrice: number }) {
-  const [swapFrom, setSwapFrom] = useState('USDT');
-  const [swapTo, setSwapTo] = useState(coinName);
+  const { isConnected, chainId } = useAccount();
+  const { tokens: walletTokens, refetch } = useTokenBalances(chainId);
+  const { executeSwap, executing } = useSwapExecute();
+
+  const [fromIdx, setFromIdx] = useState(0);
+  const [toIdx, setToIdx] = useState(walletTokens.length > 1 ? 1 : 0);
   const [swapAmount, setSwapAmount] = useState('');
-  const [isFlipped, setIsFlipped] = useState(false);
 
-  const estimatedReceive = swapFrom === 'USDT'
-    ? (parseFloat(swapAmount || '0') / currentPrice)
-    : (parseFloat(swapAmount || '0') * currentPrice);
+  const fromToken = walletTokens[fromIdx] || null;
+  const toToken = walletTokens[toIdx] || null;
+  const dexRouter = chainId ? getDexRouter(chainId) : null;
 
-  const handleFlip = () => {
-    setIsFlipped(!isFlipped);
-    setSwapFrom(swapTo);
-    setSwapTo(swapFrom);
-    setSwapAmount('');
+  const { quote, loading: quoteLoading, error: quoteError } = useSwapQuote(
+    chainId, fromToken, toToken, swapAmount, 50,
+  );
+
+  const handleFlip = () => { setFromIdx(toIdx); setToIdx(fromIdx); setSwapAmount(''); };
+
+  const handleSwap = async () => {
+    if (!fromToken || !toToken || !quote || !chainId) return;
+    try {
+      await executeSwap(chainId, fromToken, toToken, quote);
+      toast.success('Swap thành công!');
+      setSwapAmount('');
+      refetch();
+    } catch (err: any) {
+      if (err?.code === 4001) return;
+      toast.error(err?.shortMessage || 'Swap thất bại');
+    }
   };
 
-  const handleSwap = () => {
-    if (!swapAmount || parseFloat(swapAmount) <= 0) return;
-    toast.success(`Đã swap ${swapAmount} ${swapFrom} → ${estimatedReceive.toFixed(6)} ${swapTo}`);
-    setSwapAmount('');
-  };
+  if (!isConnected || !dexRouter || walletTokens.length < 2) {
+    return (
+      <div className="mt-3 pt-3 border-t border-border">
+        <p className="text-[10px] text-muted-foreground text-center">
+          {!isConnected ? 'Kết nối ví để swap' : 'Mạng này chưa hỗ trợ swap'}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 pt-3 border-t border-border">
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
           <RefreshCw className="w-3.5 h-3.5 text-[#f0b90b]" />
-          Swap nhanh
+          Swap on-chain
         </h4>
-        <span className="text-[9px] text-muted-foreground">Rate: 1 {coinName} = ${currentPrice.toLocaleString()}</span>
+        <span className="text-[9px] text-muted-foreground">{dexRouter.name}</span>
       </div>
 
       {/* From */}
       <div className="mb-1">
-        <label className="text-[9px] text-muted-foreground">Từ</label>
+        <div className="flex items-center justify-between">
+          <label className="text-[9px] text-muted-foreground">Từ</label>
+          <span className="text-[9px] text-muted-foreground">{fromToken?.formattedBalance} {fromToken?.symbol}</span>
+        </div>
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-1.5">
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <CoinImage symbol={swapFrom} size={16} />
-            <span className="text-xs font-bold text-foreground">{swapFrom}</span>
-          </div>
-          <input
-            type="number"
-            placeholder="0.00"
-            value={swapAmount}
+          <select value={fromIdx} onChange={e => { setFromIdx(Number(e.target.value)); setSwapAmount(''); }}
+            className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer appearance-none w-16">
+            {walletTokens.map((t, i) => <option key={i} value={i} className="bg-card">{t.symbol}</option>)}
+          </select>
+          <input type="number" placeholder="0.00" value={swapAmount}
             onChange={e => setSwapAmount(e.target.value)}
-            className="flex-1 text-right bg-transparent text-sm font-mono text-foreground placeholder-muted-foreground focus:outline-none"
-          />
+            className="flex-1 text-right bg-transparent text-sm font-mono text-foreground placeholder-muted-foreground focus:outline-none" />
         </div>
       </div>
 
-      {/* Flip button */}
+      {/* Flip */}
       <div className="flex justify-center -my-1.5 relative z-10">
-        <button
-          onClick={handleFlip}
-          className="w-7 h-7 rounded-full bg-[#f0b90b] text-black flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 transition-all"
-        >
+        <button onClick={handleFlip} className="w-7 h-7 rounded-full bg-[#f0b90b] text-black flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 transition-all">
           <ArrowUpDown className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -526,22 +545,27 @@ function SwapCoinWidget({ coinName, currentPrice }: { coinName: string; currentP
       <div className="mb-2">
         <label className="text-[9px] text-muted-foreground">Đến</label>
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-1.5">
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <CoinImage symbol={swapTo} size={16} />
-            <span className="text-xs font-bold text-foreground">{swapTo}</span>
-          </div>
+          <select value={toIdx} onChange={e => setToIdx(Number(e.target.value))}
+            className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer appearance-none w-16">
+            {walletTokens.filter((_, i) => i !== fromIdx).map(t => {
+              const ri = walletTokens.indexOf(t);
+              return <option key={ri} value={ri} className="bg-card">{t.symbol}</option>;
+            })}
+          </select>
           <span className="flex-1 text-right text-sm font-mono text-muted-foreground">
-            ≈ {isNaN(estimatedReceive) ? '0.00' : estimatedReceive.toFixed(6)}
+            {quoteLoading ? '...' : quote ? `≈ ${parseFloat(quote.amountOutFormatted).toFixed(6)}` : '≈ 0'}
           </span>
         </div>
       </div>
 
-      <button
-        onClick={handleSwap}
-        disabled={!swapAmount || parseFloat(swapAmount) <= 0}
-        className="w-full py-2 rounded-lg text-xs font-bold bg-gradient-to-r from-[#f0b90b] to-[#e6a800] text-black shadow-md hover:shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+      {quoteError && <p className="text-[9px] text-amber-400 mb-1">⚠️ {quoteError}</p>}
+
+      <button onClick={handleSwap}
+        disabled={!quote || executing || !swapAmount || parseFloat(swapAmount) <= 0}
+        className="w-full py-2 rounded-lg text-xs font-bold bg-gradient-to-r from-[#f0b90b] to-[#e6a800] text-black shadow-md hover:shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1"
       >
-        Swap {swapFrom} → {swapTo}
+        {executing ? <><Loader2 className="w-3 h-3 animate-spin" />Đang swap...</> :
+          `Swap ${fromToken?.symbol || ''} → ${toToken?.symbol || ''}`}
       </button>
     </div>
   );
@@ -723,137 +747,195 @@ function FullSpotPanel({ coinName, currentPrice }: { coinName: string; currentPr
   );
 }
 
-/* ─── Full Swap Panel (Bottom, Binance Convert style) ─── */
+/* ─── Full Swap Panel (Bottom, Binance Convert style) — ON-CHAIN ─── */
 function FullSwapPanel({ coinName, currentPrice }: { coinName: string; currentPrice: number }) {
-  const SWAP_COINS = ['USDT', 'USDC', 'BTC', 'ETH', 'BNB', 'SOL', 'MATIC', coinName].filter((v, i, a) => a.indexOf(v) === i);
+  const { address, isConnected, chainId } = useAccount();
+  const { tokens: walletTokens, loading: balLoading, refetch: refetchBalances } = useTokenBalances(chainId);
+  const { executeSwap, executing } = useSwapExecute();
 
-  const [fromCoin, setFromCoin] = useState('USDT');
-  const [toCoin, setToCoin] = useState(coinName);
+  const [fromIdx, setFromIdx] = useState(0);
+  const [toIdx, setToIdx] = useState(1);
   const [fromAmount, setFromAmount] = useState('');
-  const [slippage, setSlippage] = useState(0.5);
+  const [slippageBps, setSlippageBps] = useState(50); // 0.5%
 
-  // Simple rate calculation
-  const getRate = (from: string, to: string) => {
-    if (from === 'USDT' && to === coinName) return 1 / currentPrice;
-    if (from === coinName && to === 'USDT') return currentPrice;
-    if (from === 'USDT' && to === 'USDT') return 1;
-    return 1 / currentPrice; // simplified
+  const fromToken = walletTokens[fromIdx] || null;
+  const toToken = walletTokens[toIdx] || null;
+  const dexRouter = chainId ? getDexRouter(chainId) : null;
+
+  const { quote, loading: quoteLoading, error: quoteError } = useSwapQuote(
+    chainId, fromToken, toToken, fromAmount, slippageBps,
+  );
+
+  const handleFlip = () => { setFromIdx(toIdx); setToIdx(fromIdx); setFromAmount(''); };
+
+  const handleSwap = async () => {
+    if (!fromToken || !toToken || !quote || !chainId) return;
+    try {
+      const txHash = await executeSwap(chainId, fromToken, toToken, quote);
+      toast.success(
+        <div>
+          <p className="font-bold">Swap thành công!</p>
+          <p className="text-xs mt-1 font-mono">{txHash.slice(0, 20)}...</p>
+        </div>
+      );
+      setFromAmount('');
+      refetchBalances();
+    } catch (err: any) {
+      if (err?.code === 4001) toast.error('Người dùng từ chối giao dịch');
+      else toast.error(err?.shortMessage || err?.message || 'Swap thất bại');
+    }
   };
 
-  const rate = getRate(fromCoin, toCoin);
-  const toAmount = parseFloat(fromAmount || '0') * rate;
-  const minReceived = toAmount * (1 - slippage / 100);
-
-  const handleFlip = () => {
-    const tmp = fromCoin;
-    setFromCoin(toCoin);
-    setToCoin(tmp);
-    setFromAmount('');
-  };
+  // Fallback: no DEX on this chain
+  if (!dexRouter && isConnected) {
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        <ArrowUpDown className="w-8 h-8 mx-auto mb-3 opacity-30" />
+        <p className="text-sm font-medium">Mạng hiện tại chưa hỗ trợ swap on-chain</p>
+        <p className="text-xs mt-1">Chuyển sang BNB Testnet (97) hoặc Polygon Amoy (80002)</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4">
-      {/* From */}
-      <div className="mb-1">
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-muted-foreground">Từ</label>
-          <span className="text-[10px] text-muted-foreground">Số dư: 1,250.00</span>
+      {/* Connect prompt */}
+      {!isConnected ? (
+        <div className="text-center py-6 space-y-3">
+          <Wallet className="w-8 h-8 mx-auto text-muted-foreground opacity-30" />
+          <p className="text-sm text-muted-foreground">Kết nối ví để swap on-chain</p>
+          <ConnectButton.Custom>
+            {({ openConnectModal }) => (
+              <button onClick={openConnectModal} className="px-4 py-2 bg-[#f0b90b] text-black text-sm font-bold rounded-xl hover:opacity-90">
+                Kết nối MetaMask
+              </button>
+            )}
+          </ConnectButton.Custom>
         </div>
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-xl px-4 py-3">
-          <select
-            value={fromCoin}
-            onChange={e => setFromCoin(e.target.value)}
-            className="bg-transparent text-sm font-bold text-foreground focus:outline-none cursor-pointer appearance-none pr-4"
-            style={{ backgroundImage: 'none' }}
+      ) : (
+        <>
+          {/* From */}
+          <div className="mb-1">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-muted-foreground">Từ</label>
+              <span className="text-[10px] text-muted-foreground">
+                Số dư: {fromToken?.formattedBalance || '0'} {fromToken?.symbol}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 bg-secondary border border-border rounded-xl px-4 py-3">
+              <select
+                value={fromIdx}
+                onChange={e => { setFromIdx(Number(e.target.value)); setFromAmount(''); }}
+                className="bg-transparent text-sm font-bold text-foreground focus:outline-none cursor-pointer appearance-none pr-2"
+              >
+                {walletTokens.map((t, i) => (
+                  <option key={i} value={i} className="bg-card text-foreground">
+                    {t.symbol} ({t.formattedBalance})
+                  </option>
+                ))}
+              </select>
+              <CoinImage symbol={fromToken?.symbol || ''} size={24} />
+              <input
+                type="number" placeholder="0.00" value={fromAmount}
+                onChange={e => setFromAmount(e.target.value)}
+                className="flex-1 text-right bg-transparent text-lg font-mono font-bold text-foreground placeholder-muted-foreground focus:outline-none"
+              />
+            </div>
+            {/* Quick fill */}
+            <div className="flex gap-1 mt-1.5">
+              {[25, 50, 75, 100].map(pct => (
+                <button key={pct} onClick={() => {
+                  if (!fromToken || fromToken.balance <= 0n) return;
+                  const val = (fromToken.balance * BigInt(pct)) / 100n;
+                  setFromAmount(formatUnits(val, fromToken.decimals));
+                }}
+                  className="flex-1 py-1 text-[10px] font-medium rounded bg-secondary text-muted-foreground border border-border hover:text-foreground hover:border-[#f0b90b]/40 transition-all"
+                >{pct}%</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Flip */}
+          <div className="flex justify-center -my-2 relative z-10">
+            <button onClick={handleFlip} className="w-9 h-9 rounded-full bg-[#f0b90b] text-black flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-110 transition-all">
+              <ArrowUpDown className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* To */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-muted-foreground">Đến {quoteLoading ? '(đang tính...)' : '(ước tính)'}</label>
+            </div>
+            <div className="flex items-center gap-2 bg-secondary border border-border rounded-xl px-4 py-3">
+              <select
+                value={toIdx}
+                onChange={e => setToIdx(Number(e.target.value))}
+                className="bg-transparent text-sm font-bold text-foreground focus:outline-none cursor-pointer appearance-none pr-2"
+              >
+                {walletTokens.filter((_, i) => i !== fromIdx).map((t, i) => {
+                  const realIdx = walletTokens.indexOf(t);
+                  return <option key={realIdx} value={realIdx} className="bg-card text-foreground">{t.symbol}</option>;
+                })}
+              </select>
+              <CoinImage symbol={toToken?.symbol || ''} size={24} />
+              <span className="flex-1 text-right text-lg font-mono font-bold text-muted-foreground">
+                {quoteLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> :
+                  quote ? `≈ ${parseFloat(quote.amountOutFormatted).toFixed(6)}` : '≈ 0.00'}
+              </span>
+            </div>
+          </div>
+
+          {/* Quote error */}
+          {quoteError && (
+            <div className="flex gap-2 p-2.5 mb-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-400">
+              <span>⚠️</span><p>{quoteError}</p>
+            </div>
+          )}
+
+          {/* Swap details */}
+          <div className="bg-muted/50 rounded-xl p-3 mb-4 space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">DEX</span>
+              <span className="font-medium text-foreground">{dexRouter?.name || '—'}</span>
+            </div>
+            {quote && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tỷ giá</span>
+                  <span className="font-mono text-foreground">
+                    1 {fromToken?.symbol} = {(parseFloat(quote.amountOutFormatted) / parseFloat(fromAmount || '1')).toFixed(6)} {toToken?.symbol}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Nhận tối thiểu</span>
+                  <span className="font-mono text-foreground">{parseFloat(quote.minimumReceivedFormatted).toFixed(6)} {toToken?.symbol}</span>
+                </div>
+              </>
+            )}
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Slippage</span>
+              <div className="flex gap-1">
+                {[10, 50, 100].map(bps => (
+                  <button key={bps} onClick={() => setSlippageBps(bps)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all ${slippageBps === bps ? 'bg-[#f0b90b]/15 text-[#f0b90b]' : 'bg-secondary text-muted-foreground'}`}
+                  >{bps / 100}%</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            onClick={handleSwap}
+            disabled={!quote || executing || !fromAmount || parseFloat(fromAmount) <= 0}
+            className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#f0b90b] to-[#e6a800] text-black shadow-lg hover:shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {SWAP_COINS.map(c => <option key={c} value={c} className="bg-card text-foreground">{c}</option>)}
-          </select>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <CoinImage symbol={fromCoin} size={24} />
-          </div>
-          <input
-            type="number"
-            placeholder="0.00"
-            value={fromAmount}
-            onChange={e => setFromAmount(e.target.value)}
-            className="flex-1 text-right bg-transparent text-lg font-mono font-bold text-foreground placeholder-muted-foreground focus:outline-none"
-          />
-        </div>
-      </div>
-
-      {/* Flip */}
-      <div className="flex justify-center -my-2 relative z-10">
-        <button
-          onClick={handleFlip}
-          className="w-9 h-9 rounded-full bg-[#f0b90b] text-black flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-110 transition-all"
-        >
-          <ArrowUpDown className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* To */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-muted-foreground">Đến (ước tính)</label>
-        </div>
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-xl px-4 py-3">
-          <select
-            value={toCoin}
-            onChange={e => setToCoin(e.target.value)}
-            className="bg-transparent text-sm font-bold text-foreground focus:outline-none cursor-pointer appearance-none pr-4"
-            style={{ backgroundImage: 'none' }}
-          >
-            {SWAP_COINS.filter(c => c !== fromCoin).map(c => <option key={c} value={c} className="bg-card text-foreground">{c}</option>)}
-          </select>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <CoinImage symbol={toCoin} size={24} />
-          </div>
-          <span className="flex-1 text-right text-lg font-mono font-bold text-muted-foreground">
-            ≈ {isNaN(toAmount) ? '0.00' : toAmount.toFixed(6)}
-          </span>
-        </div>
-      </div>
-
-      {/* Swap details */}
-      <div className="bg-muted/50 rounded-xl p-3 mb-4 space-y-2 text-xs">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Tỷ giá</span>
-          <span className="font-mono text-foreground">1 {fromCoin} = {rate.toFixed(6)} {toCoin}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Slippage</span>
-          <div className="flex gap-1">
-            {[0.1, 0.5, 1.0].map(s => (
-              <button key={s} onClick={() => setSlippage(s)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all ${slippage === s
-                  ? 'bg-[#f0b90b]/15 text-[#f0b90b]'
-                  : 'bg-secondary text-muted-foreground'}`}
-              >{s}%</button>
-            ))}
-          </div>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Nhận tối thiểu</span>
-          <span className="font-mono text-foreground">{isNaN(minReceived) ? '0' : minReceived.toFixed(6)} {toCoin}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Phí</span>
-          <span className="font-mono text-emerald-500">Miễn phí</span>
-        </div>
-      </div>
-
-      {/* Submit */}
-      <button
-        onClick={() => {
-          if (!fromAmount || parseFloat(fromAmount) <= 0) return;
-          toast.success(`Đã swap ${fromAmount} ${fromCoin} → ${toAmount.toFixed(6)} ${toCoin}`);
-          setFromAmount('');
-        }}
-        disabled={!fromAmount || parseFloat(fromAmount) <= 0}
-        className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#f0b90b] to-[#e6a800] text-black shadow-lg hover:shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        Swap {fromCoin} → {toCoin}
-      </button>
+            {executing ? <><Loader2 className="w-4 h-4 animate-spin" />Đang swap...</> :
+              `Swap ${fromToken?.symbol || ''} → ${toToken?.symbol || ''}`}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -1173,9 +1255,9 @@ export default function TradingPage() {
                   <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                       <RefreshCw className="w-4 h-4 text-[#f0b90b]" />
-                      Swap & Convert
+                      Swap On-chain (DEX)
                     </h3>
-                    <span className="text-[10px] text-muted-foreground">Phí 0% | Tốc độ ngay lập tức</span>
+                    <span className="text-[10px] text-emerald-400 font-medium">● PancakeSwap / QuickSwap</span>
                   </div>
 
                   <FullSwapPanel coinName={coinName} currentPrice={currentPrice} />

@@ -26,6 +26,7 @@ export interface ProductCardData {
   metadata?: Record<string, any>;
   category?: string;
   seller_name?: string;
+  seller_slug?: string | null;
   seller_avatar?: string | null;
   seller_user_avatar?: string | null;
   rating_avg?: number | string;
@@ -60,6 +61,8 @@ export const ProductCard = memo(function ProductCard({
     : getPrimaryProductImage(product.images as ProductGalleryImage[] | string[] | null | undefined, product.primary_image ?? null);
 
   const sellerAvatar = product.seller_user_avatar ?? product.seller_avatar ?? null;
+  const sellerLabel = product.seller_name || 'Người bán';
+  const sellerHref = product.seller_slug ? `/seller/${product.seller_slug}` : null;
   const rating = Number(product.rating_avg ?? product.seller_rating ?? 0);
   const basePriceUsd = Number(product.base_price_usd || 0);
   const primaryToken = acceptedTokens.find((token) => token.is_primary) ?? acceptedTokens[0] ?? null;
@@ -132,12 +135,25 @@ export const ProductCard = memo(function ProductCard({
           <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
             {/* Seller + Rating */}
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              {sellerAvatar ? (
-                <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+              {sellerHref ? (
+                <Link href={sellerHref} className="flex min-w-0 items-center gap-1.5 transition-colors hover:text-primary" aria-label={`Xem cửa hàng ${sellerLabel}`}>
+                  {sellerAvatar ? (
+                    <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+                  ) : (
+                    <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/60" />
+                  )}
+                  <span className="truncate">{sellerLabel}</span>
+                </Link>
               ) : (
-                <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/60" />
+                <>
+                  {sellerAvatar ? (
+                    <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+                  ) : (
+                    <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/60" />
+                  )}
+                  <span className="truncate">{sellerLabel}</span>
+                </>
               )}
-              <span className="truncate">{product.seller_name || 'Người bán'}</span>
               {rating > 0 ? (
                 <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
                   <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
@@ -247,14 +263,29 @@ export const ProductCard = memo(function ProductCard({
         <div className="flex flex-grow flex-col p-4">
           {/* Seller row */}
           <div className="mb-2 flex items-center gap-1.5 text-[11px]">
-            {sellerAvatar ? (
-              <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+            {sellerHref ? (
+              <Link href={sellerHref} className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary" aria-label={`Xem cửa hàng ${sellerLabel}`}>
+                {sellerAvatar ? (
+                  <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+                ) : (
+                  <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-muted">
+                    <User className="h-2.5 w-2.5 text-muted-foreground" />
+                  </div>
+                )}
+                <span className="truncate">{sellerLabel}</span>
+              </Link>
             ) : (
-              <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-muted">
-                <User className="h-2.5 w-2.5 text-muted-foreground" />
-              </div>
+              <>
+                {sellerAvatar ? (
+                  <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
+                ) : (
+                  <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-muted">
+                    <User className="h-2.5 w-2.5 text-muted-foreground" />
+                  </div>
+                )}
+                <span className="truncate text-muted-foreground">{sellerLabel}</span>
+              </>
             )}
-            <span className="truncate text-muted-foreground">{product.seller_name || 'Người bán'}</span>
             {rating > 0 ? (
               <span className="ml-auto flex flex-shrink-0 items-center gap-0.5">
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />

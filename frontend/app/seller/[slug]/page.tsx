@@ -5,9 +5,10 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Store, Star, TrendingUp, Calendar, Package,
-  Copy, Check, ExternalLink, AlertCircle, Loader2, Wallet,
-  ShoppingCart,
+  Copy, Check, AlertCircle, Loader2, Wallet,
+  Coins, RefreshCw,
 } from 'lucide-react';
+import { createPublicClient, formatEther, formatUnits, http, isAddress, type Address } from 'viem';
 import { toast } from 'sonner';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -15,6 +16,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { apiClient } from '@/lib/api/client';
 import { publicRequestConfig } from '@/lib/api/request-auth';
+import { DEFAULT_CHAIN_ID } from '@/lib/web3/config';
+import { getRecommendedCheckoutChainMetas } from '@/lib/web3/testnet-lite';
 
 interface SellerProfile {
   seller_id: number;
@@ -49,9 +52,70 @@ interface SellerProduct {
   }>;
 }
 
+interface TokenCatalogItem {
+  token_id: number;
+  symbol: string;
+  token_address: string;
+  chain_id: number;
+  decimals: number;
+}
+
+interface SellerHolding {
+  symbol: string;
+  amount: string;
+  tokenAddress: string | null;
+  native: boolean;
+}
+
+const ERC20_BALANCE_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
+
+const NATIVE_TOKEN_ADDRESSES = new Set([
+  '0x0000000000000000000000000000000000000000',
+  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+  '0x0000000000000000000000000000000000001010',
+]);
+
 function truncateAddress(addr: string) {
   if (!addr || addr.length < 10) return addr;
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function compactAmount(value: string) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return value;
+  if (amount === 0) return '0';
+  if (amount > 0 && amount < 0.000001) return '<0.000001';
+  return amount.toLocaleString('en-US', {
+    maximumFractionDigits: amount < 1 ? 6 : 4,
+  });
+}
+
+function getSellerBalanceContext() {
+  const chainMeta = getRecommendedCheckoutChainMetas().find((chain) => chain.chainId === DEFAULT_CHAIN_ID);
+  const rpcUrl = chainMeta?.rpcUrl || 'https://kienai.id.vn/rpc/hardhat';
+  const nativeSymbol = chainMeta?.nativeSymbol || 'ETH';
+
+  return {
+    nativeSymbol,
+    chainName: chainMeta?.name || `Chain ${DEFAULT_CHAIN_ID}`,
+    client: createPublicClient({
+      chain: {
+        id: DEFAULT_CHAIN_ID,
+        name: chainMeta?.name || `Chain ${DEFAULT_CHAIN_ID}`,
+        nativeCurrency: { decimals: 18, name: nativeSymbol, symbol: nativeSymbol },
+        rpcUrls: { default: { http: [rpcUrl] } },
+      },
+      transport: http(rpcUrl),
+    }),
+  };
 }
 
 export default function SellerStorePage() {
@@ -61,6 +125,10 @@ export default function SellerStorePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [holdings, setHoldings] = useState<SellerHolding[]>([]);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [holdingsError, setHoldingsError] = useState<string | null>(null);
+  const [holdingsRefreshKey, setHoldingsRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!slug) return;
@@ -91,6 +159,82 @@ export default function SellerStorePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  useEffect(() => {
+    const wallet = seller?.payout_wallet;
+    if (!wallet || !isAddress(wallet)) {
+      setHoldings([]);
+      setHoldingsError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadHoldings = async () => {
+      setHoldingsLoading(true);
+      setHoldingsError(null);
+
+      try {
+        const { client, nativeSymbol } = getSellerBalanceContext();
+        const walletAddress = wallet as Address;
+
+        const [nativeBalance, tokensRes] = await Promise.all([
+          client.getBalance({ address: walletAddress }),
+          apiClient.get('/api/products/tokens', publicRequestConfig),
+        ]);
+
+        const tokenRows = ((tokensRes.data?.data || []) as TokenCatalogItem[])
+          .filter((token) => Number(token.chain_id) === DEFAULT_CHAIN_ID)
+          .filter((token) => isAddress(token.token_address))
+          .filter((token) => !NATIVE_TOKEN_ADDRESSES.has(token.token_address.toLowerCase()));
+
+        const erc20Holdings: Array<SellerHolding | null> = await Promise.all(
+          tokenRows.map(async (token) => {
+            try {
+              const rawBalance = await client.readContract({
+                address: token.token_address as Address,
+                abi: ERC20_BALANCE_ABI,
+                functionName: 'balanceOf',
+                args: [walletAddress],
+              });
+
+              return {
+                symbol: token.symbol,
+                amount: formatUnits(rawBalance as bigint, Number(token.decimals || 18)),
+                tokenAddress: token.token_address,
+                native: false,
+              } satisfies SellerHolding;
+            } catch {
+              return null;
+            }
+          })
+        );
+        const resolvedErc20Holdings = erc20Holdings.filter((holding): holding is SellerHolding => holding !== null);
+
+        const nextHoldings: SellerHolding[] = [
+          {
+            symbol: nativeSymbol,
+            amount: formatEther(nativeBalance),
+            tokenAddress: null,
+            native: true,
+          },
+          ...resolvedErc20Holdings,
+        ].filter((holding) => holding.native || Number(holding.amount) > 0);
+
+        if (!cancelled) setHoldings(nextHoldings);
+      } catch {
+        if (!cancelled) setHoldingsError('Không đọc được số dư public của ví seller từ RPC.');
+      } finally {
+        if (!cancelled) setHoldingsLoading(false);
+      }
+    };
+
+    loadHoldings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seller?.payout_wallet, holdingsRefreshKey]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
@@ -119,7 +263,7 @@ export default function SellerStorePage() {
     );
   }
 
-  const primaryToken = products[0]?.accepted_tokens?.find(t => t.is_primary) || products[0]?.accepted_tokens?.[0];
+  const holdingsChain = getSellerBalanceContext().chainName;
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -190,15 +334,65 @@ export default function SellerStorePage() {
 
                 {/* Wallet */}
                 {seller.payout_wallet && (
-                  <div className="mt-4 flex justify-center md:justify-start">
-                    <button
-                      onClick={handleCopyWallet}
-                      className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl text-xs font-mono text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all"
-                    >
-                      <Wallet className="w-3.5 h-3.5 text-primary" />
-                      {truncateAddress(seller.payout_wallet)}
-                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    </button>
+                  <div className="mt-4 space-y-3">
+                    <div className="flex justify-center md:justify-start">
+                      <button
+                        onClick={handleCopyWallet}
+                        className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl text-xs font-mono text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all"
+                      >
+                        <Wallet className="w-3.5 h-3.5 text-primary" />
+                        {truncateAddress(seller.payout_wallet)}
+                        {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+
+                    <div className="max-w-xl rounded-2xl border border-border bg-card/70 p-4 text-left">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+                            <Coins className="h-4 w-4 text-primary" />
+                            Public token holdings
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Đọc trực tiếp ví payout trên {holdingsChain}; dùng để demo tiền về seller mà không cần logout.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHoldingsRefreshKey((key) => key + 1)}
+                          disabled={holdingsLoading}
+                          className="rounded-xl border border-border p-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50"
+                          aria-label="Refresh seller token holdings"
+                        >
+                          {holdingsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        </button>
+                      </div>
+
+                      {holdingsError ? (
+                        <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                          {holdingsError}
+                        </p>
+                      ) : holdingsLoading && holdings.length === 0 ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Đang đọc số dư seller...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {holdings.map((holding) => (
+                            <div key={`${holding.symbol}-${holding.tokenAddress || 'native'}`} className="flex items-center justify-between rounded-xl border border-border/70 bg-background/60 px-3 py-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <CoinImage symbol={holding.symbol} size={18} />
+                                <span className="truncate text-xs font-semibold text-foreground">{holding.symbol}</span>
+                              </div>
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {compactAmount(holding.amount)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

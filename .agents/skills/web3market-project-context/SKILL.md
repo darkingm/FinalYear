@@ -9,9 +9,9 @@ description: Use when starting any task in the Web3Market FYP project (kienai.id
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 14 (App Router), TypeScript, Tailwind, wagmi v2, RainbowKit |
-| Main Backend | Node.js + Express, TypeScript, PostgreSQL, Redis, RabbitMQ |
-| Payment Backend | Separate Node.js service, connects to both `marketplace_db` AND `payment_db` |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind, wagmi v2, viem, RainbowKit |
+| Main Backend | Node.js 22 + Express, TypeScript, PostgreSQL, Redis, RabbitMQ |
+| Payment Backend | Node.js 22 service, connects to both `marketplace_db` AND `payment_db` |
 | Smart Contracts | Solidity (Hardhat), EscrowCore.sol, CreditScoreSBT.sol |
 | AI Service | Python (FastAPI) |
 | Deploy | Docker Compose on VPS `103.20.96.79` — images built locally, pushed to Docker Hub (`kiendzpro/`), VPS pulls |
@@ -59,31 +59,40 @@ Valid transitions only — enforced in `orders.controller.ts`:
 
 ```
 UNPAID → CANCELLED
-UNPAID → TX_SUBMITTED (crypto flow, via payment-service event)
-TX_SUBMITTED → ONCHAIN_CONFIRMED | TX_FAILED
-ONCHAIN_CONFIRMED → PAID | SHIPPED
-PAID → SHIPPED | DISPUTED
+UNPAID → TX_SUBMITTED (crypto submit/session flow, via payment-service)
+TX_FAILED → new payment session allowed
+TX_SUBMITTED → ONCHAIN_CONFIRMED | PAID | TX_FAILED
+ONCHAIN_CONFIRMED → PAID | SHIPPED | COMPLETED | DISPUTED
+PAID → SHIPPED | COMPLETED | DISPUTED
+PAID_PAYPAL → SHIPPED | COMPLETED | DISPUTED
 SHIPPED → COMPLETED | DISPUTED
+DELIVERED → COMPLETED | DISPUTED
 COMPLETED → (terminal)
 DISPUTED → (terminal, admin resolves)
 REFUNDED → (terminal)
 CANCELLED → (terminal)
 ```
 
-**Never** set status directly to `COMPLETED` from `UNPAID` or `PAID` — state machine will reject it.
+`orders.seller_id` references `seller_profiles.seller_id`, not `users.user_id`. When checking seller permissions, join `seller_profiles` and compare `sp.user_id` to the authenticated user.
 
 ## Crypto Payment Flow (End-to-End)
 
 ```
-Frontend checkout → GET /api/payments/crypto/quote
-                  → walletClient.sendTransaction (MetaMask signs)
-                  → POST /api/payments/crypto/submit {order_id, tx_hash}
-                  → payment-service blockchain listener → event 'payment.confirmed'
-                  → main-service sets status ONCHAIN_CONFIRMED or PAID
-                  → Buyer confirms delivery → POST /api/orders/:id/status {status:'COMPLETED'}
-                  → main-service calls payment-service POST /api/crypto-payment/release
-                  → payment-service calls escrowContract.releasePayment(orderId32)
-                  → After release: order status → COMPLETED, release_tx_hash stored
+Frontend checkout → POST /api/payments/crypto/session
+                  → POST /api/payments/crypto/session/:sessionId/quote
+                  → walletClient.sendTransaction (MetaMask signs deposit calldata)
+                  → POST /api/payments/crypto/session/:sessionId/submit {tx_hash, nonce}
+                  → payment-service verifies receipt, records payment events
+                  → main-service projection sets TX_SUBMITTED → ONCHAIN_CONFIRMED/PAID or TX_FAILED
+                  → Buyer confirms delivery:
+                       A) Preferred: frontend calls EscrowCore.buyerConfirmDelivery(orderId32),
+                          then POST /api/orders/:id/status
+                          {status:'COMPLETED', completion_source:'buyer_onchain', release_tx_hash}
+                          Main-service stores release_tx_hash and must NOT trigger a second release.
+                       B) Backend/admin path: main-service calls payment-service
+                          POST /api/payments/crypto/release with X-Internal-Service-Key,
+                          payment-service calls escrowContract.releasePayment(orderId32).
+                  → After successful release: seller payout wallet receives funds, order becomes COMPLETED.
 ```
 
 ## Critical orderId Encoding (Smart Contract)
@@ -102,7 +111,7 @@ For `main-service → payment-service` calls:
 headers: { 'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY }
 ```
 
-The `/release` endpoint on payment-service uses `authenticateOrInternalKey` middleware — accepts JWT **or** internal key. Env var: `INTERNAL_SERVICE_KEY` (same value in both services).
+The `/api/payments/crypto/release` endpoint on payment-service uses `authenticateOrInternalKey` middleware — accepts admin JWT **or** internal key. Env var: `INTERNAL_SERVICE_KEY` must be the same value in main-service and payment-service. Never expose this key as a public `NEXT_PUBLIC_*` frontend variable.
 
 ## Database Migration System
 
@@ -152,8 +161,11 @@ docker rm -f marketplace-db-migrator
 | `PAYMENT_SERVICE_URL` | main-service | `http://payment-api:3002` (Docker) |
 | `DATABASE_URL` | payment-service | Points to payment_db |
 | `MAIN_DATABASE_URL` | payment-service | Points to marketplace_db |
-| `DEFAULT_CHAIN_ID` | payment-service | `31337` (Hardhat VPS) |
+| `DEFAULT_CHAIN_ID` | payment-service | `31337` (Hardhat demo chain) |
 | `ESCROW_CONTRACT_LOCALHOST` | payment-service, frontend | Contract address on Hardhat |
+| `NEXT_PUBLIC_HARDHAT_RPC_URL` | frontend | Production default is `https://kienai.id.vn/rpc/hardhat`; local dev can set `http://127.0.0.1:8545` |
+| `LOCALHOST_RPC_URL` | payment-service/contracts | Docker internal value should be `http://hardhat-node:8545` |
+| `PAYMENT_INVOICE_RATE_LIMIT_MAX` | payment-service | Optional override for invoice/session creation limit; default `10` per 5 minutes |
 
 ## Common Mistakes & Fixes
 
@@ -185,24 +197,38 @@ docker rm -f marketplace-db-migrator
 **Symptom:** TypeScript error — `'approve'` not assignable to `PayStep`  
 **Fix:** PayStep type is `'idle' | 'signing' | 'submitted' | 'confirming' | 'done' | 'failed'`. Reuse `'signing'` for the approve step.
 
+### 8. Invoice creation blocked by status polling
+**Symptom:** Checkout shows `Too many requests for this action` while demo-buying several items.
+**Root cause:** `strictLimiter` wrapped all `/api/payments/crypto` routes, so quote/status/submit traffic consumed the same quota as invoice creation.
+**Fix:** Use route-level limiters: `invoiceLimiter` for `/session`, `/session-batch`, and legacy `/quote`; `statusLimiter` for status reads; `strictLimiter` for quote submit, verify, release, refund, and admin actions.
+
+### 9. Seller cannot see/update orders
+**Symptom:** Seller dashboard/order pages miss seller orders or seller cannot mark shipped/delivered.
+**Root cause:** Code compares `orders.seller_id` to authenticated `users.user_id`, but `orders.seller_id` stores `seller_profiles.seller_id`.
+**Fix:** Join `seller_profiles sp ON o.seller_id = sp.seller_id` and compare `sp.user_id` with the authenticated user.
+
 ## Key Files Reference
 
 | File | Purpose |
 |---|---|
 | `frontend/app/checkout/[orderId]/page.tsx` | Crypto payment checkout UI, 4-step flow |
 | `frontend/app/orders/[id]/page.tsx` | Order details, confirm delivery, dispute |
+| `frontend/app/seller/[slug]/page.tsx` | Public seller storefront/profile and public payout wallet holdings |
 | `backend/main-service/src/modules/orders/orders.controller.ts` | Status updates, escrow trigger, dispute creation |
 | `backend/payment-service/src/modules/crypto-payment/crypto-payment.service.ts` | Quote, submit, release escrow |
 | `backend/payment-service/src/modules/crypto-payment/crypto-payment.routes.ts` | `authenticateOrInternalKey` middleware |
+| `backend/payment-service/src/middleware/rate-limit.ts` | API, invoice, strict, and status rate limiters |
 | `contracts/contracts/EscrowCore.sol` | Smart contract — escrow logic |
 | `init_database.sql/migrations/` | All DB migrations |
 | `docker/docker-compose.prod.yml` | Production stack with db-migrator |
 | `scripts/deploy.sh` | Full deploy pipeline |
 
-## Hardhat VPS Node
+## Hardhat Demo Node
 
 - Chain ID: `31337`
-- RPC (public): `http://103.20.96.79:8545`
+- Frontend/public RPC: `https://kienai.id.vn/rpc/hardhat`
+- VPS internal Docker RPC: `http://hardhat-node:8545`
+- Direct VPS RPC may exist at `http://103.20.96.79:8545`, but prefer the HTTPS proxy for browser/MetaMask to avoid mixed-content/CORS issues.
 - Test private key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` (10000 ETH, for testing only)
 - Escrow contract: env var `ESCROW_CONTRACT_LOCALHOST`
 - Container: `marketplace-hardhat` (docker network internal: `http://hardhat-node:8545`)

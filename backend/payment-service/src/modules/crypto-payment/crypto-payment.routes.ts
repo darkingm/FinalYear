@@ -19,7 +19,7 @@ import {
   refundPayment
 } from './crypto-payment.controller';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
-import { statusLimiter } from '../../middleware/rate-limit';
+import { invoiceLimiter, statusLimiter, strictLimiter } from '../../middleware/rate-limit';
 import { validateRequest } from '../../middleware/validate.middleware';
 import {
   createPaymentSessionSchema,
@@ -66,27 +66,27 @@ function authenticateOrInternalKey(req: Request, res: Response, next: NextFuncti
   });
 }
 
-router.post('/session', authenticate, validateRequest(createPaymentSessionSchema), createPaymentSession);
-router.post('/session-batch', authenticate, validateRequest(createPaymentBatchSessionSchema), createPaymentBatchSession);
-router.post('/session/:sessionId/quote', authenticate, validateRequest(getPaymentSessionQuoteSchema), getPaymentSessionQuote);
-router.post('/session-batch/:sessionId/quote', authenticate, validateRequest(getPaymentBatchSessionQuoteSchema), getPaymentBatchSessionQuote);
-router.post('/session/:sessionId/submit', authenticate, validateRequest(submitPaymentSessionSchema), submitPaymentSession);
-router.post('/session-batch/:sessionId/submit', authenticate, validateRequest(submitPaymentBatchSessionSchema), submitPaymentBatchSession);
-router.get('/session/:sessionId/status', authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
-router.get('/session-batch/:sessionId/status', authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
-router.get('/admin/reconciliation', authenticateOrInternalKey, validateRequest(getPaymentReconciliationCasesSchema), getPaymentReconciliationCases);
-router.get('/admin/ops-health', authenticateOrInternalKey, getPaymentOpsHealth);
-router.post('/admin/reconciliation/:orderId/retry-verify', authenticateOrInternalKey, validateRequest(retryVerifyOrderPaymentSchema), retryVerifyOrderPayment);
-router.post('/admin/reconciliation/expire-stale', authenticateOrInternalKey, validateRequest(expireStalePaymentsSchema), expireStalePayments);
+router.post('/session', invoiceLimiter, authenticate, validateRequest(createPaymentSessionSchema), createPaymentSession);
+router.post('/session-batch', invoiceLimiter, authenticate, validateRequest(createPaymentBatchSessionSchema), createPaymentBatchSession);
+router.post('/session/:sessionId/quote', strictLimiter, authenticate, validateRequest(getPaymentSessionQuoteSchema), getPaymentSessionQuote);
+router.post('/session-batch/:sessionId/quote', strictLimiter, authenticate, validateRequest(getPaymentBatchSessionQuoteSchema), getPaymentBatchSessionQuote);
+router.post('/session/:sessionId/submit', strictLimiter, authenticate, validateRequest(submitPaymentSessionSchema), submitPaymentSession);
+router.post('/session-batch/:sessionId/submit', strictLimiter, authenticate, validateRequest(submitPaymentBatchSessionSchema), submitPaymentBatchSession);
+router.get('/session/:sessionId/status', statusLimiter, authenticate, validateRequest(getPaymentSessionStatusSchema), getPaymentSessionStatus);
+router.get('/session-batch/:sessionId/status', statusLimiter, authenticate, validateRequest(getPaymentBatchSessionStatusSchema), getPaymentBatchSessionStatus);
+router.get('/admin/reconciliation', strictLimiter, authenticateOrInternalKey, validateRequest(getPaymentReconciliationCasesSchema), getPaymentReconciliationCases);
+router.get('/admin/ops-health', strictLimiter, authenticateOrInternalKey, getPaymentOpsHealth);
+router.post('/admin/reconciliation/:orderId/retry-verify', strictLimiter, authenticateOrInternalKey, validateRequest(retryVerifyOrderPaymentSchema), retryVerifyOrderPayment);
+router.post('/admin/reconciliation/expire-stale', strictLimiter, authenticateOrInternalKey, validateRequest(expireStalePaymentsSchema), expireStalePayments);
 
-router.post('/quote', authenticate, validateRequest(generateQuoteSchema), generateQuote);
+router.post('/quote', invoiceLimiter, authenticate, validateRequest(generateQuoteSchema), generateQuote);
 router.get('/status/:orderId', statusLimiter, authenticate, validateRequest(getPaymentStatusSchema), getPaymentStatus);
-router.post('/verify/:txHash', authenticate, validateRequest(verifyTransactionSchema), verifyTransaction);
+router.post('/verify/:txHash', strictLimiter, authenticate, validateRequest(verifyTransactionSchema), verifyTransaction);
 
 // Release: callable by admin (JWT) OR main-service (internal key after buyer confirms delivery)
-router.post('/release', authenticateOrInternalKey, validateRequest(releaseFundsSchema), releaseFunds);
+router.post('/release', strictLimiter, authenticateOrInternalKey, validateRequest(releaseFundsSchema), releaseFunds);
 
 // Refund: admin only — triggered when admin resolves a dispute in buyer's favor
-router.post('/refund', authenticateOrInternalKey, validateRequest(refundPaymentSchema), refundPayment);
+router.post('/refund', strictLimiter, authenticateOrInternalKey, validateRequest(refundPaymentSchema), refundPayment);
 
 export default router;

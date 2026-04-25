@@ -54,3 +54,15 @@ description: Use when making architectural decisions or modifying core infrastru
 - **Decision**: Frontend queries subgraphs + Etherscan + RPC directly (via Next.js API proxy routes to avoid CORS)
 - **Consequence**: Heavy logic in frontend (`pair-tx-fetcher.ts` 625 lines). API keys exposed via `NEXT_PUBLIC_*` env vars. Long-term should move to dedicated backend service.
 - **Status**: Active (tech debt acknowledged)
+
+## ADR-009: Crypto Payment Rate Limits Are Route-Specific
+- **Context**: Checkout creates sessions, posts quotes, submits tx hashes, and polls status. Applying one strict limiter to all `/api/payments/crypto` routes lets read-only polling consume the same quota as invoice creation, which blocks demos with false `Too many requests` errors.
+- **Decision**: Use route-level limiters: `invoiceLimiter` for `/session`, `/session-batch`, and legacy `/quote`; `statusLimiter` for status reads; `strictLimiter` for sensitive writes/admin actions.
+- **Consequence**: Demo invoice creation defaults to 10 requests per 5 minutes via `PAYMENT_INVOICE_RATE_LIMIT_MAX`, while status polling remains safe and does not consume invoice quota.
+- **Status**: Active
+
+## ADR-010: Seller Identity Uses seller_profiles.seller_id
+- **Context**: `orders.seller_id` references `seller_profiles.seller_id`, while authenticated sessions identify users by `users.user_id`.
+- **Decision**: Seller ownership checks must join `seller_profiles` and compare `sp.user_id` to the authenticated user. Public seller navigation should use `seller_profiles.slug`.
+- **Consequence**: Do not compare `orders.seller_id` directly to `req.user.user_id`. This prevents seller dashboards/order updates from failing when seller profile ids differ from user ids.
+- **Status**: Active

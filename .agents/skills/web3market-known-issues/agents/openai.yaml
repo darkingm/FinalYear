@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web3Market Issues"
+  short_description: "Known bugs and proven fixes"
+  brand_color: "#DC2626"
+  default_prompt: "Use $web3market-known-issues to check whether this Web3Market bug already has a proven fix."
+policy:
+  allow_implicit_invocation: true
