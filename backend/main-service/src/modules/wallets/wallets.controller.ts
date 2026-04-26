@@ -32,62 +32,6 @@ export async function setPrimary(req: AuthRequest, res: Response, next: NextFunc
     } catch (err) { next(err); }
 }
 
-export async function updateWalletLabel(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-        const label = typeof req.body?.label === 'string' ? req.body.label.slice(0, 100) : null;
-        const wallet = await walletsService.updateLabel(
-            req.user!.user_id,
-            parseInt(req.params.id),
-            label,
-        );
-        res.json({ success: true, data: wallet });
-    } catch (err) { next(err); }
-}
-
-export async function setSellerPayout(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-        const result = await walletsService.setSellerPayout(
-            req.user!.user_id,
-            parseInt(req.params.id),
-        );
-        res.json({ success: true, data: result });
-    } catch (err) { next(err); }
-}
-
-export async function createDepositIntent(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-        const { chain_id, token_id, amount, from_address, ttl_minutes } = req.body || {};
-        if (!chain_id || !token_id || amount === undefined || !from_address) {
-            return res.status(400).json({ success: false, message: 'chain_id, token_id, amount, from_address are required' });
-        }
-        const intent = await walletsService.createDepositIntent(req.user!.user_id, {
-            chain_id: Number(chain_id),
-            token_id: Number(token_id),
-            amount,
-            from_address,
-            ttl_minutes,
-        });
-        res.status(201).json({ success: true, data: intent });
-    } catch (err) { next(err); }
-}
-
-export async function listDepositIntents(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-        const intents = await walletsService.listDepositIntents(req.user!.user_id);
-        res.json({ success: true, data: intents });
-    } catch (err) { next(err); }
-}
-
-export async function cancelDepositIntent(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-        const intent = await walletsService.cancelDepositIntent(
-            req.user!.user_id,
-            parseInt(req.params.id),
-        );
-        res.json({ success: true, data: intent });
-    } catch (err) { next(err); }
-}
-
 export async function getDepositHistory(req: AuthRequest, res: Response, next: NextFunction) {
     try {
         const deposits = await walletsService.getDepositHistory(req.user!.user_id, req.query.status as string);

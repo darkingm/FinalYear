@@ -10,23 +10,17 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
-import { useAccount, useSignMessage, useBalance, useSwitchChain } from 'wagmi';
+import { useAccount, useSignMessage, useBalance } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet, Copy, QrCode, Link2, Trash2, Star,
   ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle,
   AlertCircle, Loader2, Shield, ArrowDownToLine, ExternalLink,
-  Plus, Info, Zap, Pencil, Banknote, ShieldCheck,
+  Plus, Info, Zap,
 } from 'lucide-react';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 import { NetworkDiagnostics } from '@/components/web3/NetworkDiagnostics';
-import {
-  DepositInvoiceCard,
-  PastIntentsList,
-  type DepositIntent,
-  type ChainToken,
-} from '@/components/wallet/DepositInvoice';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface UserWallet {
@@ -36,14 +30,8 @@ interface UserWallet {
   address: string;
   label: string | null;
   is_primary: boolean;
-  is_verified?: boolean;
   chain_info: { name: string; type: string; symbol: string; explorer?: string };
   created_at: string;
-}
-
-interface SellerPayoutInfo {
-  is_seller: boolean;
-  payout_wallet: string | null;
 }
 
 interface Deposit {
@@ -86,12 +74,9 @@ function shortAddr(addr: string) {
   return `${addr.slice(0, 10)}...${addr.slice(-6)}`;
 }
 
-/* ─── Balance display per wallet (uses wallet's saved chainId, falls back to current) ────── */
-function WalletBalanceDisplay({ address, chainId }: { address: string; chainId?: number | null }) {
-  const { data, isLoading } = useBalance({
-    address: address as `0x${string}`,
-    chainId: chainId ?? undefined,
-  });
+/* ─── Balance display per wallet (each uses its own useBalance hook) ────── */
+function WalletBalanceDisplay({ address }: { address: string }) {
+  const { data, isLoading } = useBalance({ address: address as `0x${string}` });
   if (isLoading) return <span className="text-[10px] text-muted-foreground animate-pulse">Loading...</span>;
   if (!data) return <span className="text-[10px] text-muted-foreground">—</span>;
   const val = parseFloat(data.formatted);
@@ -109,7 +94,6 @@ export default function WalletPage() {
   const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const { address, isConnected, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
-  const { switchChain } = useSwitchChain();
 
   const [wallets, setWallets] = useState<UserWallet[]>([]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
@@ -118,21 +102,6 @@ export default function WalletPage() {
   const [activeTab, setActiveTab] = useState<'qr' | 'history'>('qr');
   const [selectedQRWallet, setSelectedQRWallet] = useState<UserWallet | null>(null);
   const [expandedNetwork, setExpandedNetwork] = useState<number | null>(31337);
-  const [editingLabel, setEditingLabel] = useState<number | null>(null);
-  const [labelDraft, setLabelDraft] = useState('');
-  const [sellerInfo, setSellerInfo] = useState<SellerPayoutInfo>({ is_seller: false, payout_wallet: null });
-
-  // Deposit invoice state
-  const [intents, setIntents] = useState<DepositIntent[]>([]);
-  const [activeIntent, setActiveIntent] = useState<DepositIntent | null>(null);
-  const [tokensByChain, setTokensByChain] = useState<Record<number, ChainToken[]>>({});
-  const [formChainId, setFormChainId] = useState<number>(31337);
-  const [formTokenId, setFormTokenId] = useState<number | ''>('');
-  const [formAmount, setFormAmount] = useState('');
-  const [formFromWalletId, setFormFromWalletId] = useState<number | ''>('');
-  const [creatingIntent, setCreatingIntent] = useState(false);
-  const [tokenLoading, setTokenLoading] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
 
   /* ─── Auth guard ─────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -145,39 +114,22 @@ export default function WalletPage() {
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const [walletsRes, depositsRes, profileRes] = await Promise.allSettled([
+      const [walletsRes, depositsRes] = await Promise.allSettled([
         apiClient.get('/api/wallets'),
         apiClient.get('/api/wallets/deposits'),
-        apiClient.get('/api/users/profile'),
       ]);
       if (walletsRes.status === 'fulfilled') {
         const raw = walletsRes.value.data;
-        // Backend now returns { success, data: [...] }; keep legacy fallbacks for safety.
         const ws: UserWallet[] = Array.isArray(raw) ? raw
-          : Array.isArray(raw?.data) ? raw.data
-            : Array.isArray(raw?.wallets) ? raw.wallets
-              : [];
+          : Array.isArray(raw?.wallets) ? raw.wallets
+            : [];
         setWallets(ws);
         const primary = ws.find(w => w.is_primary) || ws[0];
         if (primary && !selectedQRWallet) setSelectedQRWallet(primary);
       }
       if (depositsRes.status === 'fulfilled') {
         const raw = depositsRes.value.data;
-        setDeposits(
-          Array.isArray(raw) ? raw
-            : Array.isArray(raw?.data) ? raw.data
-              : Array.isArray(raw?.deposits) ? raw.deposits
-                : []
-        );
-      }
-      if (profileRes.status === 'fulfilled') {
-        const u = profileRes.value.data?.user || profileRes.value.data?.data || profileRes.value.data;
-        if (u) {
-          setSellerInfo({
-            is_seller: !!(u.role === 'seller' || u.role === 'admin' || u.is_seller || u.seller_id),
-            payout_wallet: u.payout_wallet ?? u.seller?.payout_wallet ?? null,
-          });
-        }
+        setDeposits(Array.isArray(raw) ? raw : Array.isArray(raw?.deposits) ? raw.deposits : []);
       }
     } catch { /* silent */ } finally {
       setLoading(false);
@@ -186,104 +138,6 @@ export default function WalletPage() {
   }, [isAuthenticated]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  /* ─── Load deposit intents ──────────────────────────────────────────── */
-  const fetchIntents = useCallback(async () => {
-    if (!isAuthenticated) return;
-    try {
-      const res = await apiClient.get('/api/wallets/deposit-intents');
-      const raw = res.data;
-      const list: DepositIntent[] = Array.isArray(raw) ? raw
-        : Array.isArray(raw?.data) ? raw.data : [];
-      setIntents(list);
-      // If activeIntent is shown, refresh it from the latest list
-      setActiveIntent(prev => prev ? (list.find(i => i.intent_id === prev.intent_id) || null) : null);
-    } catch { /* silent */ }
-  }, [isAuthenticated]);
-
-  useEffect(() => { fetchIntents(); }, [fetchIntents]);
-
-  /* ─── Live tick for countdown + auto-refresh while pending intent open ── */
-  useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
-  }, []);
-
-  useEffect(() => {
-    if (!activeIntent || activeIntent.status !== 'pending') return;
-    const poll = setInterval(() => {
-      fetchIntents();
-      fetchData();
-    }, 5000);
-    return () => clearInterval(poll);
-  }, [activeIntent, fetchIntents, fetchData]);
-
-  /* ─── Load tokens for a chain (cached) ──────────────────────────────── */
-  const loadTokens = useCallback(async (chainId: number) => {
-    if (tokensByChain[chainId]) return tokensByChain[chainId];
-    setTokenLoading(true);
-    try {
-      const res = await apiClient.get(`/api/wallets/chains/${chainId}/tokens`);
-      const raw = res.data;
-      const list: ChainToken[] = Array.isArray(raw) ? raw
-        : Array.isArray(raw?.data) ? raw.data : [];
-      setTokensByChain(prev => ({ ...prev, [chainId]: list }));
-      return list;
-    } catch {
-      return [];
-    } finally {
-      setTokenLoading(false);
-    }
-  }, [tokensByChain]);
-
-  useEffect(() => { loadTokens(formChainId); }, [formChainId, loadTokens]);
-
-  /* ─── Create deposit intent ─────────────────────────────────────────── */
-  const handleCreateIntent = async () => {
-    if (!formTokenId || !formAmount || !formFromWalletId) {
-      toast.error('Vui lòng nhập đủ token, số lượng và ví gửi');
-      return;
-    }
-    const wallet = wallets.find(w => w.wallet_db_id === formFromWalletId);
-    if (!wallet) { toast.error('Ví gửi không hợp lệ'); return; }
-    if (!wallet.is_verified) { toast.error('Ví gửi phải được xác thực trước. Hãy liên kết lại bằng MetaMask.'); return; }
-    const amountNum = Number(formAmount);
-    if (!isFinite(amountNum) || amountNum <= 0) {
-      toast.error('Số lượng không hợp lệ');
-      return;
-    }
-    setCreatingIntent(true);
-    try {
-      const res = await apiClient.post('/api/wallets/deposit-intents', {
-        chain_id: formChainId,
-        token_id: formTokenId,
-        amount: formAmount,
-        from_address: wallet.address,
-        ttl_minutes: 15,
-      });
-      const intent: DepositIntent = res.data?.data || res.data;
-      setActiveIntent(intent);
-      setIntents(prev => [intent, ...prev.filter(i => i.intent_id !== intent.intent_id)]);
-      setFormAmount('');
-      toast.success('Đã tạo phiếu nạp tiền — quét QR để gửi');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Tạo phiếu nạp thất bại');
-    } finally {
-      setCreatingIntent(false);
-    }
-  };
-
-  const handleCancelIntent = async (id: number) => {
-    if (!confirm('Huỷ phiếu nạp này?')) return;
-    try {
-      await apiClient.delete(`/api/wallets/deposit-intents/${id}`);
-      toast.success('Đã huỷ phiếu nạp');
-      if (activeIntent?.intent_id === id) setActiveIntent(null);
-      fetchIntents();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Huỷ phiếu nạp thất bại');
-    }
-  };
 
   /* ─── Detect MetaMask account switch ───────────────────────────────── */
   const prevAddrRef = useRef<string | undefined>(undefined);
@@ -299,7 +153,7 @@ export default function WalletPage() {
     }
   }, [address, wallets]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Link MetaMask wallet (full SIWE so backend can verify ownership) ── */
+  /* ─── Link MetaMask wallet ───────────────────────────────────────────── */
   const handleLinkWallet = async () => {
     if (!isConnected || !address) { toast.error('Vui lòng kết nối MetaMask trước'); return; }
     const already = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
@@ -307,25 +161,14 @@ export default function WalletPage() {
 
     setLinking(true);
     try {
-      const domain = window.location.host;
-      const origin = window.location.origin;
-      const nonce = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-        ? crypto.randomUUID().replace(/-/g, '')
-        : Math.random().toString(36).slice(2) + Date.now().toString(36);
-      const issuedAt = new Date().toISOString();
-      const expiration = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-      const message = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nLink wallet to Web3Market account\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId || 1}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expiration}`;
-
-      const signature = await signMessageAsync({ message });
+      const ts = Date.now();
+      await signMessageAsync({ message: `Link wallet to Crypto Marketplace\nAddress: ${address}\nTimestamp: ${ts}` });
       await apiClient.post('/api/wallets', {
         chain_type: 'evm',
         chain_id: chainId || 1,
         address,
         label: `MetaMask (${shortAddr(address)})`,
         is_primary: wallets.length === 0,
-        message,
-        signature,
       });
       toast.success('Đã liên kết ví MetaMask!');
       fetchData();
@@ -333,32 +176,6 @@ export default function WalletPage() {
       if (err.code === 4001) toast.error('Người dùng từ chối ký xác nhận');
       else toast.error(err.response?.data?.message || 'Liên kết ví thất bại');
     } finally { setLinking(false); }
-  };
-
-  /* ─── Edit wallet label ──────────────────────────────────────────────── */
-  const handleSaveLabel = async (id: number) => {
-    try {
-      await apiClient.patch(`/api/wallets/${id}/label`, { label: labelDraft.trim() || null });
-      toast.success('Đã cập nhật tên ví');
-      setEditingLabel(null);
-      fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Cập nhật tên ví thất bại');
-    }
-  };
-
-  /* ─── Set wallet as seller payout ────────────────────────────────────── */
-  const handleSetPayout = async (w: UserWallet) => {
-    if (!w.is_verified) { toast.error('Ví chưa được xác thực — không thể đặt làm payout'); return; }
-    if (!confirm(`Đặt ví ${shortAddr(w.address)} làm địa chỉ nhận thanh toán cho cửa hàng?`)) return;
-    try {
-      const res = await apiClient.patch(`/api/wallets/${w.wallet_db_id}/set-payout`);
-      const payout = res.data?.data?.payout_wallet ?? w.address;
-      setSellerInfo(s => ({ ...s, payout_wallet: payout, is_seller: true }));
-      toast.success('Đã cập nhật ví nhận thanh toán');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Cập nhật payout wallet thất bại');
-    }
   };
 
   const handleRemove = async (id: number) => {
@@ -427,7 +244,7 @@ export default function WalletPage() {
             </div>
             <div>
               <h1 className="text-2xl font-black">Ví của tôi</h1>
-              <p className="text-sm text-muted-foreground">Liên kết MetaMask · Nạp tiền · Lịch sử</p>
+              <p className="text-sm text-muted-foreground">Liên kết MetaMask · QR nạp tiền · Lịch sử</p>
             </div>
           </div>
 
@@ -519,66 +336,12 @@ export default function WalletPage() {
                               )}
                               <span className="text-xs text-muted-foreground">{w.chain_info?.name || 'EVM'}</span>
                             </div>
-                            {editingLabel === w.wallet_db_id ? (
-                              <div className="flex items-center gap-1 mb-1" onClick={e => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  value={labelDraft}
-                                  onChange={e => setLabelDraft(e.target.value)}
-                                  maxLength={100}
-                                  autoFocus
-                                  className="flex-1 min-w-0 px-2 py-1 text-xs bg-background border border-border rounded"
-                                />
-                                <button
-                                  onClick={() => handleSaveLabel(w.wallet_db_id)}
-                                  className="text-[10px] font-bold text-emerald-400 px-1.5 py-1 hover:bg-emerald-500/10 rounded"
-                                >OK</button>
-                                <button
-                                  onClick={() => { setEditingLabel(null); setLabelDraft(''); }}
-                                  className="text-[10px] text-muted-foreground px-1.5 py-1 hover:bg-muted rounded"
-                                >X</button>
-                              </div>
-                            ) : (
-                              <p className="text-[11px] text-muted-foreground truncate mb-0.5">
-                                {w.label || 'Chưa đặt tên'}
-                              </p>
-                            )}
                             <p className="font-mono text-xs text-foreground">{shortAddr(w.address)}</p>
-                            <div className="mt-1 flex items-center gap-2 flex-wrap">
-                              <WalletBalanceDisplay address={w.address} chainId={w.chain_id} />
-                              {w.is_verified && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                                  <ShieldCheck className="w-3 h-3" /> Verified
-                                </span>
-                              )}
-                              {sellerInfo.is_seller && sellerInfo.payout_wallet?.toLowerCase() === w.address.toLowerCase() && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-400">
-                                  <Banknote className="w-3 h-3" /> Payout
-                                </span>
-                              )}
+                            <div className="mt-1">
+                              <WalletBalanceDisplay address={w.address} />
                             </div>
                           </div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                setEditingLabel(w.wallet_db_id);
-                                setLabelDraft(w.label || '');
-                              }}
-                              title="Đổi tên ví"
-                              className="p-1.5 text-muted-foreground hover:text-foreground"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            {sellerInfo.is_seller && w.chain_type === 'evm' && (
-                              <button
-                                onClick={e => { e.stopPropagation(); handleSetPayout(w); }}
-                                title="Đặt làm ví nhận thanh toán bán hàng"
-                                className="p-1.5 text-muted-foreground hover:text-blue-400"
-                              >
-                                <Banknote className="w-3.5 h-3.5" />
-                              </button>
-                            )}
                             {!w.is_primary && (
                               <button onClick={e => { e.stopPropagation(); handleSetPrimary(w.wallet_db_id); }} title="Đặt làm ví chính" className="p-1.5 text-muted-foreground hover:text-[#f0b90b]">
                                 <Star className="w-3.5 h-3.5" />
@@ -605,7 +368,7 @@ export default function WalletPage() {
               {/* Tabs */}
               <div className="flex gap-1 p-1 bg-muted rounded-xl">
                 {[
-                  { key: 'qr', icon: QrCode, label: 'Nạp tiền' },
+                  { key: 'qr', icon: QrCode, label: 'QR Nạp tiền' },
                   { key: 'history', icon: Clock, label: 'Lịch sử' },
                 ].map(tab => (
                   <button
@@ -625,62 +388,50 @@ export default function WalletPage() {
                 {activeTab === 'qr' && (
                   <motion.div key="qr" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
 
-                    {/* Network mismatch warning */}
-                    {qrWallet && qrWallet.chain_type === 'evm' && qrWallet.chain_id && isConnected && chainId && qrWallet.chain_id !== chainId && (
-                      <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                        <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1 text-xs text-amber-400/90">
-                          MetaMask đang ở chain <strong>{chainId}</strong> nhưng ví đang chọn lưu trên chain <strong>{qrWallet.chain_id}</strong>. Số dư hiển thị có thể không chính xác.
+                    {/* QR Card */}
+                    <div className="bg-card border border-border rounded-2xl p-6">
+                      {qrWallet ? (
+                        <div className="flex flex-col items-center">
+                          {/* QR */}
+                          <div className="p-4 bg-white rounded-2xl shadow-xl mb-5 ring-4 ring-[#f0b90b]/10">
+                            <QRCodeSVG value={qrWallet.address} size={200} bgColor="#ffffff" fgColor="#000000" level="M" />
+                          </div>
+
+                          {/* Scan hint */}
+                          <p className="text-xs text-muted-foreground mb-4 flex items-center gap-1.5">
+                            <QrCode className="w-3.5 h-3.5" /> Quét bằng ví crypto để gửi tiền
+                          </p>
+
+                          {/* Address box */}
+                          <div className="w-full p-4 bg-background border border-border rounded-xl mb-3">
+                            <p className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wider">Địa chỉ ví</p>
+                            <div className="flex items-start gap-2">
+                              <p className="font-mono text-sm flex-1 break-all leading-relaxed">{qrWallet.address}</p>
+                              <button
+                                onClick={() => copyText(qrWallet.address, 'địa chỉ ví')}
+                                className="flex-shrink-0 p-2 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] rounded-lg transition-colors"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Warning */}
+                          <div className="w-full flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                            <p className="text-xs text-amber-400/90">
+                              ⚠️ Chỉ gửi đúng token và đúng mạng. Gửi sai mạng sẽ <strong>mất tiền vĩnh viễn</strong>.
+                            </p>
+                          </div>
                         </div>
-                        <button
-                          onClick={() => qrWallet.chain_id && switchChain?.({ chainId: qrWallet.chain_id })}
-                          className="text-[11px] font-bold text-amber-400 underline whitespace-nowrap"
-                        >
-                          Chuyển mạng
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Seller payout banner */}
-                    {sellerInfo.is_seller && !sellerInfo.payout_wallet && wallets.some(w => w.is_verified && w.chain_type === 'evm') && (
-                      <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-                        <Banknote className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-blue-400/90 flex-1">
-                          Bạn là người bán nhưng chưa đặt <strong>ví nhận thanh toán</strong>. Bấm icon <Banknote className="inline w-3 h-3" /> ở danh sách ví bên trái để chọn.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Deposit Invoice Card */}
-                    <DepositInvoiceCard
-                      activeIntent={activeIntent}
-                      now={now}
-                      tokens={tokensByChain[formChainId] || []}
-                      tokenLoading={tokenLoading}
-                      wallets={wallets}
-                      formChainId={formChainId}
-                      formTokenId={formTokenId}
-                      formAmount={formAmount}
-                      formFromWalletId={formFromWalletId}
-                      creating={creatingIntent}
-                      onChainChange={(c) => { setFormChainId(c); setFormTokenId(''); }}
-                      onTokenChange={setFormTokenId}
-                      onAmountChange={setFormAmount}
-                      onWalletChange={setFormFromWalletId}
-                      onSubmit={handleCreateIntent}
-                      onCancel={() => activeIntent && handleCancelIntent(activeIntent.intent_id)}
-                      onClose={() => setActiveIntent(null)}
-                      onCopy={(text, label) => copyText(text, label)}
-                    />
-
-                    {/* Past intents (collapsed) */}
-                    {intents.filter(i => !activeIntent || i.intent_id !== activeIntent.intent_id).length > 0 && (
-                      <PastIntentsList
-                        intents={intents.filter(i => !activeIntent || i.intent_id !== activeIntent.intent_id)}
-                        onResume={(i) => setActiveIntent(i)}
-                        onCancel={(id) => handleCancelIntent(id)}
-                      />
-                    )}
+                      ) : (
+                        <div className="text-center py-14 text-muted-foreground">
+                          <QrCode className="w-14 h-14 mx-auto mb-4 opacity-15" />
+                          <p className="font-semibold">Chưa có ví nào</p>
+                          <p className="text-sm mt-1">Liên kết MetaMask để tạo QR nạp tiền</p>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Network info accordion */}
                     <div className="bg-card border border-border rounded-2xl p-5">
