@@ -2,9 +2,29 @@ import cron from 'node-cron';
 import { query } from '../config/database';
 import { logger } from './logger';
 import { publishEvent } from '../config/rabbitmq';
+import { runEscrowChainSyncTick } from '../modules/orders/order-onchain-sync.worker';
 
 export function initCronJobs() {
     logger.info('Initializing cron jobs...');
+
+    // ─── Escrow auto-sync ──────────────────────────────────────────────────
+    // Reconcile in-flight crypto orders against EscrowCore truth so DB drift
+    // (missed events, unrecorded buyer self-refunds, manual contract calls)
+    // self-heals without admin intervention. Runs every 2 minutes by default;
+    // override with ESCROW_SYNC_CRON.
+    const escrowSyncCron = process.env.ESCROW_SYNC_CRON || '*/2 * * * *';
+    if (process.env.ESCROW_SYNC_DISABLED !== 'true') {
+        cron.schedule(escrowSyncCron, async () => {
+            try {
+                await runEscrowChainSyncTick();
+            } catch (err: any) {
+                logger.error('[escrow-sync] tick failed', { err: err?.message });
+            }
+        });
+        logger.info(`[escrow-sync] scheduled with cron "${escrowSyncCron}"`);
+    } else {
+        logger.warn('[escrow-sync] disabled via ESCROW_SYNC_DISABLED=true');
+    }
 
     // Run every minute — cancel UNPAID orders (+ PayPal TX_SUBMITTED with no money captured) older than 10 minutes
     cron.schedule('* * * * *', async () => {

@@ -37,7 +37,8 @@ import {
     updateSetting,
     getDisputeMessages,
     addDisputeMessage,
-    resolveOrderDisputeOnChain
+    resolveOrderDisputeOnChain,
+    triggerEscrowSync,
 } from './admin.controller';
 
 const router = Router();
@@ -105,5 +106,8 @@ router.get('/payments/reconciliation', getPaymentReconciliationCases);
 router.post('/payments/reconciliation/:id/retry-verify', retryVerifyPayment);
 router.post('/payments/reconciliation/expire-stale', expireStalePaymentTx);
 router.post('/payments/reconciliation/:id/reconcile-order', repairOrderPaymentProjection);
+
+// Manual escrow chain-sync trigger (Phase 5 reconcile worker)
+router.post('/escrow/sync', triggerEscrowSync);
 
 export default router;

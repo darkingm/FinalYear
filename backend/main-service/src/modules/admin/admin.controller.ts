@@ -5,6 +5,7 @@ import { P2PService } from '../p2p/p2p.service';
 import { logger } from '../../utils/logger';
 import { PaymentReconciliationAdminService } from './payment-reconciliation.service';
 import { ContractOpsService } from './contract-ops.service';
+import { runEscrowChainSyncTick } from '../orders/order-onchain-sync.worker';
 
 const adminService = new AdminService();
 const p2pService = new P2PService();
@@ -510,6 +511,46 @@ export async function addDisputeMessage(req: AuthRequest, res: Response, next: N
         res.json({ success: true, message: savedMessage });
     } catch (error: any) {
         logger.error('Admin add dispute message error:', error);
+        next(error);
+    }
+}
+
+// ─── Manual escrow chain-sync trigger ────────────────────────────
+// Lets an admin force a reconcile-against-chain pass without waiting for the
+// 2-minute cron. Useful for incident response (e.g. RPC was down, indexer
+// was stalled, a buyer reports their order is stuck) and for the support
+// dashboard. Body fields are all optional:
+//   - order_id        → sync ONLY this order (bypasses throttle)
+//   - batch_limit     → cap on rows scanned (default 25, max 200)
+//   - throttle_seconds → ignore rows synced within this window (default 120)
+export async function triggerEscrowSync(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const orderIdRaw = req.body?.order_id;
+        const onlyOrderId = orderIdRaw !== undefined && orderIdRaw !== null
+            ? parseInt(String(orderIdRaw), 10)
+            : undefined;
+        if (onlyOrderId !== undefined && Number.isNaN(onlyOrderId)) {
+            res.status(400).json({ success: false, message: 'order_id must be an integer' });
+            return;
+        }
+
+        const stats = await runEscrowChainSyncTick({
+            onlyOrderId: onlyOrderId,
+            batchLimit: req.body?.batch_limit ? Number(req.body.batch_limit) : undefined,
+            throttleSeconds: req.body?.throttle_seconds !== undefined
+                ? Number(req.body.throttle_seconds)
+                : (onlyOrderId !== undefined ? 0 : undefined),
+        });
+
+        logger.info('Admin triggered escrow chain sync', {
+            adminId: req.user?.user_id,
+            onlyOrderId,
+            stats,
+        });
+
+        res.json({ success: true, ...stats });
+    } catch (error: any) {
+        logger.error('Admin escrow sync trigger error:', error);
         next(error);
     }
 }
