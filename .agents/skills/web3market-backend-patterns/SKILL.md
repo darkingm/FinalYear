@@ -72,6 +72,27 @@ const authenticateOrInternalKey = (req, res, next) => {
 };
 ```
 
+## Auth Endpoint Routing and Rate Limits
+
+main-service owns these backend routes and they must be reachable behind production nginx:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/wallet-login
+POST /api/auth/oauth
+POST /api/auth/refresh
+POST /api/auth/logout
+POST /api/auth/forgot-password
+POST /api/auth/reset-password
+```
+
+Do not let nginx route all `/api/auth/*` to NextAuth. Only the NextAuth-specific subpaths belong to the frontend. If `authLimiter` skips genuine internal Docker calls so NextAuth can call the backend, make sure the public NextAuth credentials endpoint has equivalent rate limiting or forwards a trustworthy real client IP for limiter keys.
+
+`/api/auth/oauth` must require `X-Internal-Service-Key`; browsers must not call it directly. `INTERNAL_SERVICE_KEY` is a server secret, never a `NEXT_PUBLIC_*` value.
+
+CAPTCHA policy: registration currently verifies hCaptcha in main-service. If credential login is protected by a CAPTCHA UI, the token must be sent through NextAuth and verified server-side before/while calling main-service; browser-only CAPTCHA checks do not stop direct requests.
+
 ## Request Validation (Zod)
 
 ```typescript

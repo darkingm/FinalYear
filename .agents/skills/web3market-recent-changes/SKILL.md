@@ -7,6 +7,14 @@ description: Use when starting any new task in Web3Market — check recent chang
 
 > **Agent instruction**: Read this before starting work. Update this file after completing any significant change (new feature, bug fix, deploy, schema change).
 
+## 2026-04-26: Agent Guidance Sync for Auth Routing, Deploy, UI Guardrails
+- Updated project guidance so future agents treat the local workspace as source of truth, avoid heavy VPS work, and do not pull/reset VPS state without explicit approval.
+- Clarified shared `/api/auth` ownership: NextAuth owns only session/callback/provider subpaths; backend register/login/wallet/oauth/refresh/logout/forgot/reset must route to main-service.
+- Documented production Hardhat RPC rule: browser/MetaMask uses `https://kienai.id.vn/rpc/hardhat`; direct `http://103.20.96.79:8545` is debug/infrastructure only.
+- Added guardrails for UI work: no dead links/placeholders, no primary CTA labels leaking `VPS`, seller names should link to public storefronts when possible.
+- Added known issues for auth nginx catch-all, login CAPTCHA UI-only, NextAuth credential rate-limit bypass risk, SIWE `www` origin mismatch, and direct HTTP RPC failures.
+- **Files**: `AGENTS.md`, `.agents/skills/web3market-project-context/SKILL.md`, `.agents/skills/web3market-backend-patterns/SKILL.md`, `.agents/skills/web3market-frontend-conventions/SKILL.md`, `.agents/skills/web3market-deploy-pipeline/SKILL.md`, `.agents/skills/web3market-known-issues/SKILL.md`, `.agents/skills/web3market-decisions/SKILL.md`
+
 ## 2026-04-25: Skill Metadata, Grapuco Guardrails, RWA Demo Test Fallback
 - Added `agents/openai.yaml` metadata for Web3Market skills so the UI can display clear skill names, descriptions, and default prompts.
 - Clarified Grapuco usage: use MCP when available, otherwise inspect `.grapuco/status.json` and fall back to local code search instead of blocking.

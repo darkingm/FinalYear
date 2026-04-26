@@ -66,3 +66,21 @@ description: Use when making architectural decisions or modifying core infrastru
 - **Decision**: Seller ownership checks must join `seller_profiles` and compare `sp.user_id` to the authenticated user. Public seller navigation should use `seller_profiles.slug`.
 - **Consequence**: Do not compare `orders.seller_id` directly to `req.user.user_id`. This prevents seller dashboards/order updates from failing when seller profile ids differ from user ids.
 - **Status**: Active
+
+## ADR-011: Auth Namespace Is Shared by NextAuth and main-service
+- **Context**: NextAuth and backend auth endpoints both live under `/api/auth`. A broad nginx catch-all can send backend register/login/reset/logout endpoints to the wrong service.
+- **Decision**: NextAuth owns only `session`, `csrf`, `signin`, `signout`, `callback`, `providers`, `error`, and `_log` subpaths. main-service owns register, login, wallet-login, oauth, refresh, logout, forgot-password, and reset-password.
+- **Consequence**: Production nginx must route these groups explicitly. Do not use `location ^~ /api/auth/` pointing all auth requests at the frontend unless the backend namespace is intentionally changed.
+- **Status**: Active
+
+## ADR-012: Browser Hardhat RPC Uses HTTPS Proxy
+- **Context**: The production site is HTTPS, while the raw Hardhat node can be exposed as plain HTTP on the VPS.
+- **Decision**: Browser and MetaMask configuration should use `https://kienai.id.vn/rpc/hardhat`; Docker-internal services should use `http://hardhat-node:8545`.
+- **Consequence**: `NEXT_PUBLIC_HARDHAT_RPC_URL` must be set before frontend build and should not use `http://103.20.96.79:8545` for production browser code. Direct IP RPC is infrastructure/debug only.
+- **Status**: Active
+
+## ADR-013: No Placeholder User-Facing UI
+- **Context**: Dead links, `href="#"`, toast-only coming-soon buttons, and clickable seller text without routes cause demos to look broken and can hide missing product logic.
+- **Decision**: Every clickable user-facing element must either navigate to an existing route, execute a real handler, or be visibly disabled with a Vietnamese explanation. Seller names should link to public seller storefronts when a slug is available.
+- **Consequence**: Agents must scan affected UI after adding features and list any missing routes/handlers instead of silently leaving placeholders.
+- **Status**: Active

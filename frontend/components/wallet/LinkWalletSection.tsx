@@ -24,7 +24,7 @@ export function LinkWalletSection() {
 
   const handleLinkWallet = async () => {
     if (!isConnected || !address) {
-      toast.error('Connect your wallet first');
+      toast.error('Vui lòng kết nối ví trước');
       return;
     }
     setLinking(true);
@@ -40,10 +40,10 @@ export function LinkWalletSection() {
       const signature = await signMessageAsync({ message });
       await authApi.linkWallet({ wallet_address: address, message, signature });
       setProfileWallet(address);
-      toast.success('Wallet linked. You can now receive crypto payments as a seller.');
+      toast.success('Đã liên kết ví. Bạn có thể nhận thanh toán crypto khi bán hàng.');
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg || 'Failed to link wallet');
+      toast.error(msg || 'Liên kết ví thất bại');
     } finally {
       setLinking(false);
     }
@@ -58,7 +58,7 @@ export function LinkWalletSection() {
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
             <Check className="w-5 h-5 text-emerald-400" />
           </div>
-          <h2 className="text-lg font-bold text-white">Wallet Linked</h2>
+          <h2 className="text-lg font-bold text-white">Đã liên kết ví</h2>
         </div>
         <p className="text-sm text-gray-400 mt-1 relative z-10">
           Địa chỉ nhận thanh toán: <span className="font-mono text-gray-300 font-medium bg-black/30 px-2 py-1 rounded select-all">{profileWallet.slice(0, 6)}…{profileWallet.slice(-4)}</span>
@@ -75,7 +75,7 @@ export function LinkWalletSection() {
           <div className="w-10 h-10 rounded-xl bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center">
             <Link2 className="w-5 h-5 text-[#f0b90b]" />
           </div>
-          <h2 className="text-lg font-bold text-white">Link wallet (for sellers)</h2>
+          <h2 className="text-lg font-bold text-white">Liên kết ví (cho người bán)</h2>
         </div>
         <p className="text-sm text-gray-400 mb-5 leading-relaxed">
           Người bán cần liên kết ví để nhận thanh toán bằng Crypto. Kết nối ví của bạn và ký xác nhận.

@@ -145,6 +145,10 @@ JWT_REFRESH_SECRET=...
 DOCKERHUB_USERNAME=kiendzpro
 INTERNAL_SERVICE_KEY=...         ← same value for both services
 NEXTAUTH_SECRET=...
+NEXTAUTH_URL=https://kienai.id.vn
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+HCAPTCHA_SECRET=...
 PAYPAL_CLIENT_ID=...
 PAYPAL_SECRET=...
 ESCROW_CONTRACT_LOCALHOST=0x5FbDB2315678afecb367f032d93F642f64180aa3
@@ -157,8 +161,8 @@ PAYMENT_INVOICE_RATE_LIMIT_MAX=10
 
 Nginx runs as system service proxying to Docker containers:
 - `/` → `http://127.0.0.1:3000` (frontend)
-- `/api/` (except `/api/payments`) → `http://127.0.0.1:3001/api/`
-- `/payment/` → `http://127.0.0.1:3002/`
+- `/api/` → `http://127.0.0.1:3001/api/` (main-service, with explicit NextAuth exceptions above it)
+- `/payment/` → `http://127.0.0.1:3002/` (payment-service; frontend base URL is `https://kienai.id.vn/payment`)
 - SSL cert: Let's Encrypt (auto-renew via certbot)
 
 Nginx config: `/etc/nginx/conf.d/kienai.conf`
@@ -166,13 +170,17 @@ Nginx config: `/etc/nginx/conf.d/kienai.conf`
 Full routing table:
 | External path | Container | Port |
 |---|---|---|
-| `/api/auth/*` | frontend (NextAuth) | 3000 |
-| `/api/payments/*` | payment-api | 3002 |
-| `/payment/*` | payment-api (legacy) | 3002 |
+| `/api/auth/session`, `/api/auth/csrf`, `/api/auth/signin`, `/api/auth/signout`, `/api/auth/callback/*`, `/api/auth/providers`, `/api/auth/error`, `/api/auth/_log` | frontend (NextAuth only) | 3000 |
+| `/api/auth/register`, `/api/auth/login`, `/api/auth/wallet-login`, `/api/auth/oauth`, `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/forgot-password`, `/api/auth/reset-password` | main-api | 3001 |
+| `/payment/*` | payment-api | 3002 |
 | `/rpc/hardhat` | hardhat-node | 8545 |
 | `/api/*` | main-api | 3001 |
 | `/*` | frontend (Next.js) | 3000 |
 | `:8545` (direct, if exposed) | hardhat-node | 8545 |
+
+**Auth routing rule:** never use a system-nginx catch-all like `location ^~ /api/auth/ { proxy_pass frontend; }`. That sends backend endpoints such as register, forgot-password, reset-password, wallet-login, oauth, refresh, and logout to NextAuth and causes confusing 404/405/403 production failures. Use the narrow NextAuth regex from `docker/nginx/nginx.conf` or move backend auth to a separate namespace before changing this.
+
+**Hardhat RPC rule:** public browser config must point to `https://kienai.id.vn/rpc/hardhat`. If `docker-compose.prod.yml` or VPS `.env` contains `NEXT_PUBLIC_HARDHAT_RPC_URL=http://103.20.96.79:8545`, fix it before building the frontend image; direct HTTP IP can be blocked by HTTPS mixed-content/CORS and is only acceptable for manual infrastructure debugging.
 
 **Health endpoints** (NOT `/api/health`):
 - main-api: `curl http://127.0.0.1:3001/health`
@@ -194,6 +202,9 @@ After deploying:
 - [ ] `curl -sf http://127.0.0.1:3001/health` on VPS  ← `/health` not `/api/health`
 - [ ] `curl -sf http://127.0.0.1:3002/health` on VPS
 - [ ] Check `https://kienai.id.vn` in browser
+- [ ] Verify auth routing from outside nginx: register/forgot/reset hit main-api; NextAuth session/callback hit frontend.
+- [ ] Verify Hardhat RPC from browser-safe URL: `curl -sf https://kienai.id.vn/rpc/hardhat` should reach the node and not require direct `http://103.20.96.79:8545`.
+- [ ] Verify login methods separately: email/password, Google OAuth, wallet SIWE, register, refresh after reload, and logout blacklist.
 
 ## Tricky Issues Learned
 
@@ -256,15 +267,18 @@ RABBITMQ_PASSWORD=<your-rabbitmq-password>
 JWT_SECRET=<min-32-chars>
 JWT_REFRESH_SECRET=<min-32-chars>
 NEXTAUTH_SECRET=<nextauth-secret>
+NEXTAUTH_URL=https://kienai.id.vn
 CLOUDINARY_CLOUD_NAME=deyjlti3v
 CLOUDINARY_API_KEY=<cloudinary-api-key>
 CLOUDINARY_API_SECRET=<cloudinary-api-secret>
 NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=deyjlti3v
 CLOUDINARY_EVIDENCE_PRESET=marketplace_evidence
+GOOGLE_CLIENT_ID=<google-oauth-client-id>
 GOOGLE_CLIENT_SECRET=<google-oauth-secret>
 FACEBOOK_CLIENT_SECRET=<facebook-secret>
 PAYPAL_SECRET=<paypal-secret>
 SMTP_PASSWORD=<gmail-app-password>
 HCAPTCHA_SECRET=<hcaptcha-secret>
 BLOCKCHAIN_PRIVATE_KEY=<wallet-private-key>
+NEXT_PUBLIC_HARDHAT_RPC_URL=https://kienai.id.vn/rpc/hardhat
 ```

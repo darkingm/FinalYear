@@ -35,6 +35,8 @@ paymentClient.get('/api/payments/crypto/status/:orderId')
 
 **Never** call `fetch()` directly — always use the pre-configured clients with auth interceptors.
 
+Exception: NextAuth local endpoints (`/api/auth/session`, `signIn`, `signOut`) are owned by Next.js and should use NextAuth helpers or a local same-origin request. Backend endpoints under `/api/auth/register`, `/api/auth/login`, `/api/auth/wallet-login`, `/api/auth/oauth`, `/api/auth/forgot-password`, `/api/auth/reset-password`, and `/api/auth/logout` must reach main-service through `apiClient` or server-side `serverApi`.
+
 ## Auth
 
 ```typescript
@@ -46,6 +48,14 @@ useEffect(() => {
   if (!authLoading && !isAuthenticated) router.push('/login');
 }, [isAuthenticated, authLoading]);
 ```
+
+Frontend auth rules:
+- Use `signIn()` / `signOut()` for NextAuth provider flows.
+- Register, forgot-password, reset-password, and backend logout are main-service endpoints; make sure production nginx does not send them to NextAuth.
+- Never put `INTERNAL_SERVICE_KEY` in `NEXT_PUBLIC_*` env vars or browser code. It is server-runtime only for NextAuth server-to-server calls.
+- Login CAPTCHA must be submitted to and verified by the server path that receives credentials. Checking `captchaToken` only in the browser is not sufficient.
+- Wallet/SIWE login and wallet linking must use the actual connected `chainId` from wagmi, not a hard-coded default when the wallet is already connected.
+- SIWE origin must match production canonical origin. If the site serves both apex and `www`, either canonical-redirect `www` or explicitly support both in backend validation.
 
 ## wagmi v2 Patterns
 
@@ -65,6 +75,15 @@ const orderId32 = keccak256(toBytes(order.internal_order_id));
 - Browser/MetaMask RPC should use `https://kienai.id.vn/rpc/hardhat` in production.
 - Local development can set `NEXT_PUBLIC_HARDHAT_RPC_URL=http://127.0.0.1:8545` in `frontend/.env.local`.
 - Checkout CTA should say `Tạo hóa đơn trên Hardhat`; avoid showing `VPS` on the primary purchase button.
+- Network diagnostics/admin/debug pages may mention VPS infrastructure when useful, but customer-facing purchase CTAs and product/order flows should use clearer labels such as `Hardhat`, `mạng test`, or `chain demo`.
+
+## Clickable UI Contract
+
+Every clickable element must have a real outcome:
+- Use `<Link>` only when the target route exists.
+- Use a `<button>` only with a real handler, or disable it with a clear Vietnamese explanation.
+- Do not leave `href="#"`, fake social links, placeholder support links, cursor-pointer text without navigation, or toast-only "coming soon" actions unless the control is visibly marked as unavailable.
+- Seller names in product cards, product detail, checkout, and order detail should link to the public seller storefront when `seller_slug` is available.
 
 ## Icon Rules
 

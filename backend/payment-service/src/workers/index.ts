@@ -3,6 +3,7 @@ import { PriceUpdaterWorker } from './price-updater.worker';
 import { InventoryCleanerWorker } from './inventory-cleaner.worker';
 import { PaymentOutboxWorker } from './payment-outbox.worker';
 import { StalePaymentExpiryWorker } from './stale-payment-expiry.worker';
+import { DepositIndexerWorker } from './deposit-indexer.worker';
 import { logger } from '../utils/logger';
 
 export function startWorkers() {
@@ -22,6 +23,9 @@ export function startWorkers() {
 
   const inventoryCleaner = new InventoryCleanerWorker();
   inventoryCleaner.start();
+
+  const depositIndexer = new DepositIndexerWorker();
+  depositIndexer.start();
 
   logger.info('All workers started successfully');
 }

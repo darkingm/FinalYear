@@ -113,6 +113,29 @@ headers: { 'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY }
 
 The `/api/payments/crypto/release` endpoint on payment-service uses `authenticateOrInternalKey` middleware — accepts admin JWT **or** internal key. Env var: `INTERNAL_SERVICE_KEY` must be the same value in main-service and payment-service. Never expose this key as a public `NEXT_PUBLIC_*` frontend variable.
 
+## Auth Routing and Login Ownership
+
+There are two different auth systems sharing the `/api/auth` prefix:
+
+| Path group | Owner | Notes |
+|---|---|---|
+| `/api/auth/session`, `/api/auth/csrf`, `/api/auth/signin`, `/api/auth/signout`, `/api/auth/callback/*`, `/api/auth/providers`, `/api/auth/error`, `/api/auth/_log` | Next.js frontend / NextAuth | Must route to port `3000` |
+| `/api/auth/register`, `/api/auth/login`, `/api/auth/wallet-login`, `/api/auth/oauth`, `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/forgot-password`, `/api/auth/reset-password` | main-service backend | Must route to port `3001` |
+
+Never configure nginx with `location ^~ /api/auth/` pointing all auth traffic to the frontend. It breaks backend registration, password reset, wallet login, OAuth handoff, refresh, and logout blacklist. Use a narrow regex for only the NextAuth endpoints or rename one namespace deliberately.
+
+Current login flows:
+- Email/password login uses NextAuth `CredentialsProvider`, which server-to-server posts to main-service `/api/auth/login`.
+- Google/Facebook OAuth uses NextAuth callbacks, then server-to-server posts to main-service `/api/auth/oauth` with `X-Internal-Service-Key`.
+- Wallet login uses SIWE-style signed messages through NextAuth `wallet`, then main-service `/api/auth/wallet-login`.
+- Register, forgot-password, reset-password, and backend logout are direct main-service endpoints from browser/client code.
+
+Security rules:
+- `INTERNAL_SERVICE_KEY` may exist in the Next.js server runtime for internal calls, but must never be exposed as `NEXT_PUBLIC_*` or used in browser code.
+- If login CAPTCHA is intended, enforcement must happen server-side on the path that actually receives credentials. UI-only CAPTCHA is not a security control.
+- If backend auth rate limiting skips internal Docker IPs for NextAuth server-to-server calls, add equivalent rate limiting at the NextAuth endpoint or forward/use the real client IP safely.
+- SIWE messages must use the connected chain ID and canonical frontend origin. Production should either redirect `www.kienai.id.vn` to `kienai.id.vn` or explicitly allow both origins.
+
 ## Database Migration System
 
 **NEVER edit `schema.sql` to add new columns/tables** — existing volumes won't pick it up.
@@ -176,6 +199,10 @@ VPS `103.20.96.79` is a low-resource production host with 2 CPU cores.
 | `NEXT_PUBLIC_HARDHAT_RPC_URL` | frontend | Production default is `https://kienai.id.vn/rpc/hardhat`; local dev can set `http://127.0.0.1:8545` |
 | `LOCALHOST_RPC_URL` | payment-service/contracts | Docker internal value should be `http://hardhat-node:8545` |
 | `PAYMENT_INVOICE_RATE_LIMIT_MAX` | payment-service | Optional override for invoice/session creation limit; default `10` per 5 minutes |
+| `NEXTAUTH_URL` | frontend | Production canonical URL should be `https://kienai.id.vn` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | frontend server runtime | Required for Google OAuth through NextAuth |
+| `HCAPTCHA_SECRET` | main-service | Required in production for register CAPTCHA verification |
+| `FRONTEND_URL` | main-service, payment-service | Canonical frontend origin; keep aligned with SIWE and CORS |
 
 ## Common Mistakes & Fixes
 
@@ -216,6 +243,16 @@ VPS `103.20.96.79` is a low-resource production host with 2 CPU cores.
 **Symptom:** Seller dashboard/order pages miss seller orders or seller cannot mark shipped/delivered.
 **Root cause:** Code compares `orders.seller_id` to authenticated `users.user_id`, but `orders.seller_id` stores `seller_profiles.seller_id`.
 **Fix:** Join `seller_profiles sp ON o.seller_id = sp.seller_id` and compare `sp.user_id` with the authenticated user.
+
+### 10. Auth routes work locally but fail in production
+**Symptom:** Register, forgot-password, reset-password, wallet login, OAuth handoff, refresh, or logout returns 404/405/403 behind nginx while NextAuth session still works.
+**Root cause:** System nginx routed all `/api/auth/*` to Next.js instead of routing only NextAuth-owned subpaths to the frontend.
+**Fix:** Keep the narrow NextAuth route list on port `3000`; route backend auth endpoints to main-service port `3001`.
+
+### 11. Hardhat RPC works locally but fails from HTTPS production UI
+**Symptom:** MetaMask/RPC fetch fails with CORS, mixed-content, or direct `http://103.20.96.79:8545` errors from `https://kienai.id.vn`.
+**Root cause:** Browser config used the direct HTTP VPS RPC instead of the HTTPS nginx proxy.
+**Fix:** Set `NEXT_PUBLIC_HARDHAT_RPC_URL=https://kienai.id.vn/rpc/hardhat` before building the frontend image. Keep `http://hardhat-node:8545` only for Docker-internal service calls.
 
 ## Key Files Reference
 

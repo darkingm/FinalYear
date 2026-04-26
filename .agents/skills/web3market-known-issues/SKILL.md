@@ -107,3 +107,33 @@ description: Use when debugging any bug or unexpected behavior in Web3Market —
 - **Root cause**: There are two valid release paths: frontend `buyerConfirmDelivery(orderId32)` and backend/admin `releasePayment(orderId32)`. Triggering both causes an invalid status/revert.
 - **Fix**: When frontend sends `completion_source:'buyer_onchain'` with `release_tx_hash`, main-service should store the hash and set `COMPLETED`; do not call payment-service `/release`.
 - **Date found**: 2026-04-25
+
+### 17. Backend auth endpoints fail behind production nginx
+- **Symptom**: Register, forgot-password, reset-password, wallet-login, oauth handoff, refresh, or logout returns 404/405/403 in production, while `/api/auth/session` still works.
+- **Root cause**: System nginx used a broad `location ^~ /api/auth/` and routed every auth request to Next.js/NextAuth. The backend also owns several `/api/auth/*` endpoints.
+- **Fix**: Route only NextAuth-owned subpaths (`session`, `csrf`, `signin`, `signout`, `callback`, `providers`, `error`, `_log`) to frontend; route backend auth endpoints to main-service.
+- **Date found**: 2026-04-26
+
+### 18. Login CAPTCHA is UI-only
+- **Symptom**: Login page asks for CAPTCHA, but a direct request to NextAuth credentials can still try passwords without a CAPTCHA token.
+- **Root cause**: The browser checks `captchaToken` before calling `signIn('credentials')`, but the token is not sent to the NextAuth credentials provider or verified by main-service `/api/auth/login`.
+- **Fix**: Pass the CAPTCHA token through the credentials flow and verify it server-side, or remove the login CAPTCHA UI and rely on rate limits. Do not treat client-only CAPTCHA as security.
+- **Date found**: 2026-04-26
+
+### 19. NextAuth credentials can hide the real client IP from backend rate limit
+- **Symptom**: Backend `authLimiter` appears configured, but credential login attempts through NextAuth may be counted as internal server-to-server traffic and skipped.
+- **Root cause**: NextAuth calls main-service from the frontend container; internal Docker IP skip logic can bypass backend IP-based rate limiting for public login attempts.
+- **Fix**: Add rate limiting at the NextAuth credentials endpoint or forward/use a trustworthy original client IP in limiter keys. Keep internal-key endpoints protected separately.
+- **Date found**: 2026-04-26
+
+### 20. SIWE origin mismatch on `www`
+- **Symptom**: Wallet login/linking works on `https://kienai.id.vn` but fails with `Invalid SIWE origin` on `https://www.kienai.id.vn`.
+- **Root cause**: Backend compares signed message URI to `FRONTEND_URL`; production serves both apex and `www` unless nginx redirects one canonical host.
+- **Fix**: Canonical-redirect `www` to apex or allow both origins explicitly in SIWE validation.
+- **Date found**: 2026-04-26
+
+### 21. Hardhat RPC direct HTTP IP breaks HTTPS frontend
+- **Symptom**: MetaMask/RPC fetch fails with mixed-content, CORS, or direct `http://103.20.96.79:8545` errors from production.
+- **Root cause**: Browser-facing `NEXT_PUBLIC_HARDHAT_RPC_URL` points to direct HTTP VPS RPC instead of the HTTPS nginx proxy.
+- **Fix**: Build/deploy frontend with `NEXT_PUBLIC_HARDHAT_RPC_URL=https://kienai.id.vn/rpc/hardhat`. Keep `http://hardhat-node:8545` only for Docker-internal services.
+- **Date found**: 2026-04-26

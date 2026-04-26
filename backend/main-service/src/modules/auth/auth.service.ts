@@ -148,10 +148,43 @@ export class AuthService {
     if (existing.rows.length > 0 && existing.rows[0].user_id !== userId) {
       throw new AppError('This wallet is already linked to another account', 409);
     }
+    // Also check the multi-wallet table — same wallet may have been linked there only.
+    const existingMulti = await query(
+      `SELECT user_id FROM user_wallets WHERE chain_type = 'evm' AND LOWER(address) = $1 AND user_id <> $2 LIMIT 1`,
+      [normalized, userId]
+    );
+    if (existingMulti.rows.length > 0) {
+      throw new AppError('This wallet is already linked to another account', 409);
+    }
     await query(
       'UPDATE users SET wallet_address = $1, updated_at = NOW() WHERE user_id = $2',
       [walletAddress, userId]
     );
+
+    // Sync into user_wallets so the multi-wallet UI (`/wallet`) sees this wallet.
+    // Use the global EVM partial unique index from migration 020.
+    // If this is the first wallet of the user, also mark it primary.
+    const countRes = await query(
+      `SELECT COUNT(*)::int AS count FROM user_wallets WHERE user_id = $1 AND chain_type = 'evm'`,
+      [userId]
+    );
+    const isFirst = countRes.rows[0].count === 0;
+    if (isFirst) {
+      await query(
+        `UPDATE user_wallets SET is_primary = FALSE WHERE user_id = $1`,
+        [userId]
+      );
+    }
+    await query(
+      `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary, is_verified, verified_at)
+       VALUES ($1, 'evm', NULL, $2, $3, $4, TRUE, NOW())
+       ON CONFLICT (LOWER(address)) WHERE chain_type = 'evm' DO UPDATE
+       SET is_verified = TRUE, verified_at = NOW(), updated_at = NOW(),
+           is_primary = CASE WHEN user_wallets.user_id = EXCLUDED.user_id THEN GREATEST(user_wallets.is_primary::int, EXCLUDED.is_primary::int)::boolean
+                              ELSE user_wallets.is_primary END`,
+      [userId, normalized, 'MetaMask', isFirst]
+    );
+
     const result = await query(
       'SELECT user_id, email, username, wallet_address, avatar_url, role, status, created_at FROM users WHERE user_id = $1',
       [userId]
