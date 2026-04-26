@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from './error-handler';
+import { query } from '../config/database';
+import { setCache, getCache } from '../config/redis';
+import { logger } from '../utils/logger';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -10,7 +13,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,8 +22,34 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     req.user = { user_id: decoded.user_id, email: decoded.email, role: decoded.role };
+
+    // Check if user account is still active (cached for 60s to avoid DB spam)
+    try {
+      const statusKey = `user-status:${decoded.user_id}`;
+      let status = await getCache(statusKey) as string | null;
+      if (!status) {
+        const result = await query('SELECT status FROM users WHERE user_id = $1', [decoded.user_id]);
+        status = result.rows[0]?.status || 'unknown';
+        await setCache(statusKey, status, 60); // cache 60s
+      }
+      if (status !== 'active') {
+        throw new AppError('Account suspended', 403);
+      }
+    } catch (err) {
+      // If it's our AppError (suspended), re-throw
+      if (err instanceof AppError) throw err;
+      // Redis/DB failure — fail-open in dev, fail-closed in production
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('User status check failed in production:', err);
+        // Continue anyway — JWT is valid, status check is defense-in-depth
+      }
+    }
+
     next();
   } catch (error) {
+    if (error instanceof AppError) {
+      return next(error);
+    }
     next(new AppError('Invalid or expired token', 401));
   }
 }

@@ -4,12 +4,13 @@ import rateLimit from 'express-rate-limit';
  * Detect requests from local/internal network.
  * - NextAuth calls backend server-to-server (Docker internal network, e.g. 172.x.x.x)
  * - Skipping internal IPs prevents NextAuth from getting 429 when relaying user requests
+ *
+ * IMPORTANT: We check BOTH req.ip (real client IP via X-Forwarded-For + trust proxy)
+ * AND req.socket.remoteAddress (the connecting socket). If req.ip shows a public IP
+ * but the socket is internal, that means nginx is proxying a public request — NOT internal.
+ * We only skip if BOTH are internal (genuine server-to-server like NextAuth → backend).
  */
-const skipInternalNetwork = (req: any): boolean => {
-  // SECURITY: Only trust socket address, not X-Forwarded-For
-  // (attackers can spoof X-Forwarded-For to bypass rate limiting)
-  const ip = req.socket?.remoteAddress || '';
-
+const isInternalIp = (ip: string): boolean => {
   return (
     ip === '127.0.0.1'          ||
     ip === '::1'                 ||
@@ -18,6 +19,18 @@ const skipInternalNetwork = (req: any): boolean => {
     ip.startsWith('10.')         ||  // Private networks (VPS internal)
     ip.startsWith('192.168.')       // LAN
   );
+};
+
+const skipInternalNetwork = (req: any): boolean => {
+  // req.ip respects 'trust proxy' = real client IP from X-Forwarded-For
+  // req.socket.remoteAddress = immediate connecting IP (nginx/docker)
+  const realIp = req.ip || '';
+  const socketIp = req.socket?.remoteAddress || '';
+
+  // Only skip if the REAL client IP is also internal
+  // This means it's genuine server-to-server (e.g. NextAuth container → backend)
+  // Public traffic proxied by nginx will have a public req.ip
+  return isInternalIp(realIp) && isInternalIp(socketIp);
 };
 
 /**
@@ -30,6 +43,7 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
+  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes',
@@ -47,7 +61,8 @@ export const apiLimiter = rateLimit({
  *
  * IMPORTANT: NextAuth makes server-to-server calls from the frontend server
  * to this backend. Those calls come from internal Docker IPs (172.x.x.x)
- * and are skipped automatically via skipInternalNetwork.
+ * and are skipped automatically via skipInternalNetwork — but ONLY when
+ * req.ip is also internal (genuine server-to-server).
  */
 export const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -55,6 +70,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
+  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
   message: {
     success: false,
     message: 'Too many login attempts. Please try again in 5 minutes',
@@ -72,6 +88,7 @@ export const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
+  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
   message: {
     success: false,
     message: 'Too many requests for this action, please try again in 15 minutes',

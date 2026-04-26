@@ -14,21 +14,33 @@ export class AuthService {
     username?: string;
     wallet_address?: string;
   }) {
+    // Normalize email & username to prevent case-sensitive duplicates
+    const normalizedEmail = data.email.toLowerCase().trim();
+    const normalizedUsername = data.username?.trim();
+
     // Check if email already exists
-    const existing = await query('SELECT * FROM users WHERE email = $1', [data.email]);
+    const existing = await query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
     if (existing.rows.length > 0) {
       throw new AppError('Email already registered', 409);
+    }
+
+    // Check if username already exists (case-insensitive)
+    if (normalizedUsername) {
+      const existingUsername = await query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [normalizedUsername]);
+      if (existingUsername.rows.length > 0) {
+        throw new AppError('Username already taken', 409);
+      }
     }
 
     // Hash password
     const password_hash = await bcrypt.hash(data.password, 10);
 
-    // Create user
+    // Create user — store normalized email
     const result = await query(
       `INSERT INTO users (email, password_hash, username, wallet_address, role, status)
        VALUES ($1, $2, $3, $4, 'buyer', 'active')
        RETURNING user_id, email, username, wallet_address, role, status, created_at`,
-      [data.email, password_hash, data.username, data.wallet_address]
+      [normalizedEmail, password_hash, normalizedUsername, data.wallet_address]
     );
 
     const user = result.rows[0];
@@ -43,10 +55,12 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
-    // Find user by email or username
+    // Normalize input for case-insensitive lookup
+    const normalizedInput = email.toLowerCase().trim();
+    // Find user by email or username (case-insensitive)
     const result = await query(
-      'SELECT * FROM users WHERE email = $1 OR username = $1',
-      [email]
+      'SELECT * FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $1',
+      [normalizedInput]
     );
 
     if (result.rows.length === 0) {
@@ -216,6 +230,14 @@ export class AuthService {
     }
 
     const user = result.rows[0];
+
+    // Block suspended users from refreshing tokens
+    if (user.status !== 'active') {
+      await this.blacklistToken(refreshToken);
+      logger.warn('Suspended user attempted token refresh', { user_id: user.user_id, status: user.status });
+      throw new AppError('Account suspended', 403);
+    }
+
     const tokens = this.generateTokens(user);
 
     await this.blacklistToken(refreshToken);
@@ -301,7 +323,17 @@ export class AuthService {
 
     // Validate chain ID against allowed chains
     if (chainIdMatch) {
-      const allowedChains = ['31337', '80002', '137', '1']; // Hardhat, Amoy, Polygon, Mainnet
+      const allowedChains = [
+        '31337',    // Hardhat local
+        '1',        // Ethereum Mainnet
+        '137',      // Polygon Mainnet
+        '80002',    // Polygon Amoy Testnet
+        '56',       // BSC Mainnet
+        '97',       // BSC Testnet
+        '84532',    // Base Sepolia
+        '421614',   // Arbitrum Sepolia
+        '11155111', // Sepolia
+      ];
       if (!allowedChains.includes(chainIdMatch[1])) {
         throw new AppError('Unsupported chain ID in signature', 400);
       }

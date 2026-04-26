@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount, useSignMessage, useChainId } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api/auth';
@@ -10,6 +10,7 @@ import { Link2, Check } from 'lucide-react';
 
 export function LinkWalletSection() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const { signMessageAsync } = useSignMessage();
   const [profileWallet, setProfileWallet] = useState<string | null | undefined>(undefined);
   const [linking, setLinking] = useState(false);
@@ -28,7 +29,14 @@ export function LinkWalletSection() {
     }
     setLinking(true);
     try {
-      const message = `Link this wallet to your Crypto Marketplace account\n\nNonce: ${Date.now()}`;
+      const domain = window.location.host;
+      const origin = window.location.origin;
+      const nonce = crypto.randomUUID().replace(/-/g, '');
+      const issuedAt = new Date().toISOString();
+      const expiration = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+      const message = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nLink wallet to Web3Market account\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId || 1}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expiration}`;
+
       const signature = await signMessageAsync({ message });
       await authApi.linkWallet({ wallet_address: address, message, signature });
       setProfileWallet(address);
