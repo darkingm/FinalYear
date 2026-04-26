@@ -236,7 +236,7 @@ export default function LoginClientPage() {
   const lastNoticeReasonRef = useRef<string | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || '';
 
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
   const ERROR_MESSAGES: Record<string, string> = {
@@ -327,10 +327,10 @@ export default function LoginClientPage() {
       // Build SIWE message (must match backend's buildSiweMessage format)
       const domain = typeof window !== 'undefined' ? window.location.host : 'localhost';
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const chainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || '31337';
+      const walletChainId = chainId || parseInt(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || '31337');
       const issuedAt = new Date().toISOString();
       const expirationTime = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      const message = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nSign in to Crypto Marketplace\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expirationTime}`;
+      const message = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nSign in to Crypto Marketplace\n\nURI: ${origin}\nVersion: 1\nChain ID: ${walletChainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expirationTime}`;
 
       // Sign
       const signature = await signMessageAsync({ message });

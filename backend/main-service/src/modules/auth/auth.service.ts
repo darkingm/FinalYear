@@ -167,6 +167,7 @@ export class AuthService {
     image?: string;
   }) {
     const idField = data.provider === 'google' ? 'google_id' : 'facebook_id';
+    const normalizedEmail = data.email.toLowerCase().trim();
 
     // Find user by provider ID
     let result = await query(
@@ -176,24 +177,24 @@ export class AuthService {
 
     let user;
     if (result.rows.length === 0) {
-      // Check if email exists
-      result = await query('SELECT * FROM users WHERE email = $1', [data.email]);
+      // Check if email exists (case-insensitive, consistent with register/login)
+      result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
 
       if (result.rows.length > 0) {
         // Link OAuth account to existing user
         await query(
-          `UPDATE users SET ${idField} = $1, avatar_url = $2 WHERE email = $3`,
-          [data.providerId, data.image, data.email]
+          `UPDATE users SET ${idField} = $1, avatar_url = $2 WHERE LOWER(email) = $3`,
+          [data.providerId, data.image, normalizedEmail]
         );
-        result = await query('SELECT * FROM users WHERE email = $1', [data.email]);
+        result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
         user = result.rows[0];
       } else {
-        // Create new user
+        // Create new user — store normalized email
         result = await query(
           `INSERT INTO users (email, ${idField}, username, avatar_url, role, status)
            VALUES ($1, $2, $3, $4, 'buyer', 'active')
            RETURNING *`,
-          [data.email, data.providerId, data.name, data.image]
+          [normalizedEmail, data.providerId, data.name, data.image]
         );
         user = result.rows[0];
       }
