@@ -74,7 +74,7 @@ function LeftPanel() {
     <div className="hidden lg:flex w-[58%] relative overflow-hidden flex-col bg-black/40 dark:bg-black/40 backdrop-blur-[2px]">
       {/* Grid overlay */}
       <div className="absolute inset-0" style={{
-        backgroundImage: 'linear-gradient(rgba(240,185,11,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(240,185,11,0.04) 1px, transparent 1px)',
+        backgroundImage: 'linear-gradient(rgba(240,185,11,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(240,185,11,0.07) 1px, transparent 1px)',
         backgroundSize: '40px 40px',
       }} />
 
@@ -381,6 +381,11 @@ export default function LoginClientPage() {
 
         {/* ── Right panel ── */}
         <div className="w-full lg:w-[42%] flex items-center justify-center relative overflow-hidden overflow-y-auto px-4 py-8 min-h-[calc(100vh-4rem)]">
+          {/* Grid overlay — matches left panel */}
+          <div className="absolute inset-0 pointer-events-none" style={{
+            backgroundImage: 'linear-gradient(rgba(240,185,11,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(240,185,11,0.05) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }} />
           {/* Mobile background glows */}
           <div className="lg:hidden absolute inset-0">
             <div className="absolute top-[-10%] right-[-10%] w-72 h-72 bg-[#f0b90b]/8 rounded-full blur-[100px]" />

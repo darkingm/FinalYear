@@ -83,7 +83,7 @@ function LeftPanel() {
     <div className="hidden lg:flex w-[55%] relative overflow-hidden flex-col bg-black/40 backdrop-blur-[2px]">
       {/* Grid */}
       <div className="absolute inset-0" style={{
-        backgroundImage: 'linear-gradient(rgba(99,126,234,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(99,126,234,0.04) 1px, transparent 1px)',
+        backgroundImage: 'linear-gradient(rgba(99,126,234,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(99,126,234,0.07) 1px, transparent 1px)',
         backgroundSize: '40px 40px',
       }} />
       {/* Glows */}
@@ -269,6 +269,11 @@ export default function RegisterPage() {
 
         {/* Right panel */}
         <div className="w-full lg:w-[45%] flex items-center justify-center relative overflow-y-auto px-4 py-6 min-h-[calc(100vh-4rem)]">
+          {/* Grid overlay — matches left panel */}
+          <div className="absolute inset-0 pointer-events-none" style={{
+            backgroundImage: 'linear-gradient(rgba(99,126,234,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(99,126,234,0.05) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }} />
           <div className="lg:hidden absolute inset-0">
             <div className="absolute top-0 right-0 w-72 h-72 bg-[#9945ff]/8 rounded-full blur-[100px]" />
             <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#f0b90b]/6 rounded-full blur-[100px]" />
