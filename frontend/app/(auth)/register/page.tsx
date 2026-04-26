@@ -235,7 +235,21 @@ export default function RegisterPage() {
       toast.success('Tạo tài khoản thành công! Đang chuyển hướng...');
       router.push('/login');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Đăng ký thất bại');
+      const resData = err.response?.data;
+      const message = resData?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+      const code = resData?.code;
+
+      toast.error(message);
+
+      // Log error code for debugging (safe — doesn't expose server internals)
+      if (code) {
+        console.warn(`[Register] ${code}: ${message}`);
+      }
+
+      // Reset captcha so user can retry without refreshing
+      if (code?.startsWith('ERR_CAPTCHA')) {
+        setCaptchaToken(null);
+      }
     } finally {
       setIsLoading(false);
     }

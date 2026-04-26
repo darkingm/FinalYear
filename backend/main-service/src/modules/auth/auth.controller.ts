@@ -18,9 +18,11 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
     // Validate captcha
     if (!captcha) {
+      logger.warn('Register attempt without captcha token', { email });
       return res.status(400).json({
         success: false,
-        message: 'CAPTCHA is required',
+        message: 'Vui lòng hoàn thành xác minh CAPTCHA',
+        code: 'ERR_CAPTCHA_REQUIRED',
       });
     }
 
@@ -33,39 +35,61 @@ export async function register(req: Request, res: Response, next: NextFunction) 
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `secret=${hcaptchaSecret}&response=${captcha}`,
         });
-        const verifyData = await verifyRes.json() as { success: boolean };
+        const verifyData = await verifyRes.json() as { success: boolean; 'error-codes'?: string[] };
         if (!verifyData.success) {
+          const errorCodes = verifyData['error-codes'] || [];
+          logger.warn('hCaptcha verification failed', {
+            email,
+            errorCodes,
+            tokenLen: captcha?.length,
+          });
+
+          // Provide user-friendly message based on error type
+          let userMessage = 'Xác minh CAPTCHA thất bại. Vui lòng thử lại.';
+          if (errorCodes.includes('invalid-or-already-seen-response')) {
+            userMessage = 'CAPTCHA đã hết hạn hoặc đã sử dụng. Vui lòng làm mới và thử lại.';
+          } else if (errorCodes.includes('invalid-input-response')) {
+            userMessage = 'CAPTCHA không hợp lệ. Vui lòng thử lại.';
+          } else if (errorCodes.includes('sitekey-secret-mismatch')) {
+            userMessage = 'Lỗi cấu hình CAPTCHA. Vui lòng liên hệ hỗ trợ.';
+            logger.error('CRITICAL: hCaptcha sitekey-secret mismatch — check HCAPTCHA_SECRET and NEXT_PUBLIC_HCAPTCHA_SITEKEY');
+          }
+
           return res.status(400).json({
             success: false,
-            message: 'CAPTCHA verification failed',
+            message: userMessage,
+            code: 'ERR_CAPTCHA_FAILED',
           });
         }
       } catch (err) {
-        logger.error('hCaptcha verification error:', err);
+        logger.error('hCaptcha API unreachable:', err);
         return res.status(503).json({
           success: false,
-          message: 'CAPTCHA service unavailable. Please try again.',
+          message: 'Dịch vụ xác minh CAPTCHA tạm thời không khả dụng. Vui lòng thử lại sau.',
+          code: 'ERR_CAPTCHA_SERVICE',
         });
       }
     } else {
       // hCaptcha secret not configured — block in production
       if (process.env.NODE_ENV === 'production') {
+        logger.error('HCAPTCHA_SECRET not configured in production!');
         return res.status(500).json({
           success: false,
-          message: 'CAPTCHA not configured on server',
+          message: 'Lỗi cấu hình server. Vui lòng liên hệ hỗ trợ.',
+          code: 'ERR_CAPTCHA_CONFIG',
         });
       }
     }
 
     // Validate input fields
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ success: false, message: 'Invalid email format' });
+      return res.status(400).json({ success: false, message: 'Email không hợp lệ', code: 'ERR_INVALID_EMAIL' });
     }
     if (!password || password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters with uppercase, lowercase, and number' });
+      return res.status(400).json({ success: false, message: 'Mật khẩu phải ít nhất 8 ký tự gồm chữ hoa, chữ thường và số', code: 'ERR_WEAK_PASSWORD' });
     }
     if (username && (username.length < 3 || username.length > 30)) {
-      return res.status(400).json({ success: false, message: 'Username must be 3-30 characters' });
+      return res.status(400).json({ success: false, message: 'Tên người dùng phải từ 3-30 ký tự', code: 'ERR_INVALID_USERNAME' });
     }
 
     const result = await authService.register({
@@ -75,6 +99,8 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       wallet_address,
     });
 
+    logger.info('User registered successfully', { email, username });
+
     res.cookie('refreshToken', result.refreshToken, cookieOptions);
     res.status(201).json({
       success: true,
@@ -82,7 +108,15 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       accessToken: result.accessToken,
     });
   } catch (error: any) {
-    logger.error('Register error:', error);
+    logger.error('Register error:', { message: error.message, code: error.statusCode, email: req.body?.email });
+    // Don't expose internal errors — pass safe message
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        code: 'ERR_REGISTER',
+      });
+    }
     next(error);
   }
 }
