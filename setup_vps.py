@@ -26,7 +26,7 @@ env_template = (
     "NEXTAUTH_URL=https://kienai.id.vn\n"
     "NEXTAUTH_SECRET=CHANGE_ME\n"
     "\n"
-    "DOCKERHUB_USERNAME=kiendzpro\n"
+    "DOCKERHUB_USERNAME=kaitojpla\n"
     "\n"
     "GOOGLE_CLIENT_ID=CHANGE_ME\n"
     "GOOGLE_CLIENT_SECRET=CHANGE_ME\n"

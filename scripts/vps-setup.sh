@@ -25,7 +25,7 @@ add_if_missing() {
   fi
 }
 
-add_if_missing "DOCKERHUB_USERNAME"       "kiendzpro"
+add_if_missing "DOCKERHUB_USERNAME"       "kaitojpla"
 add_if_missing "INTERNAL_SERVICE_KEY"     "FILL_IN_YOUR_SECRET_HERE"
 add_if_missing "PAYMENT_SERVICE_URL"      "http://payment-api:3002"
 add_if_missing "REDIS_PASSWORD"           "FILL_IN_YOUR_REDIS_PASSWORD"

@@ -16,12 +16,12 @@ description: Use when deploying Web3Market to VPS (103.20.96.79), building Docke
 **How it works:**
 1. Make and verify code in local workspace.
 2. Build/test locally or via GitHub Actions as a build worker.
-3. Push pre-built Docker images to Docker Hub (`kiendzpro/*`) if images changed.
+3. Push pre-built Docker images to Docker Hub (`kaitojpla/*`) if images changed.
 4. On VPS: only copy lightweight config/migrations if needed, `docker pull`, run lightweight DB migrations, set env, restart containers, and read logs/health checks.
 
 ```bash
 # ✅ CORRECT on VPS: pull pre-built images and restart
-docker pull kiendzpro/marketplace-frontend:latest
+docker pull kaitojpla/marketplace-frontend:latest
 docker compose -f docker-compose.prod.yml --env-file .env up -d frontend
 
 # ❌ WRONG on VPS: heavy jobs
@@ -58,15 +58,15 @@ docker exec marketplace-postgres psql -U postgres -d marketplace_db \
   -c "SELECT version, name, applied_at FROM schema_migrations ORDER BY version;"
 ```
 
-## Image Names (Docker Hub: `kiendzpro/`)
+## Image Names (Docker Hub: `kaitojpla/`)
 
 | Service | Image |
 |---|---|
-| main-api | `kiendzpro/marketplace-main-api:latest` |
-| payment-api | `kiendzpro/marketplace-payment-api:latest` |
-| frontend | `kiendzpro/marketplace-frontend:latest` |
-| ai-service | `kiendzpro/marketplace-ai-service:latest` |
-| db-migrator | `kiendzpro/marketplace-db-migrator:latest` |
+| main-api | `kaitojpla/marketplace-main-api:latest` |
+| payment-api | `kaitojpla/marketplace-payment-api:latest` |
+| frontend | `kaitojpla/marketplace-frontend:latest` |
+| ai-service | `kaitojpla/marketplace-ai-service:latest` |
+| db-migrator | `kaitojpla/marketplace-db-migrator:latest` |
 
 ## Dockerfile Locations
 
@@ -142,7 +142,7 @@ POSTGRES_USER=postgres
 POSTGRES_DB=marketplace_db
 JWT_SECRET=...
 JWT_REFRESH_SECRET=...
-DOCKERHUB_USERNAME=kiendzpro
+DOCKERHUB_USERNAME=kaitojpla
 INTERNAL_SERVICE_KEY=...         ← same value for both services
 NEXTAUTH_SECRET=...
 NEXTAUTH_URL=https://kienai.id.vn
@@ -258,7 +258,7 @@ docker compose ... up -d --no-deps main-api payment-api frontend
 
 ### 5. VPS .env minimum required keys
 ```env
-DOCKERHUB_USERNAME=kiendzpro
+DOCKERHUB_USERNAME=kaitojpla
 INTERNAL_SERVICE_KEY=<your-secret>   # CRITICAL — must match in both services
 PAYMENT_SERVICE_URL=http://payment-api:3002
 POSTGRES_PASSWORD=<your-db-password>

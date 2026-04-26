@@ -22,7 +22,7 @@ set -e
 VPS_HOST="103.20.96.79"
 VPS_USER="root"
 VPS_PROJECT_DIR="/root/services/FinalYear"
-DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kiendzpro}"
+DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kaitojpla}"
 COMPOSE_FILE="docker/docker-compose.prod.yml"
 TAG_ENV_FILE=".image-tags.env"
 

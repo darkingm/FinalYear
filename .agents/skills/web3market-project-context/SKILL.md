@@ -14,7 +14,7 @@ description: Use when starting any task in the Web3Market FYP project (kienai.id
 | Payment Backend | Node.js 22 service, connects to both `marketplace_db` AND `payment_db` |
 | Smart Contracts | Solidity (Hardhat), EscrowCore.sol, CreditScoreSBT.sol |
 | AI Service | Python (FastAPI) |
-| Deploy | Docker Compose on VPS `103.20.96.79` — images built locally or by GitHub Actions, pushed to Docker Hub (`kiendzpro/`), VPS only pulls/restarts |
+| Deploy | Docker Compose on VPS `103.20.96.79` — images built locally or by GitHub Actions, pushed to Docker Hub (`kaitojpla/`), VPS only pulls/restarts |
 | Domain | `https://kienai.id.vn` (Nginx reverse proxy → Docker containers) |
 
 ## Project Structure

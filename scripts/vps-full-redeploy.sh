@@ -9,11 +9,11 @@ COMPOSE_DIR=/root/services/FinalYear/docker
 ENV_FILE="$COMPOSE_DIR/.env"
 TAG_ENV_FILE="$COMPOSE_DIR/.image-tags.env"
 PROJ=FinalYear
-DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kiendzpro}"
+DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kaitojpla}"
 
 if [ -f "$ENV_FILE" ]; then
   DOCKERHUB_USERNAME="$(grep '^DOCKERHUB_USERNAME=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
-  DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kiendzpro}"
+  DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME:-kaitojpla}"
 fi
 
 resolve_tag() {

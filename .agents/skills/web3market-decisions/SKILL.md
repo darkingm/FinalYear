@@ -39,7 +39,7 @@ description: Use when making architectural decisions or modifying core infrastru
 
 ## ADR-006: Docker Deploy Pipeline (Local build → Docker Hub → VPS pull)
 - **Context**: VPS has limited resources for building. Need reproducible deploys.
-- **Decision**: Build images locally, push to Docker Hub (`kiendzpro/`), VPS pulls and restarts via `scripts/deploy.sh`
+- **Decision**: Build images locally, push to Docker Hub (`kaitojpla/`), VPS pulls and restarts via `scripts/deploy.sh`
 - **Consequence**: Must build on same architecture or use multi-platform builds. Deploy order: postgres → db-migrator → main-api + payment-api → frontend.
 - **Status**: Active
 

@@ -28,9 +28,9 @@ DO_PULL=${1:-""}
 
 if [ "$DO_PULL" = "pull" ]; then
   echo "=== Pulling latest images ==="
-  docker pull kiendzpro/marketplace-frontend:$TAG &
-  docker pull kiendzpro/marketplace-main-api:$TAG &
-  docker pull kiendzpro/marketplace-payment-api:$TAG &
+  docker pull kaitojpla/marketplace-frontend:$TAG &
+  docker pull kaitojpla/marketplace-main-api:$TAG &
+  docker pull kaitojpla/marketplace-payment-api:$TAG &
   wait
   echo "=== Pull complete ==="
 fi
@@ -64,7 +64,7 @@ docker run -d --name marketplace-main-api --network "$NETWORK" \
   -e INTERNAL_SERVICE_KEY="${INTERNAL_SERVICE_KEY}" \
   -e PAYMENT_SERVICE_URL="http://marketplace-payment-api:3002" \
   -p 127.0.0.1:3001:3001 --restart unless-stopped \
-  kiendzpro/marketplace-main-api:$TAG
+  kaitojpla/marketplace-main-api:$TAG
 
 echo "=== [2/3] Restarting payment-api ==="
 docker rm -f marketplace-payment-api 2>/dev/null || true
@@ -86,7 +86,7 @@ docker run -d --name marketplace-payment-api --network "$NETWORK" \
   -e BLOCKCHAIN_PRIVATE_KEY="${BLOCKCHAIN_PRIVATE_KEY}" \
   -e FRONTEND_URL=https://kienai.id.vn \
   -p 127.0.0.1:3002:3002 --restart unless-stopped \
-  kiendzpro/marketplace-payment-api:$TAG
+  kaitojpla/marketplace-payment-api:$TAG
 
 echo "=== [3/3] Restarting frontend ==="
 docker rm -f marketplace-frontend 2>/dev/null || true
@@ -106,7 +106,7 @@ docker run -d --name marketplace-frontend --network "$NETWORK" \
   -e NEXT_PUBLIC_POLYGON_RPC=https://polygon.drpc.org \
   -e NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME="${NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME:-${CLOUDINARY_CLOUD_NAME}}" \
   -p 127.0.0.1:3000:3000 --restart unless-stopped \
-  kiendzpro/marketplace-frontend:$TAG
+  kaitojpla/marketplace-frontend:$TAG
 
 echo "=== Waiting 10s for init ==="
 sleep 10
