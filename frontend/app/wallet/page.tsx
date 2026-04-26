@@ -17,10 +17,12 @@ import {
   Wallet, Copy, QrCode, Link2, Trash2, Star,
   ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle,
   AlertCircle, Loader2, Shield, ArrowDownToLine, ExternalLink,
-  Plus, Info, Zap,
+  Plus, Info, Zap, ShieldCheck, ChevronRight,
 } from 'lucide-react';
+import Link from 'next/link';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 import { NetworkDiagnostics } from '@/components/web3/NetworkDiagnostics';
+import { CHAIN_META } from '@/lib/web3/config';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface UserWallet {
@@ -43,6 +45,22 @@ interface Deposit {
   chain_name: string;
   status: 'pending' | 'confirmed' | 'failed';
   created_at: string;
+}
+
+interface CryptoOrderRow {
+  order_id: number;
+  internal_order_id: string;
+  product_name: string;
+  status: string;
+  payment_method: string | null;
+  chain_id: number | null;
+  escrow_contract: string | null;
+  tx_hash: string | null;
+  token_symbol: string | null;
+  amount_token: string | number | null;
+  created_at: string;
+  buyer_id: number;
+  seller_id: number;
 }
 
 /* ─── Testnet network definitions ────────────────────────────────────────── */
@@ -99,7 +117,9 @@ export default function WalletPage() {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qr' | 'history'>('qr');
+  const [activeTab, setActiveTab] = useState<'qr' | 'history' | 'escrow'>('qr');
+  const [cryptoOrders, setCryptoOrders] = useState<CryptoOrderRow[]>([]);
+  const [cryptoOrdersLoading, setCryptoOrdersLoading] = useState(false);
   const [selectedQRWallet, setSelectedQRWallet] = useState<UserWallet | null>(null);
   const [expandedNetwork, setExpandedNetwork] = useState<number | null>(31337);
 
@@ -138,6 +158,28 @@ export default function WalletPage() {
   }, [isAuthenticated]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  /* ─── Load crypto orders for escrow tab ──────────────────────────────── */
+  const fetchCryptoOrders = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setCryptoOrdersLoading(true);
+    try {
+      const res = await apiClient.get('/api/orders', { params: { limit: 50 } });
+      const raw = res.data;
+      const list: CryptoOrderRow[] = Array.isArray(raw?.orders) ? raw.orders : [];
+      setCryptoOrders(
+        list.filter(o => o.payment_method === 'crypto' && o.escrow_contract && o.internal_order_id)
+      );
+    } catch {
+      /* silent */
+    } finally {
+      setCryptoOrdersLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (activeTab === 'escrow') fetchCryptoOrders();
+  }, [activeTab, fetchCryptoOrders]);
 
   /* ─── Detect MetaMask account switch ───────────────────────────────── */
   const prevAddrRef = useRef<string | undefined>(undefined);
@@ -322,7 +364,7 @@ export default function WalletPage() {
                     {wallets.map(w => (
                       <div
                         key={w.wallet_db_id}
-                        onClick={() => { setSelectedQRWallet(w); setActiveTab('qr'); }}
+                        onClick={() => { setSelectedQRWallet(w); setActiveTab('qr' as const); }}
                         className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${qrWallet?.wallet_db_id === w.wallet_db_id
                           ? 'border-[#f0b90b]/60 bg-[#f0b90b]/5'
                           : 'border-border hover:border-[#f0b90b]/30'
@@ -369,11 +411,12 @@ export default function WalletPage() {
               <div className="flex gap-1 p-1 bg-muted rounded-xl">
                 {[
                   { key: 'qr', icon: QrCode, label: 'QR Nạp tiền' },
+                  { key: 'escrow', icon: ShieldCheck, label: 'Trạng thái Escrow' },
                   { key: 'history', icon: Clock, label: 'Lịch sử' },
                 ].map(tab => (
                   <button
                     key={tab.key}
-                    onClick={() => setActiveTab(tab.key as 'qr' | 'history')}
+                    onClick={() => setActiveTab(tab.key as 'qr' | 'history' | 'escrow')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === tab.key ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                       }`}
                   >
@@ -551,6 +594,83 @@ export default function WalletPage() {
                           Chỉ cần chọn đúng mạng khi gửi.
                         </p>
                       </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Escrow Status Tab */}
+                {activeTab === 'escrow' && (
+                  <motion.div key="escrow" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                    <div className="bg-card border border-border rounded-2xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-sm flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-[#f0b90b]" /> Đơn hàng dùng Escrow on-chain
+                        </h3>
+                        <button onClick={fetchCryptoOrders} className="text-muted-foreground hover:text-foreground p-1">
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-start gap-2 p-3 bg-blue-500/8 border border-blue-500/20 rounded-xl mb-4">
+                        <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-blue-400/90">
+                          Mỗi đơn dưới đây có 1 mục trong hợp đồng <strong>EscrowCore</strong> trên chain tương ứng.
+                          Mở đơn để xem dữ liệu blockchain real-time song song với database — phát hiện mọi sai lệch.
+                        </p>
+                      </div>
+
+                      {cryptoOrdersLoading ? (
+                        <div className="flex items-center justify-center py-10 text-muted-foreground">
+                          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Đang tải đơn hàng…
+                        </div>
+                      ) : cryptoOrders.length === 0 ? (
+                        <div className="text-center py-14 text-muted-foreground">
+                          <ShieldCheck className="w-12 h-12 mx-auto mb-4 opacity-15" />
+                          <p className="font-semibold">Chưa có đơn nào dùng Escrow</p>
+                          <p className="text-sm mt-1">Đơn thanh toán bằng crypto sẽ hiện ở đây sau khi tạo</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {cryptoOrders.map(o => {
+                            const chainName = o.chain_id ? CHAIN_META[o.chain_id]?.name || `Chain ${o.chain_id}` : '—';
+                            return (
+                              <Link
+                                key={o.order_id}
+                                href={`/orders/${o.order_id}`}
+                                className="flex items-center gap-3 p-3 bg-background border border-border rounded-xl hover:border-[#f0b90b]/40 transition-colors"
+                              >
+                                <div className="w-9 h-9 rounded-full bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+                                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-bold text-sm truncate">{o.product_name}</p>
+                                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap mt-0.5">
+                                    <span className="px-1.5 py-0.5 bg-muted rounded">{chainName}</span>
+                                    <span>{o.token_symbol || '—'}</span>
+                                    {o.amount_token && (
+                                      <span className="font-mono">{Number(o.amount_token).toString()}</span>
+                                    )}
+                                  </div>
+                                  <p className="font-mono text-[10px] text-muted-foreground truncate mt-0.5">
+                                    {o.internal_order_id}
+                                  </p>
+                                </div>
+                                <div className="text-right flex-shrink-0 flex items-center gap-2">
+                                  <div>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-border bg-muted">
+                                      {o.status}
+                                    </span>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                      {new Date(o.created_at).toLocaleDateString('vi-VN')}
+                                    </p>
+                                  </div>
+                                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 )}

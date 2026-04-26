@@ -28,6 +28,7 @@ import { ensureCorrectChainRpc } from '@/lib/web3/ensure-chain';
 import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
 import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
+import { EscrowStatusPanel } from '@/components/escrow/EscrowStatusPanel';
 
 /** Translate buyerConfirmDelivery revert reasons into human-friendly messages */
 function parseConfirmRevertReason(error: Error | null | undefined): string | null {
@@ -796,6 +797,23 @@ export default function OrderDetailPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* ── ON-CHAIN TRUTH PANEL (DB vs blockchain) ─── */}
+          {showEscrowPanel && order.chain_id && (
+            <EscrowStatusPanel
+              internalOrderId={order.internal_order_id}
+              chainId={order.chain_id}
+              className="mb-6"
+              db={{
+                status: order.status,
+                paymentStatus: paymentSnapshot?.status ?? null,
+                buyerWallet: null /* DB does not expose buyer wallet on this page */,
+                sellerWallet: null /* DB does not expose seller payout wallet here */,
+                tokenSymbol: orderTokenSymbol ?? null,
+                amountWei: null /* amount_token is in display units, not wei */,
+              }}
+            />
           )}
 
           {/* ── TRACKING INFO CARD (SHIPPED) ─── */}
