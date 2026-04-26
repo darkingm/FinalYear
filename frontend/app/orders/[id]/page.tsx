@@ -29,6 +29,7 @@ import { formatEscrowAmount, hasPositiveAmount } from '@/lib/orders/amount';
 import { getOrderPricingDisplay, getOrderStatusMeta, resolveOrderProductImage, type OrderVerificationContext } from '@/lib/orders/presentation';
 import { paymentPageTheme, getPaymentAccentPanelClass } from '@/lib/payments/payment-page-theme';
 import { EscrowStatusPanel } from '@/components/escrow/EscrowStatusPanel';
+import { EscrowExpiryActions } from '@/components/escrow/EscrowExpiryActions';
 
 /** Translate buyerConfirmDelivery revert reasons into human-friendly messages */
 function parseConfirmRevertReason(error: Error | null | undefined): string | null {
@@ -813,6 +814,17 @@ export default function OrderDetailPage() {
                 tokenSymbol: orderTokenSymbol ?? null,
                 amountWei: null /* amount_token is in display units, not wei */,
               }}
+            />
+          )}
+
+          {/* ── BUYER SELF-RESCUE: countdown + refundExpired ─── */}
+          {showEscrowPanel && order.chain_id && order.internal_order_id && (
+            <EscrowExpiryActions
+              orderId={order.order_id}
+              internalOrderId={order.internal_order_id}
+              chainId={order.chain_id}
+              isBuyerOfOrder={isBuyer}
+              onRefunded={fetchOrder}
             />
           )}
 

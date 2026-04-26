@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { isBuyerOnchainCompletionSync, shouldTriggerEscrowRelease } from './orders.logic';
+import { syncOrderFromChain, type OrderRowForSync } from './order-onchain-sync.service';
 
 // ─── Create Multiple Orders (Cart Checkout) ─────────────────────────────────
 export async function checkoutCart(req: AuthRequest, res: Response, next: NextFunction) {
@@ -609,6 +610,56 @@ export async function handleLogisticsWebhook(req: Request, res: Response, next: 
     res.json({ success: true, message: 'Webhook processed' });
   } catch (error: any) {
     logger.error('Logistics webhook error:', error);
+    next(error);
+  }
+}
+
+// ─── Sync DB status from on-chain Escrow truth ────────────────────────────────
+// Used after the buyer (or anyone) calls EscrowCore.refundExpired,
+// after seller's release, after a dispute, or for any drift recovery.
+// The endpoint is idempotent and only advances DB from "in-flight" states.
+export async function syncOrderFromChainController(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const userId = req.user!.user_id;
+    const orderIdRaw = req.params.id;
+    const orderId = parseInt(orderIdRaw);
+    if (Number.isNaN(orderId)) throw new AppError('Invalid order id', 400);
+
+    // Authorize: buyer, seller-owner, or admin (admin role check is global
+    // middleware in other endpoints — here we permit any party to the order).
+    const authResult = await query(
+      `SELECT o.order_id, o.internal_order_id, o.status, o.payment_method,
+              o.chain_id, o.escrow_contract,
+              o.buyer_id,
+              sp.user_id AS seller_user_id
+       FROM orders o
+       LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
+       WHERE o.order_id = $1`,
+      [orderId]
+    );
+    if (authResult.rows.length === 0) throw new AppError('Order not found', 404);
+    const row = authResult.rows[0];
+    const isParty =
+      row.buyer_id === userId || row.seller_user_id === userId || req.user!.role === 'admin';
+    if (!isParty) throw new AppError('Forbidden', 403);
+
+    const orderRow: OrderRowForSync = {
+      order_id: row.order_id,
+      internal_order_id: row.internal_order_id,
+      status: row.status,
+      payment_method: row.payment_method,
+      chain_id: row.chain_id,
+      escrow_contract: row.escrow_contract,
+    };
+
+    const result = await syncOrderFromChain(orderRow);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    logger.error('[syncOrderFromChainController] error', error);
     next(error);
   }
 }
