@@ -280,9 +280,13 @@ export async function getOrder(req: AuthRequest, res: Response, next: NextFuncti
          p.metadata       AS product_metadata,
          p.price_in_token,
          tw.symbol        AS token_symbol,
+         tw.token_address AS token_address,
+         tw.decimals      AS token_decimals,
          buyer.username   AS buyer_name,
          COALESCE(sp.display_name, seller_u.username) AS seller_name,
          sp.slug AS seller_slug,
+         sp.payout_wallet AS seller_wallet,
+         bw.address       AS buyer_wallet,
          COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
@@ -290,6 +294,11 @@ export async function getOrder(req: AuthRequest, res: Response, next: NextFuncti
         LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
         LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
         LEFT JOIN users seller_u ON sp.user_id = seller_u.user_id
+       LEFT JOIN LATERAL (
+         SELECT address FROM user_wallets
+         WHERE user_id = o.buyer_id AND is_primary = true
+         LIMIT 1
+       ) bw ON true
        LEFT JOIN LATERAL (
          SELECT image_url FROM product_images
          WHERE product_id = p.product_id
@@ -316,9 +325,13 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
     const result = await query(
       `SELECT o.*, p.name AS product_name, p.metadata AS product_metadata,
               tw.symbol AS token_symbol,
+              tw.token_address AS token_address,
+              tw.decimals AS token_decimals,
               buyer.username AS buyer_name,
               COALESCE(sp.display_name, seller_u.username) AS seller_name,
               sp.slug AS seller_slug,
+              sp.payout_wallet AS seller_wallet,
+              bw.address AS buyer_wallet,
               COALESCE(pi.image_url, p.metadata->>'primaryImage') AS primary_image
        FROM orders o
        JOIN products p ON o.product_id = p.product_id
@@ -326,6 +339,11 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
         LEFT JOIN users buyer    ON o.buyer_id  = buyer.user_id
         LEFT JOIN seller_profiles sp ON o.seller_id = sp.seller_id
         LEFT JOIN users seller_u ON sp.user_id = seller_u.user_id
+       LEFT JOIN LATERAL (
+         SELECT address FROM user_wallets
+         WHERE user_id = o.buyer_id AND is_primary = true
+         LIMIT 1
+       ) bw ON true
        LEFT JOIN LATERAL (
          SELECT image_url FROM product_images
          WHERE product_id = p.product_id

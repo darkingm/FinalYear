@@ -75,6 +75,10 @@ interface Order {
   chain_id?: number;
   escrow_contract?: string;
   amount_token?: number | string;
+  buyer_wallet?: string | null;
+  seller_wallet?: string | null;
+  token_address?: string | null;
+  token_decimals?: number | null;
 }
 
 interface PaymentStatusSnapshot extends OrderVerificationContext {
@@ -809,10 +813,12 @@ export default function OrderDetailPage() {
               db={{
                 status: order.status,
                 paymentStatus: paymentSnapshot?.status ?? null,
-                buyerWallet: null /* DB does not expose buyer wallet on this page */,
-                sellerWallet: null /* DB does not expose seller payout wallet here */,
+                buyerWallet: order.buyer_wallet ?? null,
+                sellerWallet: order.seller_wallet ?? null,
+                tokenAddress: order.token_address ?? null,
                 tokenSymbol: orderTokenSymbol ?? null,
-                amountWei: null /* amount_token is in display units, not wei */,
+                tokenDecimals: order.token_decimals ?? null,
+                amountWei: null /* amount_token is in display units, not wei — on-chain panel handles comparison */,
               }}
             />
           )}

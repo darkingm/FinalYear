@@ -214,7 +214,7 @@ contract EscrowCore is ReentrancyGuard, AccessControl, Pausable {
         );
         
         uint256 receivedAmount = amounts[1];
-        uint256 fee = (receivedAmount * platformFeePercent) / 10000;
+        uint256 fee = (receivedAmount * getEffectiveFee(msg.sender)) / 10000;
         uint256 sellerAmount = receivedAmount - fee;
         
         // Store order as if they deposited the requiredToken directly
