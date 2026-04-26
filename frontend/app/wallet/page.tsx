@@ -22,6 +22,7 @@ import {
 import Link from 'next/link';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 import { NetworkDiagnostics } from '@/components/web3/NetworkDiagnostics';
+import { SellerPayoutWalletSection } from '@/components/wallet/SellerPayoutWalletSection';
 import { CHAIN_META } from '@/lib/web3/config';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
@@ -729,6 +730,11 @@ export default function WalletPage() {
                 )}
               </AnimatePresence>
             </div>
+          </div>
+
+          {/* ── Seller payout wallet (Phase 4) ──────────────────────── */}
+          <div className="mt-8">
+            <SellerPayoutWalletSection />
           </div>
 
           {/* ── Network Diagnostics ─────────────────────────────────── */}

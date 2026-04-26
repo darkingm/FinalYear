@@ -41,6 +41,71 @@ const DEFAULT_STALE_PAYMENT_WINDOW_MINUTES = 60;
 const ALL_SUPPORTED_CHAINS = [31337, 84532, 80002, 97, 421614, 137, 42161, 56, 1];
 
 // Escrow contract addresses per chain — falls back to ESCROW_CONTRACT_ADDRESS for unspecified
+/**
+ * Resolve a seller's payout wallet with auto-heal fallback.
+ *
+ * Lookup order:
+ *   1. seller_profiles.payout_wallet (the seller's explicit choice).
+ *   2. user_wallets.address — primary EVM wallet linked to the seller's user
+ *      account. Chain-agnostic: an EVM address is the same across all EVM
+ *      networks, so it is safe to use a wallet linked on one chain to receive
+ *      funds on another.
+ *
+ * On a fallback hit we *backfill* seller_profiles.payout_wallet so future
+ * checkouts skip the join entirely. The backfill is best-effort: if it fails
+ * (e.g. due to a transient DB error) we still return the resolved wallet.
+ *
+ * Returns the lower-cased address, or `null` if no valid wallet exists.
+ * The zero address is rejected by `resolveSellerWallet` regardless of which
+ * source it came from.
+ */
+async function resolveAndBackfillSellerWallet(sellerId: number): Promise<string | null> {
+  const profileRes = await mainQuery(
+    'SELECT user_id, payout_wallet FROM seller_profiles WHERE seller_id = $1',
+    [sellerId]
+  );
+  if (profileRes.rows.length === 0) return null;
+  const { user_id: userId, payout_wallet: rawProfileWallet } = profileRes.rows[0];
+
+  // Source 1: seller_profiles.payout_wallet
+  const profileWallet = resolveSellerWallet(rawProfileWallet);
+  if (profileWallet) return profileWallet;
+
+  // Source 2: user_wallets.address (primary EVM wallet)
+  if (!userId) return null;
+  const linkedRes = await mainQuery(
+    `SELECT address
+       FROM user_wallets
+      WHERE user_id = $1
+        AND chain_type = 'evm'
+      ORDER BY is_primary DESC, created_at ASC
+      LIMIT 1`,
+    [userId]
+  );
+  const linkedWallet = resolveSellerWallet(linkedRes.rows[0]?.address ?? null);
+  if (!linkedWallet) return null;
+
+  // Best-effort backfill so future quotes are O(1).
+  try {
+    await mainQuery(
+      `UPDATE seller_profiles
+          SET payout_wallet = $1, updated_at = NOW()
+        WHERE seller_id = $2 AND payout_wallet IS NULL`,
+      [linkedWallet, sellerId]
+    );
+    logger.info('[resolveAndBackfillSellerWallet] backfilled payout_wallet', {
+      sellerId, source: 'user_wallets', wallet: linkedWallet,
+    });
+  } catch (err: any) {
+    logger.warn('[resolveAndBackfillSellerWallet] backfill failed (non-fatal)', {
+      sellerId, err: err?.message,
+    });
+  }
+
+  return linkedWallet;
+}
+
+// Escrow contract addresses per chain — falls back to ESCROW_CONTRACT_ADDRESS for unspecified
 const ESCROW_BY_CHAIN: Record<number, string | undefined> = {
   31337: process.env.ESCROW_CONTRACT_LOCALHOST || process.env.ESCROW_CONTRACT_ADDRESS,
   84532: process.env.ESCROW_CONTRACT_BASE_SEPOLIA || process.env.ESCROW_CONTRACT_ADDRESS,
@@ -236,13 +301,15 @@ export class CryptoPaymentService {
       throw new AppError('Order is not in UNPAID status', 400);
     }
 
-    // Get seller's wallet address (payout_wallet from seller_profiles)
-    const sellerResult = await mainQuery(
-      'SELECT payout_wallet FROM seller_profiles WHERE seller_id = $1',
-      [order.seller_id]
-    );
-    const rawWallet: string | null = sellerResult.rows[0]?.payout_wallet ?? null;
-    const sellerWallet = resolveSellerWallet(rawWallet);
+    // Resolve seller's payout wallet:
+    //   1. Prefer seller_profiles.payout_wallet (seller's explicit choice).
+    //   2. Auto-heal: if NULL, fall back to the seller's primary linked wallet
+    //      from user_wallets (chain-agnostic — EVM addresses are the same
+    //      across all EVM chains). Backfill seller_profiles so future quotes
+    //      skip this join.
+    //   3. Fail fast if neither is available — never substitute the escrow
+    //      contract or zero address.
+    const sellerWallet = await resolveAndBackfillSellerWallet(order.seller_id);
 
     if (!sellerWallet) {
       throw new AppError(
@@ -354,12 +421,10 @@ export class CryptoPaymentService {
     const orderId32 = ethers.keccak256(ethers.toUtf8Bytes(order.internal_order_id));
 
     const calldata = isNative
-      // depositNative(bytes32 orderId, address seller) — payable, no token param
       ? escrowIface.encodeFunctionData('depositNative', [
         orderId32,
         (sellerWallet as string).toLowerCase(),
       ])
-      // deposit(bytes32 orderId, address token, uint256 amount, address seller) — ERC-20
       : escrowIface.encodeFunctionData('deposit', [
         orderId32,
         (token.token_address as string).toLowerCase(),
@@ -426,23 +491,18 @@ export class CryptoPaymentService {
       }
     }
 
-    // Get sellers wallets
+    // Resolve sellers' wallets (with user_wallets auto-heal fallback). We
+    // call the helper per seller so each missing wallet is backfilled.
     const sellerIds = [...new Set(orders.map(o => o.seller_id))];
-    const sellerResult = await mainQuery(
-      'SELECT seller_id, payout_wallet FROM seller_profiles WHERE seller_id = ANY($1::int[])',
-      [sellerIds]
-    );
-
-    const sellerWalletsMap = new Map<number, string | null>(
-      sellerResult.rows.map(r => [r.seller_id, r.payout_wallet ?? null])
-    );
+    const sellerWalletsMap = new Map<number, string | null>();
+    for (const sid of sellerIds) {
+      sellerWalletsMap.set(sid, await resolveAndBackfillSellerWallet(sid));
+    }
 
     const sellersForBatch: string[] = [];
 
     for (const order of orders) {
-      const rawWallet = sellerWalletsMap.get(order.seller_id) ?? null;
-      const sellerWallet = resolveSellerWallet(rawWallet);
-
+      const sellerWallet = sellerWalletsMap.get(order.seller_id) ?? null;
       if (!sellerWallet) {
         throw new AppError(`Seller of order ${order.order_id} has no valid wallet. Cannot proceed with crypto cart checkout.`, 400);
       }

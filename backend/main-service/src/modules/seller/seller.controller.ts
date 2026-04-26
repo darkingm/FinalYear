@@ -306,3 +306,96 @@ export async function getSellerOrders(req: AuthRequest, res: Response, next: Nex
 
 // ─── /api/seller/stats — alias of getSellerOverview ───────────────────────────
 export const getSellerStats = getSellerOverview;
+
+// ─── /api/seller/payout-wallet ────────────────────────────────────────────────
+// Lets a seller GET their current payout wallet (with auto-heal status) and
+// PATCH a new one. The wallet must be one of the seller's verified linked
+// wallets in user_wallets — this prevents a session-hijacker from redirecting
+// the seller's earnings to an attacker-controlled address without first
+// linking it (which itself requires SIWE signature ownership proof).
+export async function getSellerPayoutWallet(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const userId = req.user!.user_id;
+    const sellerId = await ensureSellerProfile(userId);
+
+    const profileRes = await query(
+      'SELECT payout_wallet FROM seller_profiles WHERE seller_id = $1',
+      [sellerId]
+    );
+    const linkedRes = await query(
+      `SELECT wallet_db_id, address, chain_type, chain_id, label, is_primary
+         FROM user_wallets
+        WHERE user_id = $1 AND chain_type = 'evm'
+        ORDER BY is_primary DESC, created_at ASC`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      payout_wallet: profileRes.rows[0]?.payout_wallet ?? null,
+      linked_wallets: linkedRes.rows,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateSellerPayoutWallet(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const userId = req.user!.user_id;
+    const sellerId = await ensureSellerProfile(userId);
+
+    const rawWallet: unknown = req.body?.address;
+    if (typeof rawWallet !== 'string') {
+      throw new AppError('address (string) is required', 400);
+    }
+
+    const ZERO = '0x0000000000000000000000000000000000000000';
+    if (!/^0x[0-9a-fA-F]{40}$/.test(rawWallet)) {
+      throw new AppError('Invalid Ethereum address format', 400);
+    }
+    if (rawWallet.toLowerCase() === ZERO) {
+      throw new AppError('The zero address cannot receive payouts', 400);
+    }
+
+    const wallet = rawWallet.toLowerCase();
+
+    // Authorization: the wallet must already be linked to this user. This
+    // ensures an attacker who briefly controls the session cannot redirect
+    // future earnings to a wallet they never proved ownership of.
+    const linkedCheck = await query(
+      `SELECT 1 FROM user_wallets
+        WHERE user_id = $1 AND chain_type = 'evm' AND lower(address) = $2`,
+      [userId, wallet]
+    );
+    if (linkedCheck.rows.length === 0) {
+      throw new AppError(
+        'You must link this wallet to your account first (and verify ownership) before using it as the payout wallet.',
+        403
+      );
+    }
+
+    await query(
+      `UPDATE seller_profiles
+          SET payout_wallet = $1, updated_at = NOW()
+        WHERE seller_id = $2`,
+      [wallet, sellerId]
+    );
+
+    logger.info('[updateSellerPayoutWallet] payout wallet updated', {
+      userId, sellerId, wallet,
+    });
+
+    res.json({ success: true, payout_wallet: wallet });
+  } catch (error) {
+    next(error);
+  }
+}

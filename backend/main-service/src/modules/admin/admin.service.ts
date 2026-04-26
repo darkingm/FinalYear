@@ -295,10 +295,16 @@ export class AdminService {
             if (existingProfile.rows.length === 0) {
                 const userResult = await query('SELECT username, wallet_address FROM users WHERE user_id = $1', [userId]);
                 const user = userResult.rows[0];
+                const rawWallet: string | null = user.wallet_address ?? null;
+                const looksValid =
+                    !!rawWallet
+                    && /^0x[0-9a-fA-F]{40}$/.test(rawWallet)
+                    && rawWallet.toLowerCase() !== '0x0000000000000000000000000000000000000000';
+                const payoutWallet = looksValid ? rawWallet.toLowerCase() : null;
                 await query(
                     `INSERT INTO seller_profiles (user_id, display_name, payout_wallet, kyc_status)
            VALUES ($1, $2, $3, 'pending')`,
-                    [userId, user.username || 'Seller', user.wallet_address || '0x0000000000000000000000000000000000000000']
+                    [userId, user.username || 'Seller', payoutWallet]
                 );
             }
         }
