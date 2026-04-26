@@ -21,7 +21,7 @@ import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
-import { AIChatButton } from '@/components/ui/ai-chat-button';
+
 import { usePriceStore } from '@/store';
 import { productsApi } from '@/lib/api/products';
 import { CoinPriceStrip } from '@/components/home/CoinPriceStrip';
@@ -618,7 +618,7 @@ export default function HomePage() {
   useEffect(() => {
     if (searchParams?.get('welcome') === '1') {
       toast.success('🎉 Chào mừng bạn trở lại!', {
-        description: 'Bạn đã đăng nhập thành công vào KienAI Marketplace.',
+        description: 'Bạn đã đăng nhập thành công vào Web3Market.',
         duration: 5000,
       });
       // Clean up URL without reload
@@ -696,7 +696,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-transparent">
       <Header />
-      <AIChatButton />
+
 
       <main>
         {/* ── Hero Section ── */}

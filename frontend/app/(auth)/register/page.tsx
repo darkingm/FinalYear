@@ -97,7 +97,7 @@ function LeftPanel() {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f0b90b] to-[#e6a800] flex items-center justify-center shadow-lg shadow-[#f0b90b]/20 group-hover:scale-110 transition-transform">
             <Zap className="w-5 h-5 text-black fill-black" />
           </div>
-          <span className="font-black text-xl text-white tracking-tight">KienAI<span className="text-[#f0b90b]">.</span></span>
+          <span className="font-black text-xl text-white tracking-tight">Web3<span className="text-[#f0b90b]">Market</span></span>
         </Link>
         <Link href="/login" className="text-xs text-white/40 hover:text-white/70 transition-colors">
           Đã có tài khoản? <span className="text-[#f0b90b]">Đăng nhập →</span>
@@ -270,7 +270,7 @@ export default function RegisterPage() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f0b90b] to-[#e6a800] flex items-center justify-center">
                 <Zap className="w-5 h-5 text-black fill-black" />
               </div>
-              <span className="font-black text-xl text-white">KienAI<span className="text-[#f0b90b]">.</span></span>
+              <span className="font-black text-xl text-white">Web3<span className="text-[#f0b90b]">Market</span></span>
             </div>
 
             <div className="mb-7">

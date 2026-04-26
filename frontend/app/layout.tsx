@@ -8,11 +8,11 @@ import { ClientChrome } from '@/components/layout/ClientChrome';
 
 export const metadata: Metadata = {
   title: {
-    default: 'KienAI — Mua Sắm Thanh Toán Bằng Crypto | Web3 Marketplace',
-    template: '%s | KienAI — Coin E-Commerce',
+    default: 'Web3Market — Mua Sắm Thanh Toán Bằng Crypto | Web3 Marketplace',
+    template: '%s | Web3Market',
   },
   description:
-    'KienAI - Nền tảng mua sắm thanh toán bằng coin hàng đầu Việt Nam. Buy with crypto, escrow thông minh, theo dõi cá voi on-chain. Hỗ trợ BTC, ETH, BNB, USDT trên BSC, Ethereum, Polygon.',
+    'Web3Market - Nền tảng mua sắm thanh toán bằng coin hàng đầu Việt Nam. Buy with crypto, escrow thông minh, theo dõi cá voi on-chain. Hỗ trợ BTC, ETH, BNB, USDT trên BSC, Ethereum, Polygon.',
   keywords: [
     // Vietnamese SEO
     'mua sắm thanh toán bằng coin', 'thanh toán crypto', 'mua hàng bằng bitcoin',
@@ -28,9 +28,9 @@ export const metadata: Metadata = {
     // Token names
     'Bitcoin', 'ETH', 'BNB', 'USDT', 'USDC',
   ],
-  authors: [{ name: 'KienAI', url: 'https://kienai.id.vn' }],
-  creator: 'KienAI',
-  publisher: 'KienAI',
+  authors: [{ name: 'Web3Market', url: 'https://kienai.id.vn' }],
+  creator: 'Web3Market',
+  publisher: 'Web3Market',
   metadataBase: new URL('https://kienai.id.vn'),
   alternates: {
     canonical: 'https://kienai.id.vn',
@@ -45,8 +45,8 @@ export const metadata: Metadata = {
     locale: 'vi_VN',
     alternateLocale: 'en_US',
     url: 'https://kienai.id.vn',
-    siteName: 'KienAI — Coin E-Commerce',
-    title: 'KienAI — Mua Sắm Thanh Toán Bằng Crypto | Buy With Crypto',
+    siteName: 'Web3Market',
+    title: 'Web3Market — Mua Sắm Thanh Toán Bằng Crypto | Buy With Crypto',
     description:
       'Nền tảng mua sắm thanh toán bằng coin hàng đầu Việt Nam. Smart Contract Escrow bảo vệ giao dịch. Hỗ trợ BTC, ETH, BNB, USDT. On-Chain Analytics · Whale Tracker · Multi-chain.',
     images: [
@@ -54,14 +54,14 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'KienAI — Buy & Sell with Crypto. Smart Contract Escrow Marketplace.',
+        alt: 'Web3Market — Buy & Sell with Crypto. Smart Contract Escrow Marketplace.',
         type: 'image/png',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'KienAI — Mua Sắm Thanh Toán Bằng Crypto',
+    title: 'Web3Market — Mua Sắm Thanh Toán Bằng Crypto',
     description: 'Buy with crypto · Smart Contract Escrow · On-Chain Analytics · Whale Tracker · BTC ETH BNB USDT',
     images: ['/og-image.png'],
   },
@@ -81,8 +81,8 @@ export const metadata: Metadata = {
   },
   category: 'ecommerce',
   other: {
-    'apple-mobile-web-app-title': 'KienAI',
-    'application-name': 'KienAI Marketplace',
+    'apple-mobile-web-app-title': 'Web3Market',
+    'application-name': 'Web3Market',
   },
 };
 
@@ -96,8 +96,8 @@ export const viewport: Viewport = {
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: 'KienAI Marketplace',
-  alternateName: 'KienAI — Coin E-Commerce',
+  name: 'Web3Market',
+  alternateName: 'Web3Market — Crypto E-Commerce',
   url: 'https://kienai.id.vn',
   description: 'Nền tảng mua sắm thanh toán bằng coin. Buy with crypto, smart contract escrow.',
   potentialAction: {
@@ -107,7 +107,7 @@ const jsonLd = {
   },
   publisher: {
     '@type': 'Organization',
-    name: 'KienAI',
+    name: 'Web3Market',
     url: 'https://kienai.id.vn',
   },
 };

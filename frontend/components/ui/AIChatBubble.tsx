@@ -12,7 +12,7 @@ interface Msg { role: 'user' | 'assistant'; content: string }
 
 const INIT: Msg = {
     role: 'assistant',
-    content: 'Xin chào! Tôi là AI Assistant của CryptoMarket 👋\nTôi có thể giúp bạn về:\n• Giá coin & thị trường crypto\n• Gợi ý sản phẩm\n• Hướng dẫn thanh toán & ví Web3\n• RWA token hóa tài sản\n\nHỏi gì đi nào!',
+    content: 'Xin chào! Tôi là AI Assistant của Web3Market 👋\nTôi có thể giúp bạn về:\n• Giá coin & thị trường crypto\n• Gợi ý sản phẩm\n• Hướng dẫn thanh toán & ví Web3\n• RWA token hóa tài sản\n\nHỏi gì đi nào!',
 };
 
 const SUGGESTIONS = ['Giá BTC hôm nay?', 'RWA là gì?', 'Cách kết nối MetaMask?', 'Sản phẩm nổi bật'];
@@ -100,8 +100,8 @@ export function AIChatBubble() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed bottom-6 right-6 z-[9999] w-[360px] max-w-[calc(100vw-24px)] h-[520px] max-h-[calc(100vh-96px)] flex flex-col rounded-2xl shadow-2xl border border-border overflow-hidden"
-                        style={{ background: 'hsl(var(--card))' }}
+                        className="fixed bottom-6 right-6 z-[9999] w-[360px] max-w-[calc(100vw-24px)] h-[520px] max-h-[calc(100vh-96px)] flex flex-col rounded-2xl shadow-2xl border border-border overflow-hidden backdrop-blur-xl"
+                        style={{ background: 'hsl(var(--card) / 0.98)' }}
                     >
                         {/* Header */}
                         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-gradient-to-r from-[#f0b90b]/10 to-transparent flex-shrink-0">

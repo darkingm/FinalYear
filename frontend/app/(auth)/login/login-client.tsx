@@ -92,7 +92,7 @@ function LeftPanel() {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f0b90b] to-[#e6a800] flex items-center justify-center shadow-lg shadow-[#f0b90b]/20 group-hover:scale-110 transition-transform">
             <Zap className="w-5 h-5 text-black fill-black" />
           </div>
-          <span className="font-black text-xl text-white tracking-tight">KienAI<span className="text-[#f0b90b]">.</span></span>
+          <span className="font-black text-xl text-white tracking-tight">Web3<span className="text-[#f0b90b]">Market</span></span>
         </Link>
         <div className="flex items-center gap-2 text-xs text-white/40 bg-white/5 border border-white/8 rounded-full px-3 py-1.5">
           <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
@@ -398,7 +398,7 @@ export default function LoginClientPage() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f0b90b] to-[#e6a800] flex items-center justify-center shadow-lg shadow-[#f0b90b]/20">
                 <Zap className="w-5 h-5 text-black fill-black" />
               </div>
-              <span className="font-black text-xl text-white">KienAI<span className="text-[#f0b90b]">.</span></span>
+              <span className="font-black text-xl text-white">Web3<span className="text-[#f0b90b]">Market</span></span>
             </div>
 
             {/* Header */}
