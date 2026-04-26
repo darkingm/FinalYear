@@ -85,6 +85,12 @@ BEGIN
                 'Per-chain platform deposit addresses (chain_id -> address)'
             )
             ON CONFLICT (key) DO NOTHING;
+        ELSIF NOT (cfg ? '31337') THEN
+            -- Row exists but Hardhat key missing -> merge default Hardhat address.
+            UPDATE platform_config
+               SET value = value || '{"31337": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"}'::jsonb,
+                   updated_at = NOW()
+             WHERE key = 'deposit_addresses';
         END IF;
     END IF;
 END $$;
