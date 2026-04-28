@@ -6,6 +6,60 @@ import { AppError } from '../../middleware/error-handler';
 import 'dotenv/config';
 import axios from 'axios';
 
+type PayPalOperation = 'create_order' | 'capture_payment' | 'webhook_access_token' | 'webhook_verify';
+
+export type PayPalDiagnostic = {
+  statusCode?: number;
+  paypalDebugId?: string;
+  paypalError?: string;
+  paypalErrorDescription?: string;
+  configuredMode: string;
+  clientIdLength: number;
+  secretLength: number;
+};
+
+function tryParseJson(value: unknown): Record<string, any> | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getPayPalDiagnostic(error: any): PayPalDiagnostic {
+  const original = error?._originalError ?? {};
+  const headers = error?.headers ?? original?.headers ?? {};
+  const body =
+    tryParseJson(original?.text) ??
+    tryParseJson(error?.text) ??
+    tryParseJson(error?.message) ??
+    tryParseJson(error?.response?.data);
+
+  return {
+    statusCode: error?.statusCode ?? original?.statusCode ?? error?.response?.status,
+    paypalDebugId:
+      headers['paypal-debug-id'] ??
+      headers['Paypal-Debug-Id'] ??
+      headers['paypal_debug_id'],
+    paypalError: body?.error,
+    paypalErrorDescription: body?.error_description ?? body?.message,
+    configuredMode: process.env.PAYPAL_MODE === 'production' ? 'production' : 'sandbox',
+    clientIdLength: (process.env.PAYPAL_CLIENT_ID ?? '').trim().length,
+    secretLength: (process.env.PAYPAL_SECRET ?? '').trim().length,
+  };
+}
+
+export function resolvePayPalAmountUsd(order: Record<string, any>): string {
+  const rawAmount = order.total_amount ?? order.price_usd;
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError('Order total is invalid for PayPal', 400);
+  }
+  return amount.toFixed(2);
+}
+
 export class PayPalService {
   private _client: paypal.core.PayPalHttpClient | null = null;
 
@@ -27,10 +81,37 @@ export class PayPalService {
     return this._client;
   }
 
+  toOperationalError(error: any, operation: PayPalOperation): AppError {
+    const diagnostic = getPayPalDiagnostic(error);
+
+    if (diagnostic.statusCode === 401 || diagnostic.paypalError === 'invalid_client') {
+      return new AppError(
+        'PayPal credentials were rejected. Check PAYPAL_CLIENT_ID, PAYPAL_SECRET, and PAYPAL_MODE.',
+        502
+      );
+    }
+
+    if (diagnostic.statusCode === 422 || diagnostic.paypalError === 'INVALID_REQUEST') {
+      return new AppError('PayPal rejected the order request. Check the order amount and currency.', 502);
+    }
+
+    return new AppError(`PayPal ${operation} failed`, 502);
+  }
+
+  private logPayPalFailure(operation: PayPalOperation, error: any, extra: Record<string, any> = {}) {
+    logger.error('PayPal API request failed', {
+      operation,
+      ...getPayPalDiagnostic(error),
+      ...extra,
+    });
+  }
+
   async createOrder(orderId: number) {
     // Get order details
     const orderResult = await mainQuery(
-      'SELECT * FROM orders WHERE order_id = $1',
+      `SELECT order_id, internal_order_id, status, total_amount, price_usd
+       FROM orders
+       WHERE order_id = $1`,
       [orderId]
     );
 
@@ -44,6 +125,8 @@ export class PayPalService {
       throw new AppError('Order is not in UNPAID status', 400);
     }
 
+    const amountUsd = resolvePayPalAmountUsd(order);
+
     // Create PayPal order
     const request = new paypal.orders.OrdersCreateRequest();
     request.prefer('return=representation');
@@ -54,7 +137,7 @@ export class PayPalService {
           reference_id: order.internal_order_id,
           amount: {
             currency_code: 'USD',
-            value: Number(order.price_usd).toFixed(2),
+            value: amountUsd,
           },
           description: `Order #${order.internal_order_id}`,
         },
@@ -70,7 +153,13 @@ export class PayPalService {
       },
     });
 
-    const response = await this.client.execute(request);
+    let response: any;
+    try {
+      response = await this.client.execute(request);
+    } catch (error: any) {
+      this.logPayPalFailure('create_order', error, { orderId, internalOrderId: order.internal_order_id });
+      throw this.toOperationalError(error, 'create_order');
+    }
     const paypalOrderId = response.result.id;
 
     // Update order with PayPal order ID
@@ -96,7 +185,13 @@ export class PayPalService {
     const request = new paypal.orders.OrdersCaptureRequest(paypalOrderId);
     request.requestBody({});
 
-    const response = await this.client.execute(request);
+    let response: any;
+    try {
+      response = await this.client.execute(request);
+    } catch (error: any) {
+      this.logPayPalFailure('capture_payment', error, { paypalOrderId });
+      throw this.toOperationalError(error, 'capture_payment');
+    }
     
     if (response.result.status !== 'COMPLETED') {
       throw new AppError('PayPal payment not completed', 400);
