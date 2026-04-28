@@ -20,6 +20,7 @@ import { reviewsRouter } from './modules/reviews/reviews.routes';
 import { sellerRouter } from './modules/seller/seller.routes';
 import onchainRoutes from './modules/onchain/onchain.routes';
 import rwaProxyRoutes from './modules/rwa/rwa-proxy.routes';
+import kycRoutes from './modules/kyc/kyc.routes';
 
 
 const app = express();
@@ -158,6 +159,7 @@ app.use('/api/reviews', reviewsRouter);
 app.use('/api/seller', sellerRouter);
 app.use('/api/onchain', onchainRoutes);
 app.use('/api/rwa', rwaProxyRoutes);
+app.use('/api/kyc', kycRoutes);
 
 
 app.use((_req, res) => {

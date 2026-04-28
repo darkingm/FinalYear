@@ -4,8 +4,10 @@ import {
   BarChart3,
   Brain,
   Building,
+  Fingerprint,
   Home,
   Package,
+  PieChart,
   ShoppingBag,
   TrendingUp,
   User,
@@ -57,6 +59,7 @@ const HEADER_NAV_GROUPS: HeaderNavGroup[] = [
     items: [
       { href: '/trading/BTCUSDT', label: 'Giao dịch', description: 'Thị trường, chart và biến động giá', icon: TrendingUp, authRequired: false, matchStartsWith: false },
       { href: '/whale-tracker', label: 'On-Chain', description: 'Theo dõi dòng tiền và tín hiệu on-chain', icon: Activity, authRequired: false },
+      { href: '/portfolio', label: 'Portfolio', description: 'Danh mục đầu tư RWA của bạn', icon: PieChart, authRequired: true },
     ],
   },
   {
@@ -65,6 +68,7 @@ const HEADER_NAV_GROUPS: HeaderNavGroup[] = [
     icon: User,
     items: [
       { href: '/wallet', label: 'Ví', description: 'Số dư, nạp rút và kết nối Web3', icon: Wallet, authRequired: true },
+      { href: '/kyc', label: 'Xác minh KYC', description: 'Xác minh danh tính để đầu tư RWA', icon: Fingerprint, authRequired: true },
       { href: '/profile', label: 'Hồ sơ', description: 'Thông tin và thiết lập tài khoản', icon: User, authRequired: true },
       { href: '/profile/credit', label: 'AI Credit', description: 'Quản lý credit và quyền dùng AI', icon: Brain, authRequired: true },
       { href: '/seller/dashboard', label: 'Seller Dashboard', description: 'Bảng điều khiển dành cho người bán', icon: BarChart3, authRequired: true },
