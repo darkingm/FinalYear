@@ -13,8 +13,9 @@ describe('header navigation groups', () => {
 
     expect(groups.map((group) => group.label)).toEqual(['Mua bán', 'Tài chính', 'Tài khoản']);
     expect(groups[0].items.map((item) => item.href)).toEqual(['/products', '/orders', '/assets']);
-    expect(groups[1].items.map((item) => item.href)).toEqual(['/trading/BTCUSDT', '/whale-tracker']);
+    expect(groups[1].items.map((item) => item.href)).toEqual(['/trading/BTCUSDT', '/whale-tracker', '/portfolio']);
     expect(groups[2].items.map((item) => item.href)).toContain('/wallet');
+    expect(groups[2].items.map((item) => item.href)).toContain('/kyc');
   });
 
   it('marks a group active when the current route belongs to one of its items', () => {
