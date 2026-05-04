@@ -76,10 +76,13 @@ const config: HardhatUserConfig = {
     hardhat: {
       chainId: 31337,
       accounts: buildHardhatAccounts(),
+      allowUnlimitedContractSize: true,
     },
     localhost: {
       url: process.env.LOCALHOST_RPC_URL || "http://127.0.0.1:8545",
-      accounts: resolveLocalSignerAccounts(),
+      // Use unlocked accounts on the running node (Hardhat #0..#19) to bypass
+      // client-side EIP-3860 initcode size check in micro-eth-signer.
+      accounts: "remote",
       chainId: 31337,
     },
     // Correct network name for Amoy testnet (80002)

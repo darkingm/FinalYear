@@ -26,6 +26,9 @@ timeout /t 2 /nobreak >nul
 start "Backend - Payment API" cmd /k "cd /d %~dp0backend\payment-service && npm install && npm run dev"
 timeout /t 2 /nobreak >nul
 
+start "Backend - Tokenization (RWA)" cmd /k "cd /d %~dp0backend\tokenization-service && npm install && npm run dev"
+timeout /t 2 /nobreak >nul
+
 start "Frontend" cmd /k "cd /d %~dp0frontend && npm install && npm run dev"
 timeout /t 2 /nobreak >nul
 
@@ -39,7 +42,7 @@ start "Mobile App - Expo" cmd /k "cd /d %~dp0mobile && npx expo start"
 
 echo.
 echo ================================================
-echo    Da mo 6 cua so: Main API, Payment API, FE, Hardhat, AI Service, Mobile
+echo    Da mo 7 cua so: Main API, Payment API, Tokenization, FE, Hardhat, AI Service, Mobile
 echo    Web:    http://localhost:3000
 echo    AI:     http://localhost:3005
 echo    Mobile: Scan QR bang Expo Go app
