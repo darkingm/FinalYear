@@ -34,7 +34,8 @@ assetsRouter.get('/', async (req: Request, res: Response) => {
         const result = await query(sql, params);
         res.json({ assets: result.rows });
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        console.error('[assets.list] error:', err);
+        res.status(500).json({ error: err.message || String(err) });
     }
 });
 
