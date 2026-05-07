@@ -5,12 +5,6 @@
 --   - Top Traders leaderboard (aggregate per maker)
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS schema_migrations (
-  version    VARCHAR(10) PRIMARY KEY,
-  name       VARCHAR(200) NOT NULL,
-  applied_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- ── 1. Pair swap log ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS onchain_pair_txs (
     id             BIGSERIAL    PRIMARY KEY,
@@ -37,8 +31,3 @@ CREATE INDEX IF NOT EXISTS idx_pair_txs_pair
 
 CREATE INDEX IF NOT EXISTS idx_pair_txs_maker
     ON onchain_pair_txs (pair_address, maker_address);
-
--- ── 2. Record migration ─────────────────────────────────────
-INSERT INTO schema_migrations (version, name)
-VALUES ('005', 'onchain_pair_txs')
-ON CONFLICT (version) DO NOTHING;

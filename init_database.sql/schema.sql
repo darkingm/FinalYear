@@ -1022,6 +1022,368 @@ INSERT INTO platform_config (key, value, description) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- ======================================================================
+-- SECTION 15: ON-CHAIN ANALYTICS (Whale Tracker)
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS onchain_wallet_stats (
+    id              SERIAL PRIMARY KEY,
+    wallet_address  VARCHAR(42)  NOT NULL,
+    chain           VARCHAR(20)  NOT NULL,
+    token_address   VARCHAR(42)  NOT NULL DEFAULT 'native',
+    token_symbol    VARCHAR(30),
+    buy_count       INTEGER      NOT NULL DEFAULT 0,
+    sell_count      INTEGER      NOT NULL DEFAULT 0,
+    transfer_count  INTEGER      NOT NULL DEFAULT 0,
+    buy_volume_usd  DECIMAL(22,4) NOT NULL DEFAULT 0,
+    sell_volume_usd DECIMAL(22,4) NOT NULL DEFAULT 0,
+    last_tx_hash    VARCHAR(66),
+    last_activity   TIMESTAMPTZ,
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_wallet_chain_token UNIQUE (wallet_address, chain, token_address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_onchain_stats_wallet
+    ON onchain_wallet_stats (wallet_address, chain);
+
+CREATE TABLE IF NOT EXISTS onchain_tx_log (
+    id             SERIAL PRIMARY KEY,
+    wallet_address VARCHAR(42)   NOT NULL,
+    tx_hash        VARCHAR(66)   NOT NULL,
+    chain          VARCHAR(20)   NOT NULL,
+    token_address  VARCHAR(42)   NOT NULL DEFAULT 'native',
+    token_symbol   VARCHAR(30),
+    tx_type        VARCHAR(12)   NOT NULL,
+    amount_token   DECIMAL(36,8),
+    amount_usd     DECIMAL(22,4),
+    price_usd      DECIMAL(22,8),
+    pair_symbol    VARCHAR(20),
+    dex_name       VARCHAR(60),
+    block_number   BIGINT,
+    tx_timestamp   TIMESTAMPTZ,
+    recorded_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_onchain_tx UNIQUE (tx_hash, wallet_address, token_address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_onchain_log_wallet_token
+    ON onchain_tx_log (wallet_address, chain, token_address, tx_timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS onchain_pair_txs (
+    id              SERIAL PRIMARY KEY,
+    chain           VARCHAR(20)   NOT NULL,
+    pair_address    VARCHAR(42)   NOT NULL,
+    tx_hash         VARCHAR(66)   NOT NULL,
+    block_number    BIGINT,
+    tx_type         VARCHAR(10)   NOT NULL CHECK (tx_type IN ('BUY','SELL')),
+    maker_address   VARCHAR(42)   NOT NULL,
+    token_amount    DECIMAL(36,18),
+    quote_amount    DECIMAL(36,18),
+    amount_usd      DECIMAL(22,4),
+    price_usd       DECIMAL(22,8),
+    token_symbol    VARCHAR(30),
+    quote_symbol    VARCHAR(30),
+    dex_id          VARCHAR(60),
+    tx_timestamp    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    recorded_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_pair_tx UNIQUE (tx_hash, pair_address, maker_address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pair_txs_pair_chain ON onchain_pair_txs (pair_address, chain);
+CREATE INDEX IF NOT EXISTS idx_pair_txs_timestamp  ON onchain_pair_txs (tx_timestamp DESC);
+
+-- ======================================================================
+-- SECTION 16: RWA TOKENIZATION
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS rwa_assets (
+    asset_id        SERIAL PRIMARY KEY,
+    name            VARCHAR(200) NOT NULL,
+    symbol          VARCHAR(10)  NOT NULL,
+    external_id     VARCHAR(100) UNIQUE,
+    description     TEXT,
+    total_supply    DECIMAL(36,6) NOT NULL DEFAULT 0,
+    price_per_token DECIMAL(18,6) NOT NULL DEFAULT 0,
+    token_address   VARCHAR(42),
+    factory_address VARCHAR(42),
+    valuation_usd   DECIMAL(18,2),
+    asset_type      VARCHAR(50)  DEFAULT 'real_estate',
+    location        TEXT,
+    image_url       TEXT,
+    documents       JSONB DEFAULT '[]',
+    metadata        JSONB DEFAULT '{}',
+    status          VARCHAR(20)  NOT NULL DEFAULT 'DRAFT'
+                        CHECK (status IN ('DRAFT','ACTIVE','PAUSED','DELISTED')),
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rwa_kyc (
+    kyc_id          SERIAL PRIMARY KEY,
+    wallet_address  VARCHAR(42) NOT NULL UNIQUE,
+    status          VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+                        CHECK (status IN ('PENDING','APPROVED','REJECTED')),
+    jurisdiction    VARCHAR(10) DEFAULT 'VN',
+    risk_score      INT DEFAULT 0,
+    tx_hash         VARCHAR(66),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS investor_holdings (
+    holding_id      SERIAL PRIMARY KEY,
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    user_id         INT,
+    wallet_address  VARCHAR(42),
+    token_amount    DECIMAL(36,18) NOT NULL DEFAULT 0,
+    avg_buy_price   DECIMAL(18,6) DEFAULT 0,
+    total_invested  DECIMAL(18,2) DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (asset_id, wallet_address)
+);
+
+CREATE TABLE IF NOT EXISTS profit_distributions (
+    distribution_id SERIAL PRIMARY KEY,
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    amount_usd      DECIMAL(18,2) NOT NULL,
+    amount_per_token DECIMAL(18,8),
+    tx_hash         VARCHAR(66),
+    period_label    VARCHAR(50),
+    distributed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS purchase_idempotency (
+    idempotency_key VARCHAR(200) PRIMARY KEY,
+    asset_id        INT NOT NULL,
+    user_id         INT,
+    wallet_address  VARCHAR(42),
+    token_amount    DECIMAL(36,18),
+    status          VARCHAR(20) DEFAULT 'PENDING',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ======================================================================
+-- SECTION 17: GOVERNANCE & BUYOUT
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS governance_proposals (
+    proposal_id     SERIAL PRIMARY KEY,
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    proposer_address VARCHAR(42) NOT NULL,
+    proposal_type   VARCHAR(30) NOT NULL DEFAULT 'GENERAL',
+    title           VARCHAR(200) NOT NULL,
+    description     TEXT,
+    metadata_hash   VARCHAR(66),
+    votes_for       DECIMAL(36,18) NOT NULL DEFAULT 0,
+    votes_against   DECIMAL(36,18) NOT NULL DEFAULT 0,
+    quorum_tokens   DECIMAL(36,18) NOT NULL DEFAULT 0,
+    status          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+                        CHECK (status IN ('ACTIVE','PASSED','REJECTED','EXECUTED','CANCELLED')),
+    voting_ends_at  TIMESTAMPTZ,
+    executed_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS governance_votes (
+    vote_id         SERIAL PRIMARY KEY,
+    proposal_id     INT NOT NULL REFERENCES governance_proposals(proposal_id),
+    voter_address   VARCHAR(42) NOT NULL,
+    user_id         INT,
+    support         BOOLEAN NOT NULL,
+    weight          DECIMAL(36,18) NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (proposal_id, voter_address)
+);
+
+CREATE TABLE IF NOT EXISTS buyout_proposals (
+    buyout_id       SERIAL PRIMARY KEY,
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    proposer_address VARCHAR(42) NOT NULL,
+    price_per_token DECIMAL(18,6) NOT NULL,
+    total_price     DECIMAL(18,2) NOT NULL,
+    status          VARCHAR(20) NOT NULL DEFAULT 'PROPOSED'
+                        CHECK (status IN ('PROPOSED','SNAPSHOT','APPROVED','EXECUTED','REJECTED','CANCELLED')),
+    snapshot_data   JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS buyout_claims (
+    claim_id        SERIAL PRIMARY KEY,
+    buyout_id       INT NOT NULL REFERENCES buyout_proposals(buyout_id),
+    wallet_address  VARCHAR(42) NOT NULL,
+    token_amount    DECIMAL(36,18) NOT NULL,
+    payout_amount   DECIMAL(18,6) NOT NULL,
+    claimed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (buyout_id, wallet_address)
+);
+
+CREATE TABLE IF NOT EXISTS buyout_claim_proofs (
+    proof_id        SERIAL PRIMARY KEY,
+    buyout_id       INT NOT NULL REFERENCES buyout_proposals(buyout_id),
+    wallet_address  VARCHAR(42) NOT NULL,
+    token_balance   DECIMAL(36,18) NOT NULL,
+    merkle_proof    JSONB NOT NULL DEFAULT '[]',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (buyout_id, wallet_address)
+);
+
+-- ======================================================================
+-- SECTION 18: SECONDARY MARKET
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS rwa_listings (
+    listing_id      SERIAL PRIMARY KEY,
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    seller_user_id  INT,
+    seller_wallet   VARCHAR(42),
+    token_amount    DECIMAL(36,18) NOT NULL,
+    price_per_token DECIMAL(18,6) NOT NULL,
+    status          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+                        CHECK (status IN ('ACTIVE','SOLD','CANCELLED')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rwa_trades (
+    trade_id        SERIAL PRIMARY KEY,
+    listing_id      INT NOT NULL REFERENCES rwa_listings(listing_id),
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    buyer_user_id   INT,
+    buyer_wallet    VARCHAR(42),
+    token_amount    DECIMAL(36,18) NOT NULL,
+    price_per_token DECIMAL(18,6) NOT NULL,
+    total_price     DECIMAL(18,2) NOT NULL,
+    traded_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ======================================================================
+-- SECTION 19: ADMIN & PLATFORM MANAGEMENT
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS categories (
+    category_id     SERIAL PRIMARY KEY,
+    name            VARCHAR(100) NOT NULL UNIQUE,
+    slug            VARCHAR(120) UNIQUE,
+    description     TEXT,
+    parent_id       INT REFERENCES categories(category_id),
+    sort_order      INT DEFAULT 0,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS platform_settings (
+    setting_id      SERIAL PRIMARY KEY,
+    key             VARCHAR(100) NOT NULL UNIQUE,
+    value           TEXT NOT NULL,
+    description     TEXT,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS seller_payouts (
+    payout_id       SERIAL PRIMARY KEY,
+    seller_id       INT NOT NULL,
+    order_id        INT,
+    amount          DECIMAL(18,2) NOT NULL,
+    currency        VARCHAR(10) DEFAULT 'USD',
+    tx_hash         VARCHAR(66),
+    status          VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+                        CHECK (status IN ('PENDING','PROCESSING','COMPLETED','FAILED')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS dispute_messages (
+    message_id      SERIAL PRIMARY KEY,
+    dispute_id      INT NOT NULL REFERENCES disputes(dispute_id) ON DELETE CASCADE,
+    sender_id       INT NOT NULL REFERENCES users(user_id),
+    content         TEXT NOT NULL,
+    attachments     JSONB DEFAULT '[]',
+    is_internal     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS failed_mint_recovery (
+    recovery_id     SERIAL PRIMARY KEY,
+    product_id      INT NOT NULL,
+    error_message   TEXT,
+    retry_count     INT DEFAULT 0,
+    status          VARCHAR(20) DEFAULT 'PENDING',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at     TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS processed_events (
+    event_id        VARCHAR(200) PRIMARY KEY,
+    event_type      VARCHAR(50),
+    processed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS indexer_state (
+    id              SERIAL PRIMARY KEY,
+    chain_id        INT NOT NULL,
+    contract_address VARCHAR(42) NOT NULL,
+    last_block      BIGINT NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (chain_id, contract_address)
+);
+
+-- ======================================================================
+-- SECTION 20: LEGAL & COMPLIANCE
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS legal_entities (
+    entity_id       SERIAL PRIMARY KEY,
+    asset_id        INT REFERENCES rwa_assets(asset_id),
+    entity_name     VARCHAR(200),
+    entity_type     VARCHAR(50),
+    jurisdiction    VARCHAR(10),
+    registration_number VARCHAR(100),
+    metadata        JSONB DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS shareholder_agreements (
+    agreement_id    SERIAL PRIMARY KEY,
+    asset_id        INT NOT NULL REFERENCES rwa_assets(asset_id),
+    document_hash   VARCHAR(66),
+    document_url    TEXT,
+    version         INT DEFAULT 1,
+    status          VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ======================================================================
+-- SECTION 21: KYC SUBMISSIONS
+-- ======================================================================
+
+CREATE TABLE IF NOT EXISTS kyc_submissions (
+    submission_id   SERIAL PRIMARY KEY,
+    user_id         INT NOT NULL REFERENCES users(user_id),
+    wallet_address  VARCHAR(42),
+    full_name       VARCHAR(200) NOT NULL,
+    date_of_birth   DATE NOT NULL,
+    document_type   VARCHAR(20) NOT NULL
+                        CHECK (document_type IN ('CCCD','PASSPORT','DRIVER_LICENSE')),
+    document_number VARCHAR(50) NOT NULL,
+    document_front  TEXT,
+    document_back   TEXT,
+    selfie_url      TEXT,
+    jurisdiction    VARCHAR(10)     DEFAULT 'VN',
+    status          VARCHAR(20)     NOT NULL DEFAULT 'PENDING'
+                        CHECK (status IN ('PENDING','REVIEWING','APPROVED','REJECTED')),
+    rejection_reason TEXT,
+    reviewed_by     INT,
+    reviewed_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kyc_submissions_active_user
+    ON kyc_submissions(user_id) WHERE status != 'REJECTED';
+CREATE INDEX IF NOT EXISTS idx_kyc_submissions_status ON kyc_submissions(status);
+CREATE INDEX IF NOT EXISTS idx_kyc_submissions_user   ON kyc_submissions(user_id);
+
+-- ======================================================================
 -- FINAL VERIFICATION
 -- ======================================================================
 SELECT

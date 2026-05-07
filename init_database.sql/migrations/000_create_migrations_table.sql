@@ -2,6 +2,10 @@
 -- Schema Migrations Tracking Table
 -- Tạo bảng này 1 lần duy nhất để track các migration đã chạy
 -- File này được chạy TRƯỚC tất cả migrations khác
+--
+-- NOTE: db-migrate.sh cũng tạo schema_migrations ở step 3.
+-- File này chỉ là safety-net (IF NOT EXISTS).
+-- Script tự handle tracking — KHÔNG cần INSERT ở đây.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -13,9 +17,3 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     applied_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     applied_by  VARCHAR(100) DEFAULT 'auto'
 );
-
--- Mark the initial schema.sql as already applied if tables exist
--- (Safe: ON CONFLICT DO NOTHING = idempotent)
-INSERT INTO schema_migrations (version, name, filename, applied_by)
-VALUES ('000', 'initial_schema', 'schema.sql', 'bootstrap')
-ON CONFLICT (version) DO NOTHING;

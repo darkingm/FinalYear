@@ -1,18 +1,10 @@
 -- ============================================================
 -- Migration 003 — On-Chain TX counters + log table
--- Safe to re-run (idempotent)
+-- Safe to re-run (idempotent via IF NOT EXISTS)
 -- ============================================================
 
--- Ensure migrations table exists (safety net)
-CREATE TABLE IF NOT EXISTS schema_migrations (
-  version    VARCHAR(10) PRIMARY KEY,
-  name       VARCHAR(200) NOT NULL,
-  applied_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-DO $$ BEGIN
-  -- ── 1. Wallet stats (persistent BUY/SELL counters) ─────────
-  CREATE TABLE IF NOT EXISTS onchain_wallet_stats (
+-- ── 1. Wallet stats (persistent BUY/SELL counters) ─────────
+CREATE TABLE IF NOT EXISTS onchain_wallet_stats (
     id              SERIAL PRIMARY KEY,
     wallet_address  VARCHAR(42)  NOT NULL,
     chain           VARCHAR(20)  NOT NULL,
@@ -27,19 +19,13 @@ DO $$ BEGIN
     last_activity   TIMESTAMPTZ,
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_wallet_chain_token UNIQUE (wallet_address, chain, token_address)
-  );
-EXCEPTION WHEN duplicate_table THEN NULL;
-END $$;
+);
 
-DO $$ BEGIN
-  CREATE INDEX IF NOT EXISTS idx_onchain_stats_wallet
+CREATE INDEX IF NOT EXISTS idx_onchain_stats_wallet
     ON onchain_wallet_stats (wallet_address, chain);
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
 
 -- ── 2. TX event log (deduped by hash+token) ─────────────────
-DO $$ BEGIN
-  CREATE TABLE IF NOT EXISTS onchain_tx_log (
+CREATE TABLE IF NOT EXISTS onchain_tx_log (
     id             SERIAL PRIMARY KEY,
     wallet_address VARCHAR(42)   NOT NULL,
     tx_hash        VARCHAR(66)   NOT NULL,
@@ -56,17 +42,7 @@ DO $$ BEGIN
     tx_timestamp   TIMESTAMPTZ,
     recorded_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_onchain_tx UNIQUE (tx_hash, wallet_address, token_address)
-  );
-EXCEPTION WHEN duplicate_table THEN NULL;
-END $$;
+);
 
-DO $$ BEGIN
-  CREATE INDEX IF NOT EXISTS idx_onchain_log_wallet_token
+CREATE INDEX IF NOT EXISTS idx_onchain_log_wallet_token
     ON onchain_tx_log (wallet_address, chain, token_address, tx_timestamp DESC);
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
--- ── 3. Record this migration ─────────────────────────────────
-INSERT INTO schema_migrations (version, name)
-VALUES ('003', 'onchain_tx_counters')
-ON CONFLICT (version) DO NOTHING;

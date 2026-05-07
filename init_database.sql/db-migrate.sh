@@ -121,7 +121,7 @@ FAILED_COUNT=0
 
 while IFS= read -r filepath; do
   filename=$(basename "$filepath")
-  # Extract version: first 3 digits from filename (e.g. "001" from "001_payment_fixes.sql")
+  # Extract version: first digits from filename (e.g. "001" from "001_payment_fixes.sql")
   version=$(echo "$filename" | sed -nE 's/^([0-9]+).*/\1/p')
   name=$(echo "$filename" | sed -E 's/^[0-9]+_//; s/\.sql$//')
 
@@ -142,15 +142,33 @@ while IFS= read -r filepath; do
   # Calculate checksum
   CHECKSUM=$(md5sum "$filepath" 2>/dev/null | cut -d' ' -f1 || echo "unknown")
 
-  # Run the migration
-  if PGPASSWORD="$PGPASSWORD" psql \
+  # ────────────────────────────────────────────────────────────
+  # KEY FIX: Use ON_ERROR_STOP=1 so psql returns non-zero on
+  # any SQL error.  Wrap in BEGIN/COMMIT so partial failures
+  # are rolled back automatically.
+  # ────────────────────────────────────────────────────────────
+  MIGRATION_OUTPUT=$(mktemp /tmp/migrate_XXXXXX.log 2>/dev/null || echo "/tmp/migrate_${version}.log")
+  {
+    echo "BEGIN;"
+    cat "$filepath"
+    echo ""
+    echo "COMMIT;"
+  } | PGPASSWORD="$PGPASSWORD" psql \
       -h "$PGHOST" -p "$PGPORT" \
       -U "$PGUSER" -d "$PGDATABASE" \
-      -v ON_ERROR_STOP=0 \
-      -f "$filepath" \
-      2>&1 | grep -v "^$" | sed 's/^/      /'; then
+      -v ON_ERROR_STOP=1 \
+      --no-psqlrc \
+      > "$MIGRATION_OUTPUT" 2>&1
+  MIGRATION_EXIT=$?
 
-    # Record as applied
+  # Show output (indented)
+  if [[ -s "$MIGRATION_OUTPUT" ]]; then
+    grep -v "^$" "$MIGRATION_OUTPUT" | sed 's/^/      /' || true
+  fi
+  rm -f "$MIGRATION_OUTPUT"
+
+  if [[ $MIGRATION_EXIT -eq 0 ]]; then
+    # Record as applied (only on TRUE success)
     psql_run -v ON_ERROR_STOP=1 \
       -c "INSERT INTO schema_migrations (version, name, filename, checksum)
           VALUES ('${version}', '${name}', '${filename}', '${CHECKSUM}')
@@ -160,7 +178,7 @@ while IFS= read -r filepath; do
     echo -e "  ${GREEN}DONE${NC}  [v${version}] ${name} ✓"
     APPLIED_COUNT=$((APPLIED_COUNT + 1))
   else
-    echo -e "  ${RED}FAIL${NC}  [v${version}] ${name} — check logs above"
+    echo -e "  ${RED}FAIL${NC}  [v${version}] ${name} — SQL error (rolled back)"
     FAILED_COUNT=$((FAILED_COUNT + 1))
     # Don't exit — continue with other migrations
   fi

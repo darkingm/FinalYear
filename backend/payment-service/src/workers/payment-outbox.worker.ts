@@ -108,7 +108,7 @@ export class PaymentOutboxWorker {
              WHERE event_id = $2
                AND locked_by = $3`,
             [error.message, row.event_id, this.workerId]
-          );
+          ).catch(() => {}); // best-effort — DB may be down
 
           logger.warn('Payment outbox publish failed', {
             event_id: row.event_id,
@@ -117,6 +117,13 @@ export class PaymentOutboxWorker {
           });
         }
       }
+    } catch (err: any) {
+      // DB connection errors (timeout, reset, etc.) must NOT crash the process.
+      // The worker will retry on the next interval tick.
+      logger.error('Payment outbox worker cycle failed (will retry):', {
+        error: err.message,
+        code: err.code,
+      });
     } finally {
       this.isRunning = false;
     }
