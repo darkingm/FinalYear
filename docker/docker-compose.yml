@@ -178,6 +178,8 @@ services:
       FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID}
       FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET}
       PAYPAL_SECRET: ${PAYPAL_SECRET}
+      # AI service runs on port 8000 (uvicorn). Override the next.config.mjs default of 3005.
+      AI_SERVICE_URL: http://ai-service:8000
     ports:
       - "3000:3000"
     depends_on:
@@ -196,8 +198,11 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
       MAIN_SERVICE_URL: http://main-api:3001
+    # Container binds 8000 (uvicorn). Map to host 8000 to match Dockerfile EXPOSE.
+    # Frontend default AI_SERVICE_URL=http://localhost:3005 in dev; override with
+    # AI_SERVICE_URL=http://localhost:8000 (or in .env) when running this compose.
     ports:
-      - "3005:3005"
+      - "8000:8000"
     depends_on:
       - main-api
     networks:

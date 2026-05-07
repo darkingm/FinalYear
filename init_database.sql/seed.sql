@@ -62,13 +62,19 @@ ON CONFLICT (email) DO NOTHING;
 -- 2. SELLER PROFILES
 -- =====================================================
 
+-- ⚠ DO NOT seed payout_wallet with placeholder addresses (0xAaA…/0xBbB…/0xCcC…).
+--   Buyer crypto deposits are sent to seller_profiles.payout_wallet at escrow
+--   release time. A placeholder address is unowned by anyone, so any release
+--   to it is permanently lost. Leave NULL — backend's resolveAndBackfillSellerWallet
+--   then refuses to quote until the seller links a real wallet at /wallet
+--   (which now requires a signed message — see migration to wallets.service.ts).
 INSERT INTO seller_profiles (user_id, display_name, description, slug, kyc_status, payout_wallet)
 SELECT user_id,
        'TechZone Store',
        'Premium electronics & gadgets from top brands.',
        'techzone-store',
        'verified',
-       '0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa'
+       NULL
 FROM users WHERE email = 'seller1@marketplace.com'
 ON CONFLICT (user_id) DO NOTHING;
 
@@ -78,7 +84,7 @@ SELECT user_id,
        'Trendy fashion for men & women – sustainable & stylish.',
        'fashion-hub',
        'verified',
-       '0xBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBb'
+       NULL
 FROM users WHERE email = 'seller2@marketplace.com'
 ON CONFLICT (user_id) DO NOTHING;
 
@@ -88,7 +94,7 @@ SELECT user_id,
        'Quality home furnishings & decor that transform spaces.',
        'home-deco-plus',
        'verified',
-       '0xCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCc'
+       NULL
 FROM users WHERE email = 'seller3@marketplace.com'
 ON CONFLICT (user_id) DO NOTHING;
 

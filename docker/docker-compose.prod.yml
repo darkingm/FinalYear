@@ -184,6 +184,8 @@ services:
       ESCROW_CONTRACT_POLYGON: 0x0
       POLYGON_MUMBAI_RPC_URL: https://rpc-mumbai.maticvigil.com
       ARBITRUM_RPC_URL: https://arb1.arbitrum.io/rpc
+      BSC_TESTNET_RPC_URL: ${BSC_TESTNET_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545}
+      ESCROW_CONTRACT_BSC_TESTNET: ${ESCROW_CONTRACT_BSC_TESTNET:-0x0}
       ESCROW_CONTRACT_ADDRESS: ${ESCROW_CONTRACT_LOCALHOST:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
       MORALIS_API_KEY: ${MORALIS_API_KEY:-}
       ADMIN_PRIVATE_KEY: ${PRIVATE_KEY:-${BLOCKCHAIN_PRIVATE_KEY}}
@@ -229,8 +231,13 @@ services:
       # ─── Dual mode: Hardhat VPS default, Amoy fallback ───────────────
       NEXT_PUBLIC_DEFAULT_CHAIN_ID: "31337"
       NEXT_PUBLIC_TESTNET_MODE: "true"
-      # Hardhat node VPS: RPC public port 8545
-      NEXT_PUBLIC_HARDHAT_RPC_URL: http://103.20.96.79:8545
+      # Hardhat RPC is reverse-proxied via nginx /rpc/hardhat (HTTPS).
+      # NEXT_PUBLIC_HARDHAT_RPC_URL is baked into the JS bundle at BUILD time
+      # from the Dockerfile ARG (default: https://kienai.id.vn/rpc/hardhat).
+      # Setting it as a runtime env here would NOT change the client bundle
+      # and only invites mixed-content / config-drift bugs — left empty so
+      # the build-arg value is the single source of truth.
+      # NEXT_PUBLIC_HARDHAT_RPC_URL: (intentionally unset)
       NEXT_PUBLIC_ESCROW_CONTRACT_LOCALHOST: ${ESCROW_CONTRACT_LOCALHOST:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
       NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON_AMOY: ${ESCROW_CONTRACT_POLYGON_AMOY:-0xCDE08Be0190482691b3288C27240378497d74E79}
       NEXT_PUBLIC_ESCROW_CONTRACT_POLYGON: 0x0
@@ -256,7 +263,10 @@ services:
 
   # ─── Hardhat Local Chain (Chain ID 31337) ─────────────────────────────
   # Chain ảo chạy ngay trên VPS — không cần token thật, test thanh toán tự do
-  # RPC: http://103.20.96.79:8545 (public để MetaMask kết nối)
+  # RPC public-facing path: https://kienai.id.vn/rpc/hardhat (HTTPS, qua nginx
+  # reverse proxy). Container chỉ bind localhost — KHÔNG mở 8545 ra internet
+  # vì (a) HTTPS qua reverse proxy đã đủ cho MetaMask và (b) một public
+  # JSON-RPC mở là vector spam/abuse rất rộng.
   hardhat-node:
     image: node:20-alpine
     container_name: marketplace-hardhat
@@ -268,7 +278,7 @@ services:
       - ../contracts:/app
       - hardhat_node_modules:/app/node_modules
     ports:
-      - "8545:8545" # Public — MetaMask kết nối trực tiếp
+      - "127.0.0.1:8545:8545" # localhost only — nginx /rpc/hardhat proxies in
     networks:
       - marketplace-network
     restart: unless-stopped
@@ -287,8 +297,14 @@ services:
              echo 'Bootstrap done' && tail -f /dev/null"
     environment:
       LOCALHOST_RPC_URL: http://hardhat-node:8545
-      # Hardhat account #0 — used to deploy EscrowCore + CreditScoreSBT
-      PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      # Bootstrap deploys to a LOCAL Hardhat chain only (chain id 31337).
+      # If HARDHAT_BOOTSTRAP_PRIVATE_KEY is unset we fall back to the
+      # well-known Hardhat account #0 — the bootstrap script also asserts
+      # network=localhost before signing, so accidental mainnet usage with
+      # this key is blocked at the application layer. Keeping the key out
+      # of compose tracks the rule that no real-money credentials should
+      # appear in this file.
+      PRIVATE_KEY: ${HARDHAT_BOOTSTRAP_PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
     volumes:
       - ../contracts:/app
       - hardhat_node_modules:/app/node_modules

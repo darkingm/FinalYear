@@ -1,4 +1,9 @@
 # Simplified Docker Compose for development - Only infrastructure services
+#
+# Credentials are read from docker/.env (gitignored). Copy docker/.env.example
+# to docker/.env and fill in real values; defaults below are SAFE-FAIL stubs
+# only meant to make `docker compose config` parse without an .env file
+# present. Never use them as real secrets.
 version: '3.8'
 
 services:
@@ -6,16 +11,16 @@ services:
     image: postgres:15-alpine
     container_name: marketplace-postgres
     environment:
-      POSTGRES_DB: marketplace_db
-      POSTGRES_USER: marketplace
-      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ${POSTGRES_DB:-marketplace_db}
+      POSTGRES_USER: ${POSTGRES_USER:-marketplace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy docker/.env.example to docker/.env}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../init_database.sql:/docker-entrypoint-initdb.d
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U marketplace" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marketplace}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,16 +31,16 @@ services:
     image: postgres:15-alpine
     container_name: marketplace-payment-postgres
     environment:
-      POSTGRES_DB: payment_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: "@Kien2909"
+      POSTGRES_DB: ${POSTGRES_PAYMENT_DB:-payment_db}
+      POSTGRES_USER: ${POSTGRES_PAYMENT_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PAYMENT_PASSWORD:?POSTGRES_PAYMENT_PASSWORD is required — see docker/.env.example}
     ports:
       - "5434:5432"
     volumes:
       - payment_postgres_data:/var/lib/postgresql/data
       - ../payment_init_database.sql:/docker-entrypoint-initdb.d
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_PAYMENT_USER:-postgres}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,16 +50,21 @@ services:
   redis:
     image: redis:7-alpine
     container_name: marketplace-redis
-    command: redis-server --requirepass redis123
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required — see docker/.env.example}
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      # Pass the password to redis-cli so the auth-required server
+      # actually accepts the ping (previously the check would fail silently
+      # on dev once requirepass was set).
+      test: [ "CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} --no-auth-warning ping | grep -q PONG" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     networks:
       - marketplace-network
 
@@ -62,8 +72,8 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: marketplace-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: marketplace
-      RABBITMQ_DEFAULT_PASS: rabbitmq123
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-marketplace}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required — see docker/.env.example}
       RABBITMQ_DEFAULT_VHOST: /
     ports:
       - "5672:5672"
@@ -88,5 +98,3 @@ volumes:
 networks:
   marketplace-network:
     driver: bridge
-
-
