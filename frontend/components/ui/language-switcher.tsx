@@ -1,84 +1,79 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Globe, ChevronDown, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Languages } from 'lucide-react';
 import i18n from '@/lib/i18n/config';
 
-const LANGUAGES = [
-  { code: 'vi', label: 'Tiếng Việt', flag: '🇻🇳' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-];
+/**
+ * One-tap language toggle (VI ↔ EN).
+ *
+ * Click swaps to the OTHER language and persists to localStorage. The
+ * label intentionally shows the language you'll switch TO so users see
+ * the next state, not the current one — matches the "EN" / "VI" pattern
+ * common on dual-language sites.
+ *
+ * `i18n.changeLanguage` triggers re-render of any component using
+ * `useTranslation()` / `useClientTranslation()`. We also dispatch a
+ * `languagechange` window event for older non-react listeners.
+ */
+const LANG_META = {
+  vi: { flag: '🇻🇳', label: 'Tiếng Việt', code: 'VI' },
+  en: { flag: '🇺🇸', label: 'English',     code: 'EN' },
+} as const;
+
+type LangCode = keyof typeof LANG_META;
 
 export function LanguageSwitcher() {
-  const [currentLang, setCurrentLang] = useState<string>('en');
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Default to 'en' on SSR — actual choice is hydrated from localStorage on mount.
+  const [lang, setLang] = useState<LangCode>('en');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('preferred-language') : null;
-    const initial = saved || i18n.language || 'en';
-    setCurrentLang(initial);
-    if (i18n.language !== initial) {
-      i18n.changeLanguage(initial);
-    }
+    const saved = (typeof window !== 'undefined' ? localStorage.getItem('preferred-language') : null) as LangCode | null;
+    const initial: LangCode = saved === 'vi' || saved === 'en' ? saved : ((i18n.language as LangCode) || 'en');
+    setLang(initial);
+    if (i18n.language !== initial) i18n.changeLanguage(initial);
+    setMounted(true);
   }, []);
 
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const changeLanguage = async (code: string) => {
-    await i18n.changeLanguage(code);
-    setCurrentLang(code);
+  const toggle = async () => {
+    const next: LangCode = lang === 'vi' ? 'en' : 'vi';
+    await i18n.changeLanguage(next);
+    setLang(next);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('preferred-language', code);
+      localStorage.setItem('preferred-language', next);
       window.dispatchEvent(new Event('languagechange'));
     }
-    setOpen(false);
   };
 
-  const current = LANGUAGES.find(l => l.code === currentLang) || LANGUAGES[1];
+  // SSR-safe placeholder so hydration sees the same DOM the server emitted.
+  if (!mounted) {
+    return (
+      <button
+        type="button"
+        aria-label="Toggle language"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-muted-foreground border border-transparent text-sm font-medium"
+      >
+        <Languages className="w-4 h-4" />
+        <span className="text-xs font-bold tracking-wider">EN</span>
+      </button>
+    );
+  }
+
+  const current = LANG_META[lang];
+  const next = LANG_META[lang === 'vi' ? 'en' : 'vi'];
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 border border-transparent hover:border-border transition-all text-sm font-medium"
-        aria-label="Change language"
-      >
-        <Globe className="w-4 h-4" />
-        <span className="uppercase text-xs font-bold tracking-wider">{current.code}</span>
-        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <div
-          className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-xl shadow-2xl shadow-black/20 dark:shadow-black/50 py-1.5 z-50 overflow-hidden animate-scale-in"
-        >
-          {LANGUAGES.map(lang => (
-            <button
-              key={lang.code}
-              onClick={() => changeLanguage(lang.code)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                lang.code === currentLang
-                  ? 'text-[#f0b90b] bg-[#f0b90b]/10'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'
-              }`}
-            >
-              <span className="text-xl leading-none">{lang.flag}</span>
-              <span className="font-medium flex-1 text-left">{lang.label}</span>
-              {lang.code === currentLang && (
-                <Check className="w-3.5 h-3.5 text-[#f0b90b]" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={toggle}
+      title={`Đang dùng ${current.label} — bấm để chuyển sang ${next.label}`}
+      aria-label={`Switch to ${next.label}`}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 border border-transparent hover:border-border transition-all text-sm font-medium"
+    >
+      <Languages className="w-4 h-4" />
+      <span className="text-base leading-none" aria-hidden>{current.flag}</span>
+      <span className="text-xs font-bold tracking-wider">{current.code}</span>
+    </button>
   );
 }

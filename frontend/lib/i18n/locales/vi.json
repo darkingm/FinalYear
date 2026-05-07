@@ -24,6 +24,35 @@
     "addresses": "Địa chỉ",
     "sellerDashboard": "Quản lý bán hàng"
   },
+  "headerNav": {
+    "groupHint": "Nhóm điều hướng liên quan",
+    "loginBadge": "Đăng nhập",
+    "home": {
+      "label": "Trang chủ",
+      "desc": "Tổng quan marketplace"
+    },
+    "commerce": {
+      "label": "Mua bán",
+      "products": { "label": "Sản phẩm", "desc": "Duyệt danh mục và sản phẩm" },
+      "orders": { "label": "Đơn hàng", "desc": "Theo dõi và quản lý đơn hàng" },
+      "rwa": { "label": "RWA", "desc": "Khám phá tài sản thực được token hóa" }
+    },
+    "finance": {
+      "label": "Tài chính",
+      "trading": { "label": "Giao dịch", "desc": "Thị trường, chart và biến động giá" },
+      "onChain": { "label": "On-Chain", "desc": "Theo dõi dòng tiền và tín hiệu on-chain" },
+      "portfolio": { "label": "Portfolio", "desc": "Danh mục đầu tư RWA của bạn" }
+    },
+    "account": {
+      "label": "Tài khoản",
+      "wallet": { "label": "Ví", "desc": "Số dư, nạp rút và kết nối Web3" },
+      "kyc": { "label": "Xác minh KYC", "desc": "Xác minh danh tính để đầu tư RWA" },
+      "profile": { "label": "Hồ sơ", "desc": "Thông tin và thiết lập tài khoản" },
+      "credit": { "label": "AI Credit", "desc": "Quản lý credit và quyền dùng AI" },
+      "seller": { "label": "Seller Dashboard", "desc": "Bảng điều khiển dành cho người bán" },
+      "admin": { "label": "Admin", "desc": "Vận hành và quản trị hệ thống" }
+    }
+  },
   "auth": {
     "login": "Đăng nhập",
     "register": "Đăng ký",

@@ -217,7 +217,7 @@ export function Header() {
                   }`}
                 >
                   <HEADER_HOME_ITEM.icon className="h-3.5 w-3.5" />
-                  {HEADER_HOME_ITEM.label}
+                  {t(HEADER_HOME_ITEM.labelKey, { defaultValue: HEADER_HOME_ITEM.label })}
                 </Link>
 
                 {navGroups.map((group) => {
@@ -235,7 +235,7 @@ export function Header() {
                           }`}
                         >
                           <GroupIcon className="h-3.5 w-3.5" />
-                          {group.label}
+                          {t(group.labelKey, { defaultValue: group.label })}
                           <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                         </button>
                       </DropdownMenuTrigger>
@@ -246,8 +246,8 @@ export function Header() {
                               <GroupIcon className="h-4 w-4" />
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-foreground">{group.label}</p>
-                              <p className="text-[11px] text-muted-foreground">Nhóm điều hướng liên quan</p>
+                              <p className="text-sm font-bold text-foreground">{t(group.labelKey, { defaultValue: group.label })}</p>
+                              <p className="text-[11px] text-muted-foreground">{t('headerNav.groupHint', { defaultValue: 'Nhóm điều hướng liên quan' })}</p>
                             </div>
                           </div>
                         </DropdownMenuLabel>
@@ -275,15 +275,15 @@ export function Header() {
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
                                       <span className={`text-sm font-semibold ${itemActive ? 'text-[#8247e5]' : 'text-foreground'}`}>
-                                        {item.label}
+                                        {t(item.labelKey, { defaultValue: item.label })}
                                       </span>
                                       {item.authRequired && !isAuthenticated ? (
                                         <span className="rounded-full bg-[#8247e5]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#8247e5]">
-                                          Login
+                                          {t('headerNav.loginBadge', { defaultValue: 'Login' })}
                                         </span>
                                       ) : null}
                                     </div>
-                                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t(item.descriptionKey, { defaultValue: item.description })}</p>
                                   </div>
                                 </Link>
                               </DropdownMenuItem>
@@ -537,16 +537,16 @@ export function Header() {
                       <span className={`font-semibold ${
                         isHeaderNavItemActive(HEADER_HOME_ITEM, pathname) ? 'text-[#8247e5]' : 'text-foreground'
                       }`}>
-                        {HEADER_HOME_ITEM.label}
+                        {t(HEADER_HOME_ITEM.labelKey, { defaultValue: HEADER_HOME_ITEM.label })}
                       </span>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{HEADER_HOME_ITEM.description}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t(HEADER_HOME_ITEM.descriptionKey, { defaultValue: HEADER_HOME_ITEM.description })}</p>
                     </div>
                   </Link>
 
                   {navGroups.map((group) => (
                     <div key={group.key} className="space-y-1.5">
                       <div className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/70">
-                        {group.label}
+                        {t(group.labelKey, { defaultValue: group.label })}
                       </div>
                       {group.items.map((item) => {
                         const href = resolveHeaderNavHref(item, isAuthenticated);
@@ -565,14 +565,14 @@ export function Header() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className={`font-semibold ${itemActive ? 'text-[#8247e5]' : 'text-foreground'}`}>{item.label}</span>
+                                <span className={`font-semibold ${itemActive ? 'text-[#8247e5]' : 'text-foreground'}`}>{t(item.labelKey, { defaultValue: item.label })}</span>
                                 {item.authRequired && !isAuthenticated ? (
                                   <span className="rounded-full bg-[#8247e5]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#8247e5]">
-                                    Login
+                                    {t('headerNav.loginBadge', { defaultValue: 'Login' })}
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t(item.descriptionKey, { defaultValue: item.description })}</p>
                             </div>
                           </Link>
                         );

@@ -17,7 +17,10 @@ import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 
 export interface HeaderNavItem {
   href: string;
+  /** Translation key used by Header.tsx via t(labelKey). The `label` field is kept as a fallback when i18n hasn't loaded yet. */
+  labelKey: string;
   label: string;
+  descriptionKey: string;
   description: string;
   icon: LucideIcon;
   authRequired: boolean;
@@ -27,6 +30,7 @@ export interface HeaderNavItem {
 
 export interface HeaderNavGroup {
   key: 'commerce' | 'finance' | 'account';
+  labelKey: string;
   label: string;
   icon: LucideIcon;
   items: HeaderNavItem[];
@@ -34,7 +38,9 @@ export interface HeaderNavGroup {
 
 export const HEADER_HOME_ITEM: HeaderNavItem = {
   href: '/',
+  labelKey: 'headerNav.home.label',
   label: 'Trang chủ',
+  descriptionKey: 'headerNav.home.desc',
   description: 'Tổng quan marketplace',
   icon: Home,
   authRequired: false,
@@ -44,35 +50,38 @@ export const HEADER_HOME_ITEM: HeaderNavItem = {
 const HEADER_NAV_GROUPS: HeaderNavGroup[] = [
   {
     key: 'commerce',
+    labelKey: 'headerNav.commerce.label',
     label: 'Mua bán',
     icon: ShoppingBag,
     items: [
-      { href: '/products', label: 'Sản phẩm', description: 'Duyệt danh mục và sản phẩm', icon: Package, authRequired: false },
-      { href: '/orders', label: 'Đơn hàng', description: 'Theo dõi và quản lý đơn hàng', icon: ShoppingBag, authRequired: true },
-      { href: '/assets', label: 'RWA', description: 'Khám phá tài sản thực được token hóa', icon: Building, authRequired: false },
+      { href: '/products', labelKey: 'headerNav.commerce.products.label', label: 'Sản phẩm', descriptionKey: 'headerNav.commerce.products.desc', description: 'Duyệt danh mục và sản phẩm', icon: Package, authRequired: false },
+      { href: '/orders',   labelKey: 'headerNav.commerce.orders.label',   label: 'Đơn hàng', descriptionKey: 'headerNav.commerce.orders.desc',   description: 'Theo dõi và quản lý đơn hàng', icon: ShoppingBag, authRequired: true },
+      { href: '/assets',   labelKey: 'headerNav.commerce.rwa.label',      label: 'RWA',      descriptionKey: 'headerNav.commerce.rwa.desc',      description: 'Khám phá tài sản thực được token hóa', icon: Building, authRequired: false },
     ],
   },
   {
     key: 'finance',
+    labelKey: 'headerNav.finance.label',
     label: 'Tài chính',
     icon: TrendingUp,
     items: [
-      { href: '/trading/BTCUSDT', label: 'Giao dịch', description: 'Thị trường, chart và biến động giá', icon: TrendingUp, authRequired: false, matchStartsWith: false },
-      { href: '/whale-tracker', label: 'On-Chain', description: 'Theo dõi dòng tiền và tín hiệu on-chain', icon: Activity, authRequired: false },
-      { href: '/portfolio', label: 'Portfolio', description: 'Danh mục đầu tư RWA của bạn', icon: PieChart, authRequired: true },
+      { href: '/trading/BTCUSDT', labelKey: 'headerNav.finance.trading.label',   label: 'Giao dịch',  descriptionKey: 'headerNav.finance.trading.desc',   description: 'Thị trường, chart và biến động giá',     icon: TrendingUp, authRequired: false, matchStartsWith: false },
+      { href: '/whale-tracker',   labelKey: 'headerNav.finance.onChain.label',   label: 'On-Chain',   descriptionKey: 'headerNav.finance.onChain.desc',   description: 'Theo dõi dòng tiền và tín hiệu on-chain', icon: Activity,   authRequired: false },
+      { href: '/portfolio',       labelKey: 'headerNav.finance.portfolio.label', label: 'Portfolio',  descriptionKey: 'headerNav.finance.portfolio.desc', description: 'Danh mục đầu tư RWA của bạn',            icon: PieChart,   authRequired: true },
     ],
   },
   {
     key: 'account',
+    labelKey: 'headerNav.account.label',
     label: 'Tài khoản',
     icon: User,
     items: [
-      { href: '/wallet', label: 'Ví', description: 'Số dư, nạp rút và kết nối Web3', icon: Wallet, authRequired: true },
-      { href: '/kyc', label: 'Xác minh KYC', description: 'Xác minh danh tính để đầu tư RWA', icon: Fingerprint, authRequired: true },
-      { href: '/profile', label: 'Hồ sơ', description: 'Thông tin và thiết lập tài khoản', icon: User, authRequired: true },
-      { href: '/profile/credit', label: 'AI Credit', description: 'Quản lý credit và quyền dùng AI', icon: Brain, authRequired: true },
-      { href: '/seller/dashboard', label: 'Seller Dashboard', description: 'Bảng điều khiển dành cho người bán', icon: BarChart3, authRequired: true },
-      { href: '/admin', label: 'Admin', description: 'Vận hành và quản trị hệ thống', icon: Building, authRequired: true, adminOnly: true },
+      { href: '/wallet',           labelKey: 'headerNav.account.wallet.label',  label: 'Ví',                descriptionKey: 'headerNav.account.wallet.desc',  description: 'Số dư, nạp rút và kết nối Web3',     icon: Wallet,      authRequired: true },
+      { href: '/kyc',              labelKey: 'headerNav.account.kyc.label',     label: 'Xác minh KYC',      descriptionKey: 'headerNav.account.kyc.desc',     description: 'Xác minh danh tính để đầu tư RWA',   icon: Fingerprint, authRequired: true },
+      { href: '/profile',          labelKey: 'headerNav.account.profile.label', label: 'Hồ sơ',             descriptionKey: 'headerNav.account.profile.desc', description: 'Thông tin và thiết lập tài khoản',   icon: User,        authRequired: true },
+      { href: '/profile/credit',   labelKey: 'headerNav.account.credit.label',  label: 'AI Credit',         descriptionKey: 'headerNav.account.credit.desc',  description: 'Quản lý credit và quyền dùng AI',    icon: Brain,       authRequired: true },
+      { href: '/seller/dashboard', labelKey: 'headerNav.account.seller.label',  label: 'Seller Dashboard', descriptionKey: 'headerNav.account.seller.desc',  description: 'Bảng điều khiển dành cho người bán', icon: BarChart3,   authRequired: true },
+      { href: '/admin',            labelKey: 'headerNav.account.admin.label',   label: 'Admin',             descriptionKey: 'headerNav.account.admin.desc',   description: 'Vận hành và quản trị hệ thống',      icon: Building,    authRequired: true, adminOnly: true },
     ],
   },
 ];

@@ -24,6 +24,35 @@
     "addresses": "Addresses",
     "sellerDashboard": "Seller Dashboard"
   },
+  "headerNav": {
+    "groupHint": "Related navigation group",
+    "loginBadge": "Login",
+    "home": {
+      "label": "Home",
+      "desc": "Marketplace overview"
+    },
+    "commerce": {
+      "label": "Shop",
+      "products": { "label": "Products", "desc": "Browse categories and listings" },
+      "orders": { "label": "Orders", "desc": "Track and manage your orders" },
+      "rwa": { "label": "RWA", "desc": "Explore tokenized real-world assets" }
+    },
+    "finance": {
+      "label": "Finance",
+      "trading": { "label": "Trading", "desc": "Markets, charts and price action" },
+      "onChain": { "label": "On-Chain", "desc": "Track flows and on-chain signals" },
+      "portfolio": { "label": "Portfolio", "desc": "Your RWA investment portfolio" }
+    },
+    "account": {
+      "label": "Account",
+      "wallet": { "label": "Wallet", "desc": "Balances, deposits and Web3 connections" },
+      "kyc": { "label": "KYC Verification", "desc": "Verify identity to invest in RWA" },
+      "profile": { "label": "Profile", "desc": "Account info and preferences" },
+      "credit": { "label": "AI Credit", "desc": "Manage credit and AI access" },
+      "seller": { "label": "Seller Dashboard", "desc": "Control panel for sellers" },
+      "admin": { "label": "Admin", "desc": "System operations and administration" }
+    }
+  },
   "auth": {
     "login": "Login",
     "register": "Register",
