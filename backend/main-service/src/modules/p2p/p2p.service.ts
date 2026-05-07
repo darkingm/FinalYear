@@ -178,30 +178,35 @@ export class P2PService {
     }) {
         const { offer_id, fiat_amount, payment_method } = data;
 
-        const offerRes = await query(
-            `SELECT * FROM p2p_offers WHERE offer_id = $1 AND status = 'ACTIVE'`, [offer_id]
-        );
-        if (!offerRes.rows.length) throw new AppError('Offer not found or not active', 404);
-
-        const offer = offerRes.rows[0];
-        if (offer.creator_id === buyerId) throw new AppError('Cannot trade with yourself', 400);
-        if (fiat_amount < offer.min_amount) throw new AppError(`Minimum order: ${offer.min_amount} ${offer.fiat_currency}`, 400);
-        if (fiat_amount > offer.max_amount) throw new AppError(`Maximum order: ${offer.max_amount} ${offer.fiat_currency}`, 400);
-
-        const token_amount = fiat_amount / offer.price_per_unit;
-        const available = offer.total_amount - offer.filled_amount;
-        if (token_amount > available) throw new AppError('Insufficient offer liquidity', 400);
-
-        if (!offer.payment_methods.includes(payment_method)) {
-            throw new AppError(`Payment method "${payment_method}" not accepted by this offer`, 400);
-        }
-
-        const expires_at = new Date(Date.now() + offer.payment_time_limit * 60_000);
-
         const client = await getClient();
         await client.query('BEGIN');
         try {
-            // Lock offer liquidity
+            // Lock the offer row before reading liquidity, otherwise two
+            // concurrent buyers can both observe `available = 10`, both
+            // place an 8-unit order, and end up with filled_amount=16
+            // overshooting total_amount=10 (no CHECK constraint catches this).
+            const offerRes = await client.query(
+                `SELECT * FROM p2p_offers WHERE offer_id = $1 AND status = 'ACTIVE' FOR UPDATE`,
+                [offer_id]
+            );
+            if (!offerRes.rows.length) throw new AppError('Offer not found or not active', 404);
+
+            const offer = offerRes.rows[0];
+            if (offer.creator_id === buyerId) throw new AppError('Cannot trade with yourself', 400);
+            if (fiat_amount < offer.min_amount) throw new AppError(`Minimum order: ${offer.min_amount} ${offer.fiat_currency}`, 400);
+            if (fiat_amount > offer.max_amount) throw new AppError(`Maximum order: ${offer.max_amount} ${offer.fiat_currency}`, 400);
+
+            const token_amount = fiat_amount / offer.price_per_unit;
+            const available = Number(offer.total_amount) - Number(offer.filled_amount);
+            if (token_amount > available) throw new AppError('Insufficient offer liquidity', 400);
+
+            if (!offer.payment_methods.includes(payment_method)) {
+                throw new AppError(`Payment method "${payment_method}" not accepted by this offer`, 400);
+            }
+
+            const expires_at = new Date(Date.now() + offer.payment_time_limit * 60_000);
+
+            // Lock offer liquidity (UPDATE inside the same tx, row already locked above)
             await client.query(
                 `UPDATE p2p_offers SET filled_amount = filled_amount + $1 WHERE offer_id = $2`,
                 [token_amount, offer_id]
@@ -234,7 +239,7 @@ export class P2PService {
             logger.info('P2P order created', { order_id: orderRes.rows[0].p2p_order_id });
             return orderRes.rows[0];
         } catch (err) {
-            await client.query('ROLLBACK');
+            try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
             throw err;
         } finally {
             client.release();
@@ -297,16 +302,23 @@ export class P2PService {
     }
 
     async cancelOrder(orderId: number, userId: number, reason?: string) {
-        const orderRes = await query('SELECT * FROM p2p_orders WHERE p2p_order_id = $1', [orderId]);
-        if (!orderRes.rows.length) throw new AppError('Order not found', 404);
-        const order = orderRes.rows[0];
-
-        if (order.buyer_id !== userId && order.seller_id !== userId) throw new AppError('Access denied', 403);
-        if (!['PENDING'].includes(order.status)) throw new AppError(`Cannot cancel: status is ${order.status}`, 400);
-
         const client = await getClient();
         await client.query('BEGIN');
         try {
+            // Lock the order row before validating status — otherwise two
+            // concurrent cancels both see status='PENDING', both pass the
+            // check, and the offer's filled_amount gets decremented twice
+            // (effectively duping liquidity).
+            const orderRes = await client.query(
+                'SELECT * FROM p2p_orders WHERE p2p_order_id = $1 FOR UPDATE',
+                [orderId]
+            );
+            if (!orderRes.rows.length) throw new AppError('Order not found', 404);
+            const order = orderRes.rows[0];
+
+            if (order.buyer_id !== userId && order.seller_id !== userId) throw new AppError('Access denied', 403);
+            if (!['PENDING'].includes(order.status)) throw new AppError(`Cannot cancel: status is ${order.status}`, 400);
+
             // Return liquidity to offer
             await client.query(
                 `UPDATE p2p_offers SET filled_amount = GREATEST(0, filled_amount - $1) WHERE offer_id = $2`,
@@ -321,7 +333,7 @@ export class P2PService {
             );
             await client.query('COMMIT');
         } catch (err) {
-            await client.query('ROLLBACK');
+            try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
             throw err;
         } finally {
             client.release();

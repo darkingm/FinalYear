@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
+import { verifyCaptcha } from './verify-captcha';
 
 const authService = new AuthService();
 
@@ -16,69 +17,13 @@ export async function register(req: Request, res: Response, next: NextFunction) 
   try {
     const { email, password, username, wallet_address, captcha } = req.body;
 
-    // Validate captcha
-    if (!captcha) {
-      logger.warn('Register attempt without captcha token', { email });
-      return res.status(400).json({
+    const captchaResult = await verifyCaptcha(captcha, { action: 'register', email });
+    if (!captchaResult.ok) {
+      return res.status(captchaResult.status).json({
         success: false,
-        message: 'Vui lòng hoàn thành xác minh CAPTCHA',
-        code: 'ERR_CAPTCHA_REQUIRED',
+        message: captchaResult.message,
+        code: captchaResult.code,
       });
-    }
-
-    // Verify captcha with hCaptcha API
-    const hcaptchaSecret = process.env.HCAPTCHA_SECRET;
-    if (hcaptchaSecret && hcaptchaSecret !== 'your_hcaptcha_secret') {
-      try {
-        const verifyRes = await fetch('https://api.hcaptcha.com/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `secret=${hcaptchaSecret}&response=${captcha}`,
-        });
-        const verifyData = await verifyRes.json() as { success: boolean; 'error-codes'?: string[] };
-        if (!verifyData.success) {
-          const errorCodes = verifyData['error-codes'] || [];
-          logger.warn('hCaptcha verification failed', {
-            email,
-            errorCodes,
-            tokenLen: captcha?.length,
-          });
-
-          // Provide user-friendly message based on error type
-          let userMessage = 'Xác minh CAPTCHA thất bại. Vui lòng thử lại.';
-          if (errorCodes.includes('invalid-or-already-seen-response')) {
-            userMessage = 'CAPTCHA đã hết hạn hoặc đã sử dụng. Vui lòng làm mới và thử lại.';
-          } else if (errorCodes.includes('invalid-input-response')) {
-            userMessage = 'CAPTCHA không hợp lệ. Vui lòng thử lại.';
-          } else if (errorCodes.includes('sitekey-secret-mismatch')) {
-            userMessage = 'Lỗi cấu hình CAPTCHA. Vui lòng liên hệ hỗ trợ.';
-            logger.error('CRITICAL: hCaptcha sitekey-secret mismatch — check HCAPTCHA_SECRET and NEXT_PUBLIC_HCAPTCHA_SITEKEY');
-          }
-
-          return res.status(400).json({
-            success: false,
-            message: userMessage,
-            code: 'ERR_CAPTCHA_FAILED',
-          });
-        }
-      } catch (err) {
-        logger.error('hCaptcha API unreachable:', err);
-        return res.status(503).json({
-          success: false,
-          message: 'Dịch vụ xác minh CAPTCHA tạm thời không khả dụng. Vui lòng thử lại sau.',
-          code: 'ERR_CAPTCHA_SERVICE',
-        });
-      }
-    } else {
-      // hCaptcha secret not configured — block in production
-      if (process.env.NODE_ENV === 'production') {
-        logger.error('HCAPTCHA_SECRET not configured in production!');
-        return res.status(500).json({
-          success: false,
-          message: 'Lỗi cấu hình server. Vui lòng liên hệ hỗ trợ.',
-          code: 'ERR_CAPTCHA_CONFIG',
-        });
-      }
     }
 
     // Validate input fields
@@ -123,7 +68,16 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, password } = req.body;
+    const { email, password, captcha } = req.body;
+
+    const captchaResult = await verifyCaptcha(captcha, { action: 'login', email });
+    if (!captchaResult.ok) {
+      return res.status(captchaResult.status).json({
+        success: false,
+        message: captchaResult.message,
+        code: captchaResult.code,
+      });
+    }
 
     const result = await authService.login(email, password);
 
@@ -223,9 +177,14 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
   try {
     const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
-    if (refreshToken) {
-      await authService.logout(refreshToken);
-    }
+    // Also revoke the access token if presented — prevents stolen-token reuse
+    // window between logout and natural JWT expiry.
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ')
+      ? authHeader.substring(7).trim()
+      : undefined;
+
+    await authService.logout(refreshToken || undefined, accessToken);
 
     res.clearCookie('refreshToken', cookieOptions);
     res.json({

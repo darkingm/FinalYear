@@ -368,17 +368,27 @@ export async function updateSellerPayoutWallet(
 
     const wallet = rawWallet.toLowerCase();
 
-    // Authorization: the wallet must already be linked to this user. This
-    // ensures an attacker who briefly controls the session cannot redirect
-    // future earnings to a wallet they never proved ownership of.
+    // Authorization: the wallet must be linked to this user AND verified
+    // (signature-checked at /api/wallets POST time, OR matched against the
+    // canonical users.wallet_address from auth/link-wallet which always
+    // verifies SIWE). Without the verified flag, an attacker who briefly
+    // controls the session could re-add a wallet they don't own and point
+    // payouts at it.
     const linkedCheck = await query(
-      `SELECT 1 FROM user_wallets
-        WHERE user_id = $1 AND chain_type = 'evm' AND lower(address) = $2`,
+      `SELECT 1
+         FROM user_wallets
+        WHERE user_id = $1 AND chain_type = 'evm'
+          AND lower(address) = $2
+          AND is_verified = TRUE
+        UNION ALL
+       SELECT 1
+         FROM users
+        WHERE user_id = $1 AND lower(wallet_address) = $2`,
       [userId, wallet]
     );
     if (linkedCheck.rows.length === 0) {
       throw new AppError(
-        'You must link this wallet to your account first (and verify ownership) before using it as the payout wallet.',
+        'You must link AND verify this wallet (sign a message) before using it as the payout wallet.',
         403
       );
     }

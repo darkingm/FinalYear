@@ -76,12 +76,22 @@ export async function getProductReviews(req: AuthRequest, res: Response, next: N
 
     const offset = (page - 1) * limit;
 
-    let orderClause = 'r.created_at DESC';
-    if (sort === 'helpful') orderClause = 'r.helpful_count DESC, r.created_at DESC';
-    if (sort === 'highest') orderClause = 'r.rating DESC, r.created_at DESC';
-    if (sort === 'lowest')  orderClause = 'r.rating ASC, r.created_at DESC';
+    // Whitelist sort to a fixed map — never interpolate user input into ORDER BY.
+    const SORT_MAP: Record<string, string> = {
+      recent:  'r.created_at DESC',
+      helpful: 'r.helpful_count DESC, r.created_at DESC',
+      highest: 'r.rating DESC, r.created_at DESC',
+      lowest:  'r.rating ASC, r.created_at DESC',
+    };
+    const orderClause = SORT_MAP[sort] || SORT_MAP.recent;
 
-    const whereExtra = filterRating ? `AND r.rating = ${filterRating}` : '';
+    // Defensive: parseInt above returns NaN for bad input which is falsy, but
+    // pin to a 1-5 integer just in case future refactors change the parse.
+    const ratingParam = filterRating != null && filterRating >= 1 && filterRating <= 5 ? filterRating : null;
+    const whereExtra = ratingParam !== null ? 'AND r.rating = $4' : '';
+    const ratingArgsList = ratingParam !== null ? [ratingParam] : [];
+    const ratingArgsCount = ratingParam !== null ? '$2' : '';
+    void ratingArgsCount; // (unused — kept for symmetry note above)
 
     const [reviewsResult, countResult, statsResult] = await Promise.all([
       query(
@@ -93,11 +103,13 @@ export async function getProductReviews(req: AuthRequest, res: Response, next: N
          WHERE r.product_id = $1 AND r.status = 'published' ${whereExtra}
          ORDER BY ${orderClause}
          LIMIT $2 OFFSET $3`,
-        [productId, limit, offset]
+        [productId, limit, offset, ...ratingArgsList]
       ),
       query(
-        `SELECT COUNT(*) AS total FROM reviews WHERE product_id = $1 AND status = 'published' ${whereExtra}`,
-        [productId]
+        `SELECT COUNT(*) AS total FROM reviews
+         WHERE product_id = $1 AND status = 'published'
+           ${ratingParam !== null ? 'AND rating = $2' : ''}`,
+        ratingParam !== null ? [productId, ratingParam] : [productId]
       ),
       query(
         `SELECT

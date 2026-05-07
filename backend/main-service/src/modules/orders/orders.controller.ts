@@ -20,6 +20,11 @@ export async function checkoutCart(req: AuthRequest, res: Response, next: NextFu
     if (!items || !Array.isArray(items) || items.length === 0) {
       throw new AppError('Cart items are required', 400);
     }
+    // Cap cart size — without this, a malicious caller can send thousands
+    // of items and hold open inventory row-locks for every product simultaneously.
+    if (items.length > 50) {
+      throw new AppError('Cart cannot exceed 50 items per checkout', 400);
+    }
 
     await client.query('BEGIN');
 
@@ -92,18 +97,22 @@ export async function checkoutCart(req: AuthRequest, res: Response, next: NextFu
         [quantity, inventory.inventory_id]
       );
 
-      // We publish the event immediately (fire and forget)
-      // Though strictly speaking, we might want to wait for commit, but it's fine for now
-      await publishEvent('order.created', {
-        order_id: order.order_id, buyer_id: buyerId,
-        seller_id: product.seller_id, product_id, price_usd: priceUsd,
-        timestamp: Date.now(),
-      }).catch(err => logger.warn('Publish order.created failed (Cart Checkout):', err));
-
-      createdOrders.push(order);
+      createdOrders.push({ order, sellerId: product.seller_id, priceUsd });
     }
 
     await client.query('COMMIT');
+
+    // Publish AFTER commit — previously published inside the loop, which
+    // meant a later iteration's failure (and the rollback that follows)
+    // would still have advertised earlier "order.created" events to
+    // consumers. Now the messages only fire if the whole cart persists.
+    for (const c of createdOrders) {
+      publishEvent('order.created', {
+        order_id: c.order.order_id, buyer_id: buyerId,
+        seller_id: c.sellerId, product_id: c.order.product_id, price_usd: c.priceUsd,
+        timestamp: Date.now(),
+      }).catch(err => logger.warn('Publish order.created failed (Cart Checkout):', err));
+    }
 
     logger.info('Cart Checkout created multiple orders', {
       buyer_id: buyerId,
@@ -111,9 +120,13 @@ export async function checkoutCart(req: AuthRequest, res: Response, next: NextFu
       orderCount: createdOrders.length
     });
 
-    res.status(201).json({ success: true, internal_order_id: internalOrderId, orders: createdOrders });
+    res.status(201).json({
+      success: true,
+      internal_order_id: internalOrderId,
+      orders: createdOrders.map(c => c.order),
+    });
   } catch (error: any) {
-    await client.query('ROLLBACK');
+    try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
     logger.error('Checkout cart error:', error);
     next(error);
   } finally {
@@ -123,6 +136,11 @@ export async function checkoutCart(req: AuthRequest, res: Response, next: NextFu
 
 // ─── Create Single Order ─────────────────────────────────────────────────────────────
 export async function createOrder(req: AuthRequest, res: Response, next: NextFunction) {
+  // Mirror the checkoutCart shape: take a row-lock on inventory before
+  // inserting the order so two concurrent buyers can't both observe the
+  // same `available` and oversell. Previously this path had no transaction
+  // and could oversell or generate duplicate order_number under load.
+  const client = await getClient();
   try {
     const buyerId = req.user!.user_id;
     const { product_id, quantity, payment_method } = req.body;
@@ -131,20 +149,23 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       throw new AppError('product_id and quantity are required', 400);
     }
 
-    const productResult = await query(
-      'SELECT * FROM products WHERE product_id = $1 AND status = $2',
+    await client.query('BEGIN');
+
+    const productResult = await client.query(
+      'SELECT * FROM products WHERE product_id = $1 AND status = $2 FOR SHARE',
       [product_id, 'active']
     );
     if (productResult.rows.length === 0) throw new AppError('Product not found or inactive', 404);
     const product = productResult.rows[0];
 
-    const inventoryResult = await query(
-      'SELECT * FROM inventory WHERE product_id = $1',
+    const inventoryResult = await client.query(
+      'SELECT * FROM inventory WHERE product_id = $1 FOR UPDATE',
       [product_id]
     );
     if (inventoryResult.rows.length === 0 || inventoryResult.rows[0].available < quantity) {
       throw new AppError('Insufficient stock', 400);
     }
+    const inventory = inventoryResult.rows[0];
 
     const priceUsd = product.base_price_usd ? Number(product.base_price_usd) * quantity : 0;
     const subtotal = priceUsd;
@@ -154,14 +175,14 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
 
     const internalOrderId = uuidv4();
     const year = new Date().getFullYear();
-    const seqResult = await query(
+    const seqResult = await client.query(
       `SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 10) AS INTEGER)), 0) + 1 AS next_seq
        FROM orders WHERE order_number LIKE $1`,
       [`ORD-${year}-%`]
     );
     const orderNumber = `ORD-${year}-${String(seqResult.rows[0].next_seq).padStart(5, '0')}`;
 
-    const orderResult = await query(
+    const orderResult = await client.query(
       `INSERT INTO orders (
          internal_order_id, buyer_id, seller_id, product_id, quantity,
          price_usd, subtotal, shipping_fee, total_amount,
@@ -178,18 +199,21 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     );
 
     const order = orderResult.rows[0];
-    const inventory = inventoryResult.rows[0];
 
-    await query(
+    await client.query(
       `INSERT INTO inventory_locks (inventory_id, order_id, quantity, expires_at, status)
        VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes', 'active')`,
       [inventory.inventory_id, order.order_id, quantity]
     );
-    await query(
+    await client.query(
       `UPDATE inventory SET available = available - $1, reserved = reserved + $1 WHERE inventory_id = $2`,
       [quantity, inventory.inventory_id]
     );
 
+    await client.query('COMMIT');
+
+    // Publish AFTER commit — if RabbitMQ down we don't want to roll back
+    // a successful DB write; the cron sweeper will clean stale UNPAID rows.
     await publishEvent('order.created', {
       order_id: order.order_id, buyer_id: buyerId,
       seller_id: product.seller_id, product_id, price_usd: priceUsd,
@@ -199,8 +223,11 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     logger.info('Order created', { order_id: order.order_id });
     res.status(201).json({ success: true, order });
   } catch (error: any) {
+    try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
     logger.error('Create order error:', error);
     next(error);
+  } finally {
+    client.release();
   }
 }
 
@@ -363,12 +390,21 @@ export async function getOrderByInternalId(req: AuthRequest, res: Response, next
 
 // ─── Cancel Order ─────────────────────────────────────────────────────────────
 export async function cancelOrder(req: AuthRequest, res: Response, next: NextFunction) {
+  // Wrap in a transaction with FOR UPDATE on the order row. Without this,
+  // two concurrent cancels could both observe status='UNPAID', both pass the
+  // check, and the rowCount=0 branch on the *second* lock release would
+  // re-credit inventory on top of the first call's release — effectively
+  // duplicating stock back into available.
+  const client = await getClient();
+  let publishOnSuccess = false;
   try {
     const userId = req.user!.user_id;
     const orderId = parseInt(req.params.id);
 
-    const orderResult = await query(
-      'SELECT * FROM orders WHERE order_id = $1 AND buyer_id = $2',
+    await client.query('BEGIN');
+
+    const orderResult = await client.query(
+      'SELECT * FROM orders WHERE order_id = $1 AND buyer_id = $2 FOR UPDATE',
       [orderId, userId]
     );
     if (orderResult.rows.length === 0) throw new AppError('Order not found', 404);
@@ -381,16 +417,16 @@ export async function cancelOrder(req: AuthRequest, res: Response, next: NextFun
       throw new AppError('Order cannot be cancelled', 400);
     }
 
-    await query(`UPDATE orders SET status = 'CANCELLED', updated_at = NOW() WHERE order_id = $1`, [orderId]);
+    await client.query(`UPDATE orders SET status = 'CANCELLED', updated_at = NOW() WHERE order_id = $1`, [orderId]);
     // Use UPDATE + status='released' (not DELETE) so the DB trigger release_inventory() fires correctly
-    const lockUpdate = await query(
+    const lockUpdate = await client.query(
       `UPDATE inventory_locks SET status = 'released' WHERE order_id = $1 AND status = 'active' RETURNING inventory_id, quantity`,
       [orderId]
     );
 
     // For any locks that were already gone (edge case), restore inventory manually with safe bounds
     if (lockUpdate.rowCount === 0) {
-      await query(
+      await client.query(
         `UPDATE inventory SET available = LEAST(total_stock, available + $1),
                               reserved  = GREATEST(0, reserved - $1)
          WHERE product_id = $2`,
@@ -399,12 +435,20 @@ export async function cancelOrder(req: AuthRequest, res: Response, next: NextFun
     }
     // Note: if lockUpdate succeeded, the DB trigger handles available/reserved automatically
 
+    await client.query('COMMIT');
+    publishOnSuccess = true;
+
     await publishEvent('order.cancelled', { order_id: orderId, timestamp: Date.now() });
     logger.info('Order cancelled', { order_id: orderId });
     res.json({ success: true, message: 'Order cancelled successfully' });
   } catch (error: any) {
+    if (!publishOnSuccess) {
+      try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
+    }
     logger.error('Cancel order error:', error);
     next(error);
+  } finally {
+    client.release();
   }
 }
 

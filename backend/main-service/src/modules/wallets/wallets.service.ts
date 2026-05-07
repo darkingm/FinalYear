@@ -1,3 +1,4 @@
+import { ethers } from 'ethers';
 import { query } from '../../config/database';
 import { AppError } from '../../middleware/error-handler';
 import { logger } from '../../utils/logger';
@@ -47,15 +48,55 @@ export class WalletsService {
     }
 
     async addWallet(userId: number, data: {
-        chain_type: string; chain_id?: number; address: string; label?: string; is_primary?: boolean;
+        chain_type: string; chain_id?: number; address: string; label?: string;
+        is_primary?: boolean; message?: string; signature?: string;
     }) {
-        const { chain_type, chain_id, address, label, is_primary } = data;
+        const { chain_type, chain_id, address, label, is_primary, message, signature } = data;
 
         const allowedTypes = ['evm', 'solana', 'tron', 'ton', 'aptos', 'near', 'cosmos', 'bitcoin'];
         if (!allowedTypes.includes(chain_type)) throw new AppError(`Invalid chain_type: ${chain_type}`, 400);
 
         if (!validateAddress(address, chain_type)) {
             throw new AppError(`Invalid ${chain_type} address format`, 400);
+        }
+
+        // ── Ownership proof ──────────────────────────────────────────────
+        // EVM wallets require a signed message: previously the frontend
+        // signed a message client-side but the proof was never sent to the
+        // backend, so a malicious caller could "claim" any wallet (and
+        // worse, set it as their seller payout target after re-linking).
+        // Non-EVM chains (Solana/Tron/...) don't have a uniform server-
+        // verifiable signature library here yet, so we accept them as
+        // unverified — but `is_verified` will reflect that, and downstream
+        // checks (e.g. seller payout-wallet) require `is_verified = true`.
+        let isVerified = false;
+        if (chain_type === 'evm') {
+            if (!message || !signature) {
+                throw new AppError(
+                    'message and signature are required to prove ownership of an EVM wallet',
+                    400
+                );
+            }
+            let recovered: string;
+            try {
+                recovered = ethers.verifyMessage(message, signature);
+            } catch {
+                throw new AppError('Invalid signature', 401);
+            }
+            if (recovered.toLowerCase() !== address.toLowerCase()) {
+                throw new AppError('Signature does not match wallet address', 401);
+            }
+            // Anti-replay: the message must contain a timestamp within 5 minutes.
+            // Accept either ISO 8601 ("2026-01-01T00:00:00Z") or unix ms.
+            const tsMatch = message.match(/Timestamp:\s*(\S+)/i);
+            if (!tsMatch) {
+                throw new AppError('Signed message must include a "Timestamp:" line', 400);
+            }
+            const ts = /^\d+$/.test(tsMatch[1]) ? Number(tsMatch[1]) : Date.parse(tsMatch[1]);
+            if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > 5 * 60_000) {
+                throw new AppError('Signed message timestamp expired or invalid (5 min window)', 401);
+            }
+            isVerified = true;
         }
 
         // If setting as primary, unset others
@@ -67,15 +108,18 @@ export class WalletsService {
         }
 
         const res = await query(
-            `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary)
-       VALUES ($1,$2,$3,$4,$5,$6)
+            `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary, is_verified, verified_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $7 THEN NOW() ELSE NULL END)
        ON CONFLICT (user_id, chain_type, address) DO UPDATE
-       SET label = EXCLUDED.label, is_primary = EXCLUDED.is_primary, updated_at = NOW()
+       SET label = EXCLUDED.label, is_primary = EXCLUDED.is_primary,
+           is_verified = user_wallets.is_verified OR EXCLUDED.is_verified,
+           verified_at = COALESCE(user_wallets.verified_at, EXCLUDED.verified_at),
+           updated_at = NOW()
        RETURNING *`,
-            [userId, chain_type, chain_id || null, address, label || null, is_primary ?? false]
+            [userId, chain_type, chain_id || null, address, label || null, is_primary ?? false, isVerified]
         );
 
-        logger.info('Wallet added', { user_id: userId, chain_type, address });
+        logger.info('Wallet added', { user_id: userId, chain_type, address, is_verified: isVerified });
         return { ...res.rows[0], chain_info: CHAIN_INFO[chain_id!] };
     }
 
@@ -116,9 +160,13 @@ export class WalletsService {
     }
 
     async getDepositAddresses() {
-        // Return platform deposit addresses per chain from platform_config
+        // Return platform deposit addresses per chain from platform_settings.
+        // Legacy `platform_config` was consolidated into `platform_settings`
+        // by migration 028; the `deposit_addresses` key was retired in
+        // migration 023 (custodial deposit removed) so this typically
+        // returns an empty object for non-custodial flows.
         const res = await query(
-            `SELECT value FROM platform_config WHERE key = 'deposit_addresses'`
+            `SELECT value FROM platform_settings WHERE key = 'deposit_addresses'`
         );
         const addresses = res.rows[0]?.value || {};
 

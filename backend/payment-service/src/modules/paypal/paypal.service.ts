@@ -181,7 +181,25 @@ export class PayPalService {
     };
   }
 
-  async capturePayment(paypalOrderId: string) {
+  async capturePayment(paypalOrderId: string, callerUserId?: number) {
+    // Pre-check: only the buyer who originally created this PayPal order
+    // may capture it. Ownership is recorded at create-order time as
+    // `orders.paypal_order_id`. PayPal IDs are random + capture can only
+    // happen once anyway, but a strict ownership gate stops a hostile
+    // caller from completing a stranger's checkout flow if the ID leaks.
+    if (callerUserId != null) {
+      const owner = await mainQuery(
+        'SELECT buyer_id FROM orders WHERE paypal_order_id = $1',
+        [paypalOrderId]
+      );
+      if (owner.rows.length === 0) {
+        throw new AppError('Order not found for this PayPal session', 404);
+      }
+      if (Number(owner.rows[0].buyer_id) !== Number(callerUserId)) {
+        throw new AppError('You do not own this PayPal order', 403);
+      }
+    }
+
     const request = new paypal.orders.OrdersCaptureRequest(paypalOrderId);
     request.requestBody({});
 
@@ -192,7 +210,7 @@ export class PayPalService {
       this.logPayPalFailure('capture_payment', error, { paypalOrderId });
       throw this.toOperationalError(error, 'capture_payment');
     }
-    
+
     if (response.result.status !== 'COMPLETED') {
       throw new AppError('PayPal payment not completed', 400);
     }

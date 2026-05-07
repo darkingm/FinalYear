@@ -23,6 +23,19 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     req.user = { user_id: decoded.user_id, email: decoded.email, role: decoded.role };
 
+    // Check if access token has been revoked (logout). Best-effort: Redis
+    // outage falls through to status check below. Keys expire automatically
+    // when JWT exp is reached, so memory growth is bounded.
+    try {
+      const revoked = await getCache(`blacklist:access:${token}`);
+      if (revoked) {
+        throw new AppError('Token revoked', 401);
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      // Redis miss/error — fail-open; refresh token blacklist still protects.
+    }
+
     // Check if user account is still active (cached for 60s to avoid DB spam)
     try {
       const statusKey = `user-status:${decoded.user_id}`;

@@ -246,8 +246,31 @@ export class AuthService {
     return tokens;
   }
 
-  async logout(refreshToken: string) {
-    await this.blacklistToken(refreshToken);
+  async logout(refreshToken?: string, accessToken?: string) {
+    if (refreshToken) {
+      await this.blacklistToken(refreshToken);
+    }
+    if (accessToken) {
+      await this.blacklistAccessToken(accessToken);
+    }
+  }
+
+  /**
+   * Blacklist an access token until its natural expiration.
+   * TTL is computed from the JWT `exp` claim so Redis entries are not kept
+   * longer than necessary. If the token can't be decoded we skip silently —
+   * defense-in-depth, not a hard auth gate.
+   */
+  private async blacklistAccessToken(token: string) {
+    try {
+      const decoded = jwt.decode(token) as { exp?: number } | null;
+      if (!decoded || typeof decoded.exp !== 'number') return;
+      const ttlSeconds = decoded.exp - Math.floor(Date.now() / 1000);
+      if (ttlSeconds <= 0) return; // already expired
+      await setCache(`blacklist:access:${token}`, true, ttlSeconds);
+    } catch (err) {
+      logger.error('Access token blacklist failed:', err);
+    }
   }
 
   private generateTokens(user: any) {

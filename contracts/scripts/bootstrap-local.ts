@@ -47,6 +47,20 @@ async function main() {
     const deployer = signers[0];
     const network = await ethers.provider.getNetwork();
 
+    // ─── Safety guard ───────────────────────────────────────────────────
+    // This script is meant for the local Hardhat chain (31337) only.
+    // The bootstrap container in docker-compose.prod.yml falls back to the
+    // well-known Hardhat account #0 private key when HARDHAT_BOOTSTRAP_PRIVATE_KEY
+    // is unset; refuse to run anywhere else so a misconfigured RPC URL
+    // can never sign transactions on a real network with that test key.
+    const chainId = Number(network.chainId);
+    if (chainId !== 31337) {
+        throw new Error(
+            `bootstrap-local.ts refused to run on chainId=${chainId}. ` +
+            `This script is local-Hardhat-only (31337). Use deploy-amoy/deploy-base-sepolia/deploy.ts for real chains.`
+        );
+    }
+
     console.log('\n═══════════════════════════════════════════════════════');
     console.log('     Web3Market — Full Contract Bootstrap');
     console.log('═══════════════════════════════════════════════════════');

@@ -39,7 +39,8 @@ export async function capturePayment(req: Request, res: Response, next: NextFunc
       });
     }
 
-    const result = await paypalService.capturePayment(paypal_order_id);
+    const callerUserId = (req as any).user?.user_id;
+    const result = await paypalService.capturePayment(paypal_order_id, callerUserId);
     
     res.json({
       success: true,
