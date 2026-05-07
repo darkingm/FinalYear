@@ -25,6 +25,11 @@ vps*.txt
 *.zip
 *.tar
 
+# ── Hardhat build output (regenerable via `npx hardhat compile`) ──
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
 # ── Temp / scratch files ──────────────────────────────────────
 .scratch/
 .grapuco/status.json
