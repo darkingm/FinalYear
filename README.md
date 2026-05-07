@@ -1,61 +1,70 @@
-# Web3 Cryptocurrency E-commerce Platform
+# Web3Market — Hybrid Web3 + E-commerce Platform
 
-A production-grade hybrid e-commerce marketplace supporting both Web3 cryptocurrency payments (MetaMask) and traditional PayPal payments, with multi-language support, real-time crypto prices, and comprehensive features.
+A production-grade marketplace combining traditional e-commerce, Web3 crypto payments, real-world-asset tokenization, NFT-backed credit, AI-assisted shopping, and peer-to-peer fiat ↔ crypto trading.
 
 ## 🏗️ Architecture
 
-- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, TailwindCSS, Framer Motion
-- **Backend**: Node.js 22 + Express.js (2 microservices: Main + Payment Service)
-- **Database**: PostgreSQL
-- **Message Queue**: RabbitMQ (event-driven architecture)
-- **Caching**: Redis
-- **Web3**: ethers.js v6, WalletConnect v2, MetaMask SDK
-- **Smart Contracts**: Solidity + Hardhat
-- **Payments**: PayPal REST API + Smart Contract escrow
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, TailwindCSS, Framer Motion, RainbowKit + wagmi
+- **Backend (4 services)**:
+  - `main-service` — marketplace, auth, orders, products, P2P, RWA, NFT, KYC, coupons, admin (Node 22 + Express)
+  - `payment-service` — crypto + PayPal payments, escrow projection (Node 22 + Express)
+  - `tokenization-service` — RWA tokenization workflow (Node 22 + Express)
+  - `ai-service` — shopping assistant, semantic product search (FastAPI + Groq)
+- **Database**: PostgreSQL 15 (2 logical DBs: `marketplace_db`, `payment_db`)
+- **Message Queue**: RabbitMQ 3 (topic exchange `marketplace`; required in production for order state projection)
+- **Caching / Sessions**: Redis 7 (refresh-token rotation, access-token blacklist, hot caches)
+- **Web3**: ethers.js v6, viem, wagmi, RainbowKit (MetaMask · Coinbase · WalletConnect)
+- **Smart Contracts**: Solidity ^0.8.20 + Hardhat (12 contracts: EscrowCore, RWAFactory, CreditScoreSBT, etc.)
+- **Payments**: PayPal REST API + Escrow smart contracts (BSC Testnet, Polygon Amoy, local Hardhat)
+- **Infra**: Docker Compose (dev + prod), Nginx reverse proxy + Let's Encrypt SSL, GitHub Actions CI/CD → Docker Hub → VPS
 
 ## 🚀 Features
 
 ### Authentication
-- ✅ Email/Password registration with CAPTCHA
-- ✅ Google OAuth login
-- ✅ Facebook OAuth login
-- ✅ MetaMask wallet login (Sign-In with Ethereum - EIP-4361)
-
-### Homepage
-- ✅ Time-based greeting (Good Morning/Afternoon/Evening)
-- ✅ Total balance in USDT with real-time conversion
-- ✅ Individual coin holdings with logos
-- ✅ Real-time cryptocurrency prices (Binance WebSocket)
-- ✅ Smooth animations (Framer Motion)
-
-### UX Features
-- ✅ Dark/Light mode toggle
-- ✅ Language switcher (Vietnamese/English) - instant toggle
-- ✅ Responsive design
+- Email/password + hCaptcha (enforced server-side on register AND login)
+- Google + Facebook OAuth
+- Wallet sign-in with EIP-4361 (Sign-In with Ethereum)
+- Refresh-token rotation in Redis, access-token revocation on logout
 
 ### E-commerce
-- ✅ Product listing with image upload
-- ✅ Seller can choose accepted payment methods (crypto tokens + PayPal)
-- ✅ Dual payment flow (cryptocurrency or PayPal)
-- ✅ Order tracking with state machine
-- ✅ Inventory management with optimistic locking
+- Product listing with multi-image upload (Cloudinary), edit-in-place for sellers
+- Multi-token pricing per product (USDT, USDC, DAI, ETH, BNB, MATIC, …) with live USDT estimate
+- Dual checkout (crypto via escrow OR PayPal)
+- Order state machine + inventory FOR-UPDATE locking, transactional cart checkout
+- Coupons (per-seller scope), reviews, wishlist, addresses
 
-### Payment Methods
-- ✅ Cryptocurrency payments (USDT, USDC, DAI, etc.)
-- ✅ PayPal integration
-- ✅ Smart contract escrow for trustless transactions
+### Web3 / RWA / NFT
+- RWA tokenization workflow with on-chain factory + KYC gating
+- NFT mint per shipped order (proof-of-purchase) and CreditScoreSBT for AI credit
+- Multi-chain support (Hardhat local, BSC Testnet, Polygon Amoy)
+
+### P2P fiat ↔ crypto
+- Offer board (BUY/SELL), filters by token / fiat / payment method / amount
+- Order flow: place → mark paid → upload proof → confirm → release / dispute
+- In-order chat, admin dispute resolution
+- 5 fiat currencies (USD, VND, EUR, GBP, SGD), 5 payment rails (Bank, PayPal, MoMo, ZaloPay, Wise)
+
+### AI assistant
+- Conversational product search + recommendation (Groq LLaMA models)
+- Credit-gated usage tied to NFT ownership
+
+### UX
+- Dark/light theme, one-tap VI ↔ EN i18n, real-time Binance ticker bar, whale-tracker side panel
 
 ## 📦 Project Structure
 
 ```
-fyp-ecommerce/
-├── frontend/              # Next.js 16 application
+FYP/
+├── frontend/                        # Next.js 16 app
 ├── backend/
-│   ├── main-service/      # Core marketplace API
-│   └── payment-service/   # Payment processing
-├── contracts/             # Smart contracts (Solidity)
-├── docker/                # Docker Compose setup
-└── docs/                  # Documentation
+│   ├── main-service/                # Marketplace + auth + P2P + RWA + NFT
+│   ├── payment-service/             # Crypto + PayPal payments
+│   ├── tokenization-service/        # RWA tokenization workflow
+│   └── ai-service/                  # FastAPI shopping assistant
+├── contracts/                       # 12 Solidity contracts + Hardhat scripts
+├── init_database.sql/migrations/    # SQL migrations (numbered)
+├── docker/                          # docker-compose.yml + .prod.yml + nginx
+└── docs/                            # Architecture + audit docs
 ```
 
 ## 🛠️ Setup Instructions (Windows 11)

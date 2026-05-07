@@ -24,12 +24,21 @@ async function startServer() {
       logger.warn('Redis unavailable, continuing without cache:', redisErr?.message);
     }
 
-    // RabbitMQ optional — notifications only
+    // RabbitMQ is REQUIRED in production — order state projection consumes
+    // payment.confirmed/payment.failed events from it. Without RabbitMQ, paid
+    // orders never transition to PAID/CONFIRMED and the marketplace silently
+    // diverges from on-chain state. We only allow soft-fail in dev/test where
+    // local devs may not have the queue running.
+    const rabbitRequired = process.env.NODE_ENV === 'production';
     try {
       await connectRabbitMQ();
       orderPaymentEventsConsumer = new OrderPaymentEventsConsumer();
     } catch (mqErr: any) {
-      logger.warn('RabbitMQ unavailable, continuing without queue:', mqErr?.message);
+      if (rabbitRequired) {
+        logger.error('RabbitMQ unavailable in production — refusing to start', mqErr);
+        throw mqErr;
+      }
+      logger.warn('RabbitMQ unavailable (dev/test), continuing without queue:', mqErr?.message);
     }
 
     app.listen(PORT, () => {

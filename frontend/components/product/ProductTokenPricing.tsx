@@ -32,9 +32,10 @@ export function ProductTokenPricing({
 }: ProductTokenPricingProps) {
   const chipState = buildAcceptedTokenChipState(acceptedTokens, {
     selectedTokenId,
-    // Card layout: show only the primary token + a "+N" badge for the rest
-    // so the price area stays compact. Detail view shows everything.
-    maxVisible: variant === 'detail' ? acceptedTokens.length : 1,
+    // Card shows the first 3 tokens + a "+N" overflow badge so users can
+    // still pick the token they want without leaving the card. Detail view
+    // renders all tokens.
+    maxVisible: variant === 'detail' ? acceptedTokens.length : 3,
   });
   const interactive = typeof onSelect === 'function';
   const isDetail = variant === 'detail';
