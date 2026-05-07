@@ -537,17 +537,17 @@ function MarketTable({ symbols, search }: { symbols: string[]; search: string })
 }
 
 
-/* ─── Category definitions ───────────────────────── */
+/* ─── Category definitions ─────────────────────────
+ * Only categories that have at least one product in the catalog. The
+ * earlier list included Sports/Books/Gaming/etc. which sent users to
+ * empty result pages. When new categories are added to seed data,
+ * uncomment the matching row here.
+ */
 const HOME_CATEGORIES = [
-  { id: 'all', label: 'Tất cả', icon: Sparkles, color: '#f0b90b', slug: undefined },
-  { id: 'electronics', label: 'Electronics', icon: Laptop, color: '#3b82f6', slug: 'electronics' },
-  { id: 'fashion', label: 'Fashion', icon: Shirt, color: '#ec4899', slug: 'fashion' },
-  { id: 'home', label: 'Home', icon: HomeIcon, color: '#10b981', slug: 'home' },
-  { id: 'sports', label: 'Sports', icon: Dumbbell, color: '#f97316', slug: 'sports' },
-  { id: 'books', label: 'Books', icon: BookOpen, color: '#8b5cf6', slug: 'books' },
-  { id: 'gaming', label: 'Gaming', icon: Gamepad2, color: '#ef4444', slug: 'toys' },
-  { id: 'automotive', label: 'Automotive', icon: Car, color: '#6b7280', slug: 'automotive' },
-  { id: 'jewelry', label: 'Jewelry', icon: Diamond, color: '#f59e0b', slug: 'jewelry' },
+  { id: 'all',         label: 'Tất cả',     icon: Sparkles, color: '#f0b90b', slug: undefined },
+  { id: 'electronics', label: 'Electronics', icon: Laptop,   color: '#3b82f6', slug: 'electronics' },
+  { id: 'fashion',     label: 'Fashion',     icon: Shirt,    color: '#ec4899', slug: 'fashion' },
+  { id: 'home',        label: 'Home',        icon: HomeIcon, color: '#10b981', slug: 'home' },
 ];
 
 const TARGET_COUNT = 12;

@@ -57,7 +57,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
 
     const navItems = NAV_KEYS.map(n => ({ ...n, label: t(n.labelKey) }));
-    const handleLogout = () => { disconnect(); signOut({ callbackUrl: '/' }); };
+    const handleLogout = async () => {
+        // Mirror Header.tsx: blacklist refresh + access token server-side
+        // before clearing the local NextAuth session.
+        try {
+            const sessionRes = await fetch('/api/auth/session');
+            const sess = await sessionRes.json();
+            if (sess?.refreshToken || sess?.accessToken) {
+                const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                if (sess.accessToken) headers.Authorization = `Bearer ${sess.accessToken}`;
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/logout`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ refreshToken: sess.refreshToken }),
+                }).catch(() => {});
+            }
+        } catch {}
+        disconnect();
+        signOut({ callbackUrl: '/' });
+    };
     const isActive = (href: string, exact?: boolean) => exact ? pathname === href : pathname?.startsWith(href);
     const activePage = navItems.find(n => isActive(n.href, n.exact))?.label || 'Admin';
 

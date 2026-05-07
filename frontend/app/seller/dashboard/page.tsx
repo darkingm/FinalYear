@@ -17,6 +17,8 @@ import { toast } from 'sonner';
 import { TokenAmountInline, UsdtAmountInline } from '@/components/checkout/CheckoutPriceValue';
 import { getOrderPricingDisplay } from '@/lib/orders/presentation';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+// Wallet management lives under /wallet — keep this dashboard focused on
+// products + orders so non-seller and seller users see the same shape.
 
 interface DashboardStats {
   orders: {
@@ -37,6 +39,7 @@ interface DashboardStats {
     low_stock_count: number;
   };
   recent_orders: any[];
+  recent_products: any[];
   reviews: {
     avg_rating: string;
     review_count: number;
@@ -76,14 +79,17 @@ export default function SellerDashboardPage() {
       const [overviewRes, ordersRes, productsRes] = await Promise.all([
         apiClient.get('/api/seller/overview'),
         apiClient.get('/api/seller/orders?limit=5'),
-        apiClient.get('/api/seller/products?limit=1'),
+        // Fetch up to 8 most recent products so we can show actual cards
+        // on the dashboard (was previously limit=1 just to grab the count).
+        apiClient.get('/api/seller/products?limit=8'),
       ]);
 
       const ov = overviewRes.data?.data; // { revenue, orders, reviews, topProducts, ... }
       if (!ov) { setStats(null); return; }
 
       const recentOrders = ordersRes.data?.orders || [];
-      const totalProducts = productsRes.data?.pagination?.total || 0;
+      const recentProducts = productsRes.data?.products || [];
+      const totalProducts = productsRes.data?.pagination?.total || recentProducts.length;
 
       setStats({
         orders: {
@@ -104,6 +110,7 @@ export default function SellerDashboardPage() {
           low_stock_count: 0,
         },
         recent_orders: recentOrders,
+        recent_products: recentProducts,
         reviews: {
           avg_rating: ov.reviews?.avg_rating || '0',
           review_count: parseInt(ov.reviews?.total_reviews || '0'),
@@ -260,6 +267,73 @@ export default function SellerDashboardPage() {
               <p className="text-sm text-muted-foreground">Customer feedback</p>
             </div>
           </Link>
+        </div>
+
+        {/* My Products — click a card to view/edit */}
+        <div className="bg-card rounded-xl border border-border p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold">Sản phẩm của tôi</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Click vào sản phẩm để xem hoặc chỉnh sửa</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/products/create">
+                <Button size="sm" variant="outline">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Thêm
+                </Button>
+              </Link>
+              <Link href="/products/seller/my">
+                <Button size="sm" variant="ghost">
+                  Tất cả
+                  <ArrowUpRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {stats.recent_products.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Chưa có sản phẩm nào</p>
+              <Link href="/products/create" className="text-sm text-primary hover:underline mt-2 inline-block">
+                Đăng sản phẩm đầu tiên →
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {stats.recent_products.map((p: any) => (
+                <Link
+                  key={p.product_id}
+                  href={`/products/${p.product_id}/edit`}
+                  className="group p-3 bg-muted/30 rounded-lg border border-border/50 hover:border-primary/40 hover:shadow-sm transition-all"
+                >
+                  <div className="aspect-square rounded-md bg-muted overflow-hidden mb-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.primary_image || p.image_url || '/placeholder-product.svg'}
+                      alt={p.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/placeholder-product.svg'; }}
+                    />
+                  </div>
+                  <p className="text-sm font-semibold line-clamp-1 mb-0.5">{p.name}</p>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">${Number(p.base_price_usd || 0).toFixed(2)}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded ${
+                        p.status === 'active'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {p.status}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Recent Orders */}

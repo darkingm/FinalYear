@@ -20,10 +20,9 @@ const PROTECTED_ROUTES = [
 const SELLER_ROUTES = [
   '/seller/dashboard',
   '/products/create',
-  '/coupons',
 ];
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
 
@@ -67,7 +66,6 @@ export const config = {
     '/disputes/:path*',
     '/seller/:path*',
     '/products/create',
-    '/coupons/:path*',
     '/admin/:path*',
     '/login',
     '/register',

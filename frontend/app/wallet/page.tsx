@@ -111,7 +111,7 @@ function WalletBalanceDisplay({ address }: { address: string }) {
 export default function WalletPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
-  const { address, isConnected, chainId } = useAccount();
+  const { address, isConnected, chainId, connector } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
   const [wallets, setWallets] = useState<UserWallet[]>([]);
@@ -182,7 +182,11 @@ export default function WalletPage() {
     if (activeTab === 'escrow') fetchCryptoOrders();
   }, [activeTab, fetchCryptoOrders]);
 
-  /* ─── Detect MetaMask account switch ───────────────────────────────── */
+  /* ─── Detect connected-wallet account switch ──────────────────────────
+   * Works for any RainbowKit wallet connector (MetaMask, Coinbase, WalletConnect)
+   * because wagmi's useAccount() returns the active address regardless of
+   * which connector the user picked.
+   */
   const prevAddrRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!address || address === prevAddrRef.current) { prevAddrRef.current = address; return; }
@@ -196,24 +200,31 @@ export default function WalletPage() {
     }
   }, [address, wallets]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ─── Link MetaMask wallet ───────────────────────────────────────────── */
+  /* ─── Link the currently-connected wallet ─────────────────────────────
+   * The label uses connector.name (MetaMask / Coinbase Wallet / WalletConnect)
+   * so the saved entry reflects the actual provider, not a hard-coded "MetaMask".
+   */
   const handleLinkWallet = async () => {
-    if (!isConnected || !address) { toast.error('Vui lòng kết nối MetaMask trước'); return; }
+    if (!isConnected || !address) { toast.error('Vui lòng kết nối ví trước'); return; }
     const already = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
     if (already) { toast('Ví này đã được liên kết', { icon: 'ℹ️' }); return; }
 
     setLinking(true);
     try {
       const ts = Date.now();
-      await signMessageAsync({ message: `Link wallet to Crypto Marketplace\nAddress: ${address}\nTimestamp: ${ts}` });
+      const message = `Link wallet to Crypto Marketplace\nAddress: ${address}\nTimestamp: ${ts}`;
+      const signature = await signMessageAsync({ message });
+      const walletKind = connector?.name || 'EVM Wallet';
       await apiClient.post('/api/wallets', {
         chain_type: 'evm',
         chain_id: chainId || 1,
         address,
-        label: `MetaMask (${shortAddr(address)})`,
+        label: `${walletKind} (${shortAddr(address)})`,
         is_primary: wallets.length === 0,
+        message,
+        signature,
       });
-      toast.success('Đã liên kết ví MetaMask!');
+      toast.success(`Đã liên kết ${walletKind}!`);
       fetchData();
     } catch (err: any) {
       if (err.code === 4001) toast.error('Người dùng từ chối ký xác nhận');
@@ -287,7 +298,7 @@ export default function WalletPage() {
             </div>
             <div>
               <h1 className="text-2xl font-black">Ví của tôi</h1>
-              <p className="text-sm text-muted-foreground">Liên kết MetaMask · QR nạp tiền · Lịch sử</p>
+              <p className="text-sm text-muted-foreground">Liên kết ví (MetaMask · Coinbase · WalletConnect) · QR nạp tiền · Lịch sử</p>
             </div>
           </div>
 
@@ -296,11 +307,14 @@ export default function WalletPage() {
             {/* ── LEFT: Wallet management ────────────────────────────── */}
             <div className="lg:col-span-2 space-y-4">
 
-              {/* MetaMask connect / link */}
+              {/* Wallet connect / link — works with any RainbowKit connector */}
               <div className="bg-card border border-border rounded-2xl p-5">
                 <h2 className="font-bold text-sm flex items-center gap-2 mb-4">
-                  <Link2 className="w-4 h-4 text-[#f0b90b]" /> Liên kết ví MetaMask
+                  <Link2 className="w-4 h-4 text-[#f0b90b]" /> Liên kết ví Web3
                 </h2>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Hỗ trợ MetaMask, Coinbase Wallet, WalletConnect — chọn provider khi connect
+                </p>
                 <ConnectButton.Custom>
                   {({ account, openConnectModal, mounted }) => {
                     if (!mounted) return null;
@@ -309,7 +323,7 @@ export default function WalletPage() {
                         onClick={openConnectModal}
                         className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#f0b90b]/40 text-[#f0b90b] text-sm font-semibold hover:border-[#f0b90b] hover:bg-[#f0b90b]/5 transition-all flex items-center justify-center gap-2"
                       >
-                        <Wallet className="w-4 h-4" /> Kết nối MetaMask
+                        <Wallet className="w-4 h-4" /> Kết nối ví
                       </button>
                     );
                     const isAlreadyLinked = wallets.some(w => w.address.toLowerCase() === account.address.toLowerCase());
@@ -358,7 +372,7 @@ export default function WalletPage() {
                   <div className="text-center py-8 text-muted-foreground">
                     <Wallet className="w-10 h-10 mx-auto mb-3 opacity-20" />
                     <p className="text-sm">Chưa có ví nào</p>
-                    <p className="text-xs mt-1">Kết nối và liên kết MetaMask bên trên</p>
+                    <p className="text-xs mt-1">Kết nối và liên kết ví bên trên</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -472,7 +486,7 @@ export default function WalletPage() {
                         <div className="text-center py-14 text-muted-foreground">
                           <QrCode className="w-14 h-14 mx-auto mb-4 opacity-15" />
                           <p className="font-semibold">Chưa có ví nào</p>
-                          <p className="text-sm mt-1">Liên kết MetaMask để tạo QR nạp tiền</p>
+                          <p className="text-sm mt-1">Liên kết ví để tạo QR nạp tiền</p>
                         </div>
                       )}
                     </div>

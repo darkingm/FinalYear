@@ -234,6 +234,7 @@ export default function LoginClientPage() {
   const [authHint, setAuthHint] = useState<string | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const lastNoticeReasonRef = useRef<string | null>(null);
+  const captchaRef = useRef<HCaptcha | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || '';
 
   const { address, isConnected, chainId } = useAccount();
@@ -244,6 +245,7 @@ export default function LoginClientPage() {
     TOO_MANY_REQUESTS: 'Quá nhiều lần thử. Vui lòng thử lại sau 5 phút',
     ACCOUNT_SUSPENDED: 'Tài khoản đã bị khóa. Liên hệ hỗ trợ',
     INVALID_SIGNATURE: 'Chữ ký ví không hợp lệ',
+    CAPTCHA_FAILED: 'Xác minh CAPTCHA thất bại. Vui lòng làm mới và thử lại',
     OAuthAccountNotLinked: 'Email đã được đăng ký bằng phương thức khác',
     OAuthSignin: 'Đăng nhập OAuth thất bại. Vui lòng thử lại',
     Callback: 'Lỗi xác thực. Vui lòng thử lại',
@@ -274,6 +276,11 @@ export default function LoginClientPage() {
     resolver: zodResolver(schema),
   });
 
+  const resetCaptcha = () => {
+    setCaptchaToken(null);
+    try { captchaRef.current?.resetCaptcha(); } catch { /* widget unmounted */ }
+  };
+
   const onSubmit = async (data: FormData) => {
     if (siteKey && !captchaToken) { toast.error('Vui lòng hoàn thành CAPTCHA'); return; }
     setIsLoading(true);
@@ -282,12 +289,15 @@ export default function LoginClientPage() {
       const result = await signIn('credentials', {
         email: data.emailOrUsername,
         password: data.password,
+        captcha: captchaToken || '',
         redirect: false,
       });
       if (result?.error) {
         const msg = ERROR_MESSAGES[result.error] || 'Đăng nhập thất bại. Vui lòng thử lại';
         setAuthError(msg);
         toast.error(msg);
+        // hCaptcha tokens are single-use — reset after every failed attempt
+        resetCaptcha();
       } else if (result?.ok) {
         toast.success('Đăng nhập thành công!');
         router.push(searchParams?.get('callbackUrl') || '/');
@@ -295,6 +305,7 @@ export default function LoginClientPage() {
       }
     } catch {
       setAuthError('Đăng nhập thất bại. Vui lòng thử lại');
+      resetCaptcha();
     } finally {
       setIsLoading(false);
     }
@@ -569,7 +580,13 @@ export default function LoginClientPage() {
               {/* hCaptcha */}
               {siteKey && mounted && (
                 <div className="flex justify-center pt-1">
-                  <HCaptcha sitekey={siteKey} onVerify={t => setCaptchaToken(t)} onExpire={() => setCaptchaToken(null)} theme="dark" />
+                  <HCaptcha
+                    ref={captchaRef}
+                    sitekey={siteKey}
+                    onVerify={t => setCaptchaToken(t)}
+                    onExpire={() => setCaptchaToken(null)}
+                    theme="dark"
+                  />
                 </div>
               )}
 

@@ -210,12 +210,20 @@ export default function KYCPage() {
         try {
             const formData = new FormData();
             formData.append('file', file);
+            // IMPORTANT: do NOT set Content-Type manually for FormData uploads.
+            // The axios client has a default `Content-Type: application/json`
+            // — when we override it to 'multipart/form-data' without a
+            // boundary string, the server cannot parse the body and multer
+            // returns "Unexpected end of form" / req.file = undefined.
+            // Setting the header to undefined makes axios delete the inherited
+            // header and re-derive the proper `multipart/form-data; boundary=...`.
             const res = await apiClient.post('/api/kyc/upload-document', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: { 'Content-Type': undefined as unknown as string },
             });
             return res.data.url as string;
         } catch (err: any) {
-            toast.error(`Tải ảnh ${fieldName} thất bại`);
+            const msg = err?.response?.data?.message || err?.response?.data?.error || `Tải ảnh ${fieldName} thất bại`;
+            toast.error(msg);
             return null;
         } finally {
             setUploading(null);

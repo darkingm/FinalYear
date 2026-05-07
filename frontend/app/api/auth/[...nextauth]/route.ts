@@ -77,6 +77,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email or Username', type: 'text' },
         password: { label: 'Password', type: 'password' },
+        captcha: { label: 'Captcha', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
@@ -84,6 +85,7 @@ export const authOptions: NextAuthOptions = {
           const response = await serverApi.post('/api/auth/login', {
             email: credentials.email,
             password: credentials.password,
+            captcha: credentials.captcha,
           });
 
           const data = response.data;
@@ -102,10 +104,14 @@ export const authOptions: NextAuthOptions = {
         } catch (error: any) {
           const msg = error.response?.data?.message || 'Login failed';
           const status = error.response?.status;
+          const code = error.response?.data?.code;
           // Propagate specific errors to login page via NextAuth error query param
           if (status === 429) throw new Error('TOO_MANY_REQUESTS');
           if (status === 401) throw new Error('INVALID_CREDENTIALS');
           if (status === 403) throw new Error('ACCOUNT_SUSPENDED');
+          if (code === 'ERR_CAPTCHA_REQUIRED' || code === 'ERR_CAPTCHA_FAILED') {
+            throw new Error('CAPTCHA_FAILED');
+          }
           throw new Error(msg);
         }
       },
@@ -240,6 +246,27 @@ export const authOptions: NextAuthOptions = {
         session.refreshToken = token.refreshToken as string;
       }
       return session;
+    },
+  },
+  // Defense-in-depth: when NextAuth clears the local session, also tell the
+  // backend to blacklist the access + refresh tokens. Otherwise a NextAuth
+  // signOut() that bypasses the Header.tsx logout handler (e.g. the zombie
+  // cleanup in useAuth.ts) would leave the tokens valid until natural JWT
+  // expiry.
+  events: {
+    async signOut({ token }) {
+      try {
+        const accessToken = (token as any)?.accessToken as string | undefined;
+        const refreshToken = (token as any)?.refreshToken as string | undefined;
+        if (!accessToken && !refreshToken) return;
+        await serverApi.post(
+          '/api/auth/logout',
+          refreshToken ? { refreshToken } : {},
+          accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
+        );
+      } catch {
+        // Best-effort — don't block logout on backend reachability.
+      }
     },
   },
   pages: {

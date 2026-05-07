@@ -100,7 +100,8 @@ export default function ProfilePage() {
       setUploading(true);
       const fd = new FormData();
       fd.append('images', file);
-      const res = await apiClient.post('/api/products/upload-images', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      // Don't override Content-Type — axios sets the multipart boundary itself.
+      const res = await apiClient.post('/api/products/upload-images', fd, { headers: { 'Content-Type': undefined as unknown as string } });
       if (res.data?.urls?.[0]) {
         await apiClient.put('/api/users/profile', { avatar_url: res.data.urls[0] });
         toast.success('Ảnh đại diện đã cập nhật!');

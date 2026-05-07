@@ -45,6 +45,14 @@ interface ProductEditorFormProps {
   redirectTo?: string;
   defaultCategory?: string;
   defaultSelectedSymbols?: string[];
+  /**
+   * When set, the form runs in EDIT mode:
+   *   - GETs /api/products/:id on mount to populate fields
+   *   - PUTs /api/products/:id on submit instead of POST
+   * Existing primary image is presented as a non-editable thumbnail unless
+   * the user uploads a new one.
+   */
+  productId?: number;
 }
 
 interface ProductEditorState {
@@ -102,8 +110,10 @@ export function ProductEditorForm({
   redirectTo = '/products',
   defaultCategory = 'electronics',
   defaultSelectedSymbols = ['ETH', 'USDT'],
+  productId,
 }: ProductEditorFormProps) {
   const router = useRouter();
+  const isEditMode = typeof productId === 'number' && productId > 0;
 
   const [form, setForm] = useState<ProductEditorState>({
     name: '',
@@ -113,9 +123,14 @@ export function ProductEditorForm({
     stock: 1,
   });
   const [images, setImages] = useState<ProductEditorImageDraft[]>([]);
+  // Existing image URLs (for edit mode) — kept separate from local file uploads.
+  // If the user adds NEW files, those replace these on submit. If they don't,
+  // we re-send the same URLs so the backend keeps the gallery intact.
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
   const [tokenCatalog, setTokenCatalog] = useState<ProductEditorSeedToken[]>([]);
   const [tokenRows, setTokenRows] = useState<ProductEditorTokenRow[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [loadingProduct, setLoadingProduct] = useState(isEditMode);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -159,6 +174,60 @@ export function ProductEditorForm({
       ignore = true;
     };
   }, []);
+
+  // ── Edit mode: hydrate form with existing product after catalog loads ──
+  useEffect(() => {
+    if (!isEditMode || loadingCatalog) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await productsApi.getById(productId!);
+        const p = (res.data?.data || res.data?.product || res.data) as any;
+        if (!p || cancelled) return;
+
+        setForm({
+          name: p.name ?? '',
+          description: p.description ?? '',
+          category: p.category ?? defaultCategory,
+          basePriceUsd: Number(p.base_price_usd ?? 0),
+          stock: Number(p.stock ?? p.available ?? 1),
+        });
+
+        // Existing images → URL strings (no file blob; replaced only if user adds new)
+        const existingImgs: string[] = Array.isArray(p.images)
+          ? p.images.map((img: any) => (typeof img === 'string' ? img : img.image_url || img.url)).filter(Boolean)
+          : [];
+        if (existingImgs.length === 0 && p.primary_image) existingImgs.push(p.primary_image);
+        setExistingImageUrls(existingImgs);
+
+        // Existing accepted tokens → editor rows
+        const accepted = Array.isArray(p.accepted_tokens) ? p.accepted_tokens : [];
+        if (accepted.length > 0 && tokenCatalog.length > 0) {
+          const selectedSymbols = accepted.map((t: any) => String(t.symbol || '').toUpperCase());
+          const rows = syncAcceptedTokenEditorState({
+            basePriceUsd: Number(p.base_price_usd ?? 0),
+            catalog: tokenCatalog,
+            selectedSymbols,
+            currentRows: [],
+          }).map((row) => {
+            const match = accepted.find((t: any) => String(t.symbol || '').toUpperCase() === row.symbol.toUpperCase());
+            return match
+              ? { ...row, amount: String(match.price_in_token ?? row.amount), is_primary: !!match.is_primary }
+              : row;
+          });
+          if (!rows.some((r) => r.is_primary) && rows[0]) rows[0].is_primary = true;
+          setTokenRows(rows);
+        }
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'Không tải được sản phẩm');
+      } finally {
+        if (!cancelled) setLoadingProduct(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isEditMode, productId, loadingCatalog, tokenCatalog, defaultCategory]);
 
   const previewTokens = useMemo<ProductAcceptedTokenView[]>(
     () => tokenRows.map((row) => ({
@@ -307,7 +376,8 @@ export function ProductEditorForm({
       toast.error('Số lượng tồn kho không hợp lệ');
       return;
     }
-    if (images.length === 0) {
+    // In edit mode the user can keep existing images without re-uploading.
+    if (images.length === 0 && existingImageUrls.length === 0) {
       toast.error('Cần ít nhất 1 ảnh sản phẩm');
       return;
     }
@@ -320,26 +390,32 @@ export function ProductEditorForm({
 
     setSubmitting(true);
     try {
-      const uploadData = new FormData();
-      images.forEach((image) => {
-        if (image.file) {
-          uploadData.append('images', image.file);
+      // Upload only the newly-added local files; reuse already-stored URLs.
+      let uploadedUrls: string[] = [];
+      const newFiles = images.filter((img) => !!img.file);
+      if (newFiles.length > 0) {
+        const uploadData = new FormData();
+        newFiles.forEach((image) => {
+          if (image.file) uploadData.append('images', image.file);
+        });
+        // axios re-computes the boundary when Content-Type is unset.
+        // Forcing the literal string 'multipart/form-data' (no boundary)
+        // causes the backend's multer to fail with "Unexpected end of form".
+        const uploadResponse = await apiClient.post('/api/products/upload-images', uploadData, {
+          headers: { 'Content-Type': undefined as unknown as string },
+        });
+        uploadedUrls = uploadResponse.data?.urls || uploadResponse.data?.imageUrls || [];
+        if (uploadedUrls.length !== newFiles.length) {
+          throw new Error('Upload ảnh chưa hoàn tất đầy đủ');
         }
-      });
-
-      const uploadResponse = await apiClient.post('/api/products/upload-images', uploadData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      const imageUrls: string[] = uploadResponse.data?.urls || uploadResponse.data?.imageUrls || [];
-      if (imageUrls.length !== images.length) {
-        throw new Error('Upload ảnh chưa hoàn tất đầy đủ');
       }
 
-      const normalizedImages = images.map((image, index) => ({
-        url: imageUrls[index],
+      // Keep existing URLs first (preserve order), then append new uploads.
+      const allUrls = [...existingImageUrls, ...uploadedUrls];
+      const normalizedImages = allUrls.map((url, index) => ({
+        url,
         sort_order: index,
-        is_primary: image.is_primary || index === 0,
+        is_primary: index === 0,
       }));
 
       const payload: ProductUpsertPayload = {
@@ -361,7 +437,11 @@ export function ProductEditorForm({
         },
       };
 
-      await productsApi.create(payload);
+      if (isEditMode) {
+        await productsApi.update(productId!, payload);
+      } else {
+        await productsApi.create(payload);
+      }
       toast.success(successMessage);
       router.push(redirectTo);
     } catch (error: any) {
@@ -370,6 +450,19 @@ export function ProductEditorForm({
       setSubmitting(false);
     }
   };
+
+  // While the form is hydrating an existing product, show a spinner so the
+  // user doesn't see empty fields and assume the product was wiped.
+  if (isEditMode && loadingProduct) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 mx-auto border-3 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Đang tải sản phẩm…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -504,6 +597,34 @@ export function ProductEditorForm({
                   <p className="text-sm text-muted-foreground">Upload nhiều ảnh, sắp thứ tự và chọn ảnh chính để card/detail hiển thị đúng.</p>
                 </div>
               </div>
+
+              {/* Existing images (edit mode) — read-only thumbnails so the
+                  seller can see what's already attached. To replace them,
+                  add new images below; old URLs stay until form submit. */}
+              {existingImageUrls.length > 0 && (
+                <div className="mb-4 rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                    Ảnh đang có ({existingImageUrls.length}) — sẽ giữ nguyên nếu bạn không thêm ảnh mới
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {existingImageUrls.map((url, idx) => (
+                      <div key={idx} className="relative h-20 w-20 overflow-hidden rounded-lg border border-border">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`Ảnh ${idx + 1}`} className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setExistingImageUrls((prev) => prev.filter((_, i) => i !== idx))}
+                          className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-red-600"
+                          aria-label="Xóa ảnh"
+                          title="Xóa ảnh này"
+                        >
+                          <span className="block h-3 w-3 leading-none text-[10px] font-bold">×</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <ProductImageEditor
                 images={images}

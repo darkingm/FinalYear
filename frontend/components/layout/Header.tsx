@@ -153,14 +153,19 @@ export function Header() {
   }, [i18n]);
 
   const handleLogout = async () => {
-    // Best-effort: blacklist refresh token on backend before clearing session
+    // Best-effort: blacklist BOTH the refresh token (Redis 7d) and the
+    // access token (Redis until JWT exp) on backend before clearing the
+    // local session. Otherwise a stolen access token would remain valid
+    // for up to JWT_EXPIRES_IN minutes after logout.
     try {
       const sessionRes = await fetch('/api/auth/session');
       const session = await sessionRes.json();
-      if (session?.refreshToken) {
+      if (session?.refreshToken || session?.accessToken) {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
         await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/logout`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ refreshToken: session.refreshToken }),
         }).catch(() => {}); // best-effort — don't block logout
       }
@@ -169,7 +174,10 @@ export function Header() {
     signOut({ callbackUrl: '/' });
   };
 
-  const isAdmin = (user as any)?.role === 'admin' || (user as any)?.email === 'admin@marketplace.com';
+  // Trust the JWT `role` claim only. The email-based shortcut that used to
+  // live here ("|| email === 'admin@marketplace.com'") was a debug backdoor —
+  // role is the single source of truth.
+  const isAdmin = (user as any)?.role === 'admin';
   const navGroups = buildHeaderNavGroups({ isAdmin });
   const userInitials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U';
 
