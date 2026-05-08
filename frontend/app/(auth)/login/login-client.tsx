@@ -14,6 +14,7 @@ import {
   ArrowRight, Shield, Coins, Wallet,
 } from 'lucide-react';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { useDualText } from '@/lib/hooks/useDualText';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Header } from '@/components/layout/Header';
 import { CoinImage } from '@/components/ui/CoinImage';
@@ -53,6 +54,7 @@ function Particle({ delay, size, x, y, color }: { delay: number; size: number; x
 
 /* ─── Left Panel ────────────────────────────────────────────── */
 function LeftPanel() {
+  const tr = useDualText();
   const { prices: storePrices, connect: priceConnect } = usePriceStore();
   useEffect(() => { priceConnect(COIN_BINANCE); }, []);
   // Map store prices: { BTCUSDT: { price, change24h } } → { BTC: price }
@@ -108,13 +110,13 @@ function LeftPanel() {
             <Coins className="w-4 h-4" /> Web3 Marketplace
           </p>
           <h1 className="text-5xl font-black text-white leading-tight mb-4">
-            Giao dịch<br />
+            {tr('Giao dịch', 'Trade')}<br />
             <span className="bg-gradient-to-r from-[#f0b90b] via-[#f7931a] to-[#ff6b35] bg-clip-text text-transparent">
-              không giới hạn
+              {tr('không giới hạn', 'without limits')}
             </span>
           </h1>
           <p className="text-white/50 text-base leading-relaxed max-w-sm">
-            Nền tảng mua bán NFT & sản phẩm số được bảo vệ bởi Smart Contract Escrow — minh bạch, an toàn, phi tập trung.
+            {tr('Nền tảng mua bán NFT & sản phẩm số được bảo vệ bởi Smart Contract Escrow — minh bạch, an toàn, phi tập trung.', 'A marketplace for NFTs & digital goods, protected by Smart Contract Escrow — transparent, safe, decentralized.')}
           </p>
         </motion.div>
 
@@ -124,8 +126,8 @@ function LeftPanel() {
           className="flex gap-6 mt-8 mb-8"
         >
           {[
-            { label: 'Người dùng', value: '12,400+' },
-            { label: 'Giao dịch', value: '$2.4M+' },
+            { label: tr('Người dùng', 'Users'), value: '12,400+' },
+            { label: tr('Giao dịch', 'Trades'), value: '$2.4M+' },
             { label: 'NFT Mint', value: '8,300+' },
           ].map(s => (
             <div key={s.label}>
@@ -223,6 +225,7 @@ function LeftPanel() {
 /* ─── Main Page ─────────────────────────────────────────────── */
 export default function LoginClientPage() {
   const { t } = useClientTranslation();
+  const tr = useDualText();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -241,20 +244,20 @@ export default function LoginClientPage() {
   const { signMessageAsync } = useSignMessage();
 
   const ERROR_MESSAGES: Record<string, string> = {
-    INVALID_CREDENTIALS: 'Email hoặc mật khẩu không đúng',
-    TOO_MANY_REQUESTS: 'Quá nhiều lần thử. Vui lòng thử lại sau 5 phút',
-    ACCOUNT_SUSPENDED: 'Tài khoản đã bị khóa. Liên hệ hỗ trợ',
-    INVALID_SIGNATURE: 'Chữ ký ví không hợp lệ',
-    CAPTCHA_FAILED: 'Xác minh CAPTCHA thất bại. Vui lòng làm mới và thử lại',
-    OAuthAccountNotLinked: 'Email đã được đăng ký bằng phương thức khác',
-    OAuthSignin: 'Đăng nhập OAuth thất bại. Vui lòng thử lại',
-    Callback: 'Lỗi xác thực. Vui lòng thử lại',
+    INVALID_CREDENTIALS: tr('Email hoặc mật khẩu không đúng', 'Email or password is incorrect'),
+    TOO_MANY_REQUESTS: tr('Quá nhiều lần thử. Vui lòng thử lại sau 5 phút', 'Too many attempts. Please try again in 5 minutes'),
+    ACCOUNT_SUSPENDED: tr('Tài khoản đã bị khóa. Liên hệ hỗ trợ', 'Account suspended. Contact support'),
+    INVALID_SIGNATURE: tr('Chữ ký ví không hợp lệ', 'Invalid wallet signature'),
+    CAPTCHA_FAILED: tr('Xác minh CAPTCHA thất bại. Vui lòng làm mới và thử lại', 'CAPTCHA verification failed. Please refresh and retry'),
+    OAuthAccountNotLinked: tr('Email đã được đăng ký bằng phương thức khác', 'Email already registered via another method'),
+    OAuthSignin: tr('Đăng nhập OAuth thất bại. Vui lòng thử lại', 'OAuth login failed. Please try again'),
+    Callback: tr('Lỗi xác thực. Vui lòng thử lại', 'Authentication error. Please try again'),
   };
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     const err = searchParams?.get('error');
-    if (err) setAuthError(ERROR_MESSAGES[err] || 'Đăng nhập thất bại. Vui lòng thử lại');
+    if (err) setAuthError(ERROR_MESSAGES[err] || tr('Đăng nhập thất bại. Vui lòng thử lại', 'Login failed. Please try again'));
     const reason = searchParams?.get('reason');
     const notice = getLoginNoticeForReason(reason);
     setAuthHint(notice);
@@ -267,8 +270,8 @@ export default function LoginClientPage() {
   }, [searchParams]);
 
   const schema = z.object({
-    emailOrUsername: z.string().min(1, 'Email hoặc username là bắt buộc'),
-    password: z.string().min(1, 'Mật khẩu là bắt buộc'),
+    emailOrUsername: z.string().min(1, tr('Email hoặc username là bắt buộc', 'Email or username is required')),
+    password: z.string().min(1, tr('Mật khẩu là bắt buộc', 'Password is required')),
   });
   type FormData = z.infer<typeof schema>;
 
@@ -282,7 +285,7 @@ export default function LoginClientPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    if (siteKey && !captchaToken) { toast.error('Vui lòng hoàn thành CAPTCHA'); return; }
+    if (siteKey && !captchaToken) { toast.error(tr('Vui lòng hoàn thành CAPTCHA', 'Please complete the CAPTCHA')); return; }
     setIsLoading(true);
     setAuthError(null);
     try {
@@ -293,18 +296,18 @@ export default function LoginClientPage() {
         redirect: false,
       });
       if (result?.error) {
-        const msg = ERROR_MESSAGES[result.error] || 'Đăng nhập thất bại. Vui lòng thử lại';
+        const msg = ERROR_MESSAGES[result.error] || tr('Đăng nhập thất bại. Vui lòng thử lại', 'Login failed. Please try again');
         setAuthError(msg);
         toast.error(msg);
         // hCaptcha tokens are single-use — reset after every failed attempt
         resetCaptcha();
       } else if (result?.ok) {
-        toast.success('Đăng nhập thành công!');
+        toast.success(tr('Đăng nhập thành công!', 'Login successful!'));
         router.push(searchParams?.get('callbackUrl') || '/');
         router.refresh();
       }
     } catch {
-      setAuthError('Đăng nhập thất bại. Vui lòng thử lại');
+      setAuthError(tr('Đăng nhập thất bại. Vui lòng thử lại', 'Login failed. Please try again'));
       resetCaptcha();
     } finally {
       setIsLoading(false);
@@ -321,12 +324,12 @@ export default function LoginClientPage() {
         provider === 'google' ? { prompt: 'select_account' } : undefined,
       );
     }
-    catch { toast.error('Đăng nhập thất bại. Vui lòng thử lại'); setSocialLoading(null); }
+    catch { toast.error(tr('Đăng nhập thất bại. Vui lòng thử lại', 'Login failed. Please try again')); setSocialLoading(null); }
   };
 
   const handleWalletLogin = async () => {
     if (!isConnected || !address) {
-      toast.error('Vui lòng kết nối MetaMask trước');
+      toast.error(tr('Vui lòng kết nối MetaMask trước', 'Please connect MetaMask first'));
       return;
     }
     setWalletLoading(true);
@@ -355,20 +358,20 @@ export default function LoginClientPage() {
       });
 
       if (result?.error) {
-        const msg = ERROR_MESSAGES[result.error] || 'Đăng nhập ví thất bại';
+        const msg = ERROR_MESSAGES[result.error] || tr('Đăng nhập ví thất bại', 'Wallet login failed');
         setAuthError(msg);
         toast.error(msg);
       } else if (result?.ok) {
-        toast.success('Đăng nhập ví thành công!');
+        toast.success(tr('Đăng nhập ví thành công!', 'Wallet login successful!'));
         router.push(searchParams?.get('callbackUrl') || '/');
         router.refresh();
       }
     } catch (e: any) {
       if (e.code === 4001) {
-        toast.info('Đã hủy ký xác nhận');
+        toast.info(tr('Đã hủy ký xác nhận', 'Signature cancelled'));
       } else {
-        setAuthError(e.message || 'Đăng nhập ví thất bại');
-        toast.error(e.message || 'Đăng nhập ví thất bại');
+        setAuthError(e.message || tr('Đăng nhập ví thất bại', 'Wallet login failed'));
+        toast.error(e.message || tr('Đăng nhập ví thất bại', 'Wallet login failed'));
       }
     } finally {
       setWalletLoading(false);
@@ -419,8 +422,8 @@ export default function LoginClientPage() {
 
             {/* Header */}
             <div className="mb-8">
-              <h2 className="text-3xl font-black text-foreground mb-2">Đăng nhập</h2>
-              <p className="text-muted-foreground text-sm">Chào mừng trở lại! Kết nối ví để bắt đầu giao dịch.</p>
+              <h2 className="text-3xl font-black text-foreground mb-2">{tr('Đăng nhập', 'Sign in')}</h2>
+              <p className="text-muted-foreground text-sm">{tr('Chào mừng trở lại! Kết nối ví để bắt đầu giao dịch.', 'Welcome back! Connect a wallet to start trading.')}</p>
             </div>
 
             {/* Error banner */}
@@ -457,7 +460,7 @@ export default function LoginClientPage() {
                       className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#f6851b]/8 border border-[#f6851b]/20 rounded-xl text-foreground hover:bg-[#f6851b]/15 hover:border-[#f6851b]/40 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 font-medium text-sm"
                     >
                       <Wallet className="w-5 h-5 text-[#f6851b]" />
-                      Kết nối ví để đăng nhập
+                      {tr('Kết nối ví để đăng nhập', 'Connect wallet to sign in')}
                     </button>
                   );
                   return (
@@ -472,8 +475,8 @@ export default function LoginClientPage() {
                         <Wallet className="w-5 h-5 text-[#f6851b]" />
                       )}
                       {walletLoading
-                        ? 'Đang xác nhận chữ ký...'
-                        : `Đăng nhập bằng ví ${account.displayName}`}
+                        ? tr('Đang xác nhận chữ ký...', 'Confirming signature...')
+                        : tr(`Đăng nhập bằng ví ${account.displayName}`, `Sign in with wallet ${account.displayName}`)}
                     </button>
                   );
                 }}
@@ -495,7 +498,7 @@ export default function LoginClientPage() {
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                   </svg>
                 )}
-                Tiếp tục với Google
+                {tr('Tiếp tục với Google', 'Continue with Google')}
               </button>
 
               {/* Facebook — Beta/disabled */}
@@ -507,11 +510,11 @@ export default function LoginClientPage() {
                   <svg className="w-5 h-5 opacity-40" fill="#1877F2" viewBox="0 0 24 24">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                   </svg>
-                  Tiếp tục với Facebook
+                  {tr('Tiếp tục với Facebook', 'Continue with Facebook')}
                   <span className="ml-auto text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">Beta</span>
                 </button>
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-[#12121e] border border-white/10 rounded-lg text-xs text-white/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl z-10">
-                  Cần xác minh doanh nghiệp Facebook — Dùng Google nhé!
+                  {tr('Cần xác minh doanh nghiệp Facebook — Dùng Google nhé!', 'Facebook business verification needed — please use Google!')}
                 </div>
               </div>
             </div>
@@ -519,14 +522,14 @@ export default function LoginClientPage() {
             {/* Divider */}
             <div className="flex items-center gap-3 mb-6">
               <div className="flex-1 h-px bg-white/8" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">hoặc dùng email</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">{tr('hoặc dùng email', 'or use email')}</span>
               <div className="flex-1 h-px bg-white/8" />
             </div>
 
             {/* Credentials Form */}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-foreground/70 mb-1.5">Email hoặc Username</label>
+                <label className="block text-sm font-semibold text-foreground/70 mb-1.5">{tr('Email hoặc Username', 'Email or Username')}</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                   <input
@@ -547,9 +550,9 @@ export default function LoginClientPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-semibold text-foreground/70">Mật khẩu</label>
+                  <label className="text-sm font-semibold text-foreground/70">{tr('Mật khẩu', 'Password')}</label>
                   <Link href="/forgot-password" className="text-xs text-[#f0b90b] hover:text-[#f0b90b]/80 transition-colors">
-                    Quên mật khẩu?
+                    {tr('Quên mật khẩu?', 'Forgot password?')}
                   </Link>
                 </div>
                 <div className="relative">
@@ -597,18 +600,18 @@ export default function LoginClientPage() {
                 className="w-full py-3.5 btn-purple-rainbow rounded-xl text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
               >
                 {isLoading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />Đang đăng nhập...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{tr('Đang đăng nhập...', 'Signing in...')}</>
                 ) : (
-                  <>Đăng nhập <ArrowRight className="w-4 h-4" /></>
+                  <>{tr('Đăng nhập', 'Sign in')} <ArrowRight className="w-4 h-4" /></>
                 )}
               </button>
             </form>
 
             {/* Register link */}
             <p className="mt-6 text-center text-sm text-white/40">
-              Chưa có tài khoản?{' '}
+              {tr('Chưa có tài khoản?', "Don't have an account?")}{' '}
               <Link href="/register" className="text-[#f0b90b] hover:text-[#f7c82a] font-bold transition-colors">
-                Đăng ký miễn phí →
+                {tr('Đăng ký miễn phí →', 'Register for free →')}
               </Link>
             </p>
 

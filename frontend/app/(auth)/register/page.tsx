@@ -17,6 +17,7 @@ import {
   XCircle, Loader2, ArrowRight, Shield, Coins, Sparkles,
 } from 'lucide-react';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { useDualText } from '@/lib/hooks/useDualText';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Header } from '@/components/layout/Header';
 import { CoinImage } from '@/components/ui/CoinImage';
@@ -37,11 +38,12 @@ const COIN_BINANCE = COINS.map(c => c.symbol + 'USDT');
 
 /* ─── Password Strength ─────────────────────────────────────── */
 function PasswordStrengthBar({ password }: { password: string }) {
+  const tr = useDualText();
   const checks = [
-    { label: '8+ ký tự', ok: password.length >= 8 },
-    { label: 'Chữ thường', ok: /[a-z]/.test(password) },
-    { label: 'Chữ hoa', ok: /[A-Z]/.test(password) },
-    { label: 'Số', ok: /\d/.test(password) },
+    { label: tr('8+ ký tự', '8+ chars'), ok: password.length >= 8 },
+    { label: tr('Chữ thường', 'Lowercase'), ok: /[a-z]/.test(password) },
+    { label: tr('Chữ hoa', 'Uppercase'), ok: /[A-Z]/.test(password) },
+    { label: tr('Số', 'Number'), ok: /\d/.test(password) },
   ];
   const score = checks.filter(c => c.ok).length;
   const colors = ['bg-red-500', 'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-emerald-500'];
@@ -67,16 +69,17 @@ function PasswordStrengthBar({ password }: { password: string }) {
 
 /* ─── Left Panel ────────────────────────────────────────────── */
 function LeftPanel() {
+  const tr = useDualText();
   const { prices: storePrices, connect: priceConnect } = usePriceStore();
   useEffect(() => { priceConnect(COIN_BINANCE); }, []);
   const prices = Object.fromEntries(COINS.map(c => [c.symbol, storePrices[c.symbol + 'USDT']?.price ?? c.base]));
   const changes = Object.fromEntries(COINS.map(c => [c.symbol, storePrices[c.symbol + 'USDT']?.change24h ?? 0]));
 
   const perks = [
-    { icon: Shield, title: 'Escrow thông minh', desc: 'Tiền được giữ an toàn trong Smart Contract cho đến khi giao dịch hoàn tất' },
-    { icon: Coins, title: 'Multi-chain NFT', desc: 'Mint và giao dịch NFT trên Polygon, Arbitrum, BNB Chain' },
-    { icon: Sparkles, title: 'AI Credit Score', desc: 'Điểm tín nhiệm dựa trên lịch sử giao dịch blockchain, vay không thế chấp' },
-    { icon: Zap, title: 'P2P Nhanh', desc: 'Giao dịch ngang hàng tức thì, hỗ trợ 10+ phương thức thanh toán' },
+    { icon: Shield, title: tr('Escrow thông minh', 'Smart Escrow'), desc: tr('Tiền được giữ an toàn trong Smart Contract cho đến khi giao dịch hoàn tất', 'Funds held safely in a Smart Contract until the trade completes') },
+    { icon: Coins, title: 'Multi-chain NFT', desc: tr('Mint và giao dịch NFT trên Polygon, Arbitrum, BNB Chain', 'Mint and trade NFTs on Polygon, Arbitrum, BNB Chain') },
+    { icon: Sparkles, title: 'AI Credit Score', desc: tr('Điểm tín nhiệm dựa trên lịch sử giao dịch blockchain, vay không thế chấp', 'Credit score from on-chain history, borrow without collateral') },
+    { icon: Zap, title: tr('P2P Nhanh', 'Fast P2P'), desc: tr('Giao dịch ngang hàng tức thì, hỗ trợ 10+ phương thức thanh toán', 'Instant peer-to-peer trading with 10+ payment methods') },
   ];
 
   return (
@@ -100,7 +103,7 @@ function LeftPanel() {
           <span className="font-black text-xl text-white tracking-tight">Web3<span className="text-[#f0b90b]">Market</span></span>
         </Link>
         <Link href="/login" className="text-xs text-white/40 hover:text-white/70 transition-colors">
-          Đã có tài khoản? <span className="text-[#f0b90b]">Đăng nhập →</span>
+          {tr('Đã có tài khoản?', 'Already have an account?')} <span className="text-[#f0b90b]">{tr('Đăng nhập →', 'Sign in →')}</span>
         </Link>
       </div>
 
@@ -108,16 +111,16 @@ function LeftPanel() {
       <div className="relative z-10 flex-1 flex flex-col justify-center px-8 py-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <p className="text-[#9945ff] text-sm font-bold tracking-widest uppercase mb-3 flex items-center gap-2">
-            <Sparkles className="w-4 h-4" /> Tham gia ngay hôm nay
+            <Sparkles className="w-4 h-4" /> {tr('Tham gia ngay hôm nay', 'Join today')}
           </p>
           <h1 className="text-5xl font-black text-white leading-tight mb-4">
-            Xây dựng<br />
+            {tr('Xây dựng', 'Build')}<br />
             <span className="bg-gradient-to-r from-[#9945ff] via-[#627eea] to-[#12aaff] bg-clip-text text-transparent">
-              tương lai Web3
+              {tr('tương lai Web3', 'the Web3 future')}
             </span>
           </h1>
           <p className="text-white/50 text-sm leading-relaxed max-w-sm mb-8">
-            Tạo tài khoản và kết nối ví crypto để tham gia vào hệ sinh thái thương mại điện tử thế hệ tiếp theo.
+            {tr('Tạo tài khoản và kết nối ví crypto để tham gia vào hệ sinh thái thương mại điện tử thế hệ tiếp theo.', 'Create an account and connect a crypto wallet to join the next-gen e-commerce ecosystem.')}
           </p>
         </motion.div>
 
@@ -169,9 +172,9 @@ function LeftPanel() {
       {/* Bottom stats */}
       <div className="relative z-10 flex gap-8 px-8 pb-8">
         {[
-          { v: '0%', l: 'Phí đăng ký' },
-          { v: '24/7', l: 'Hỗ trợ' },
-          { v: '12K+', l: 'Thành viên' },
+          { v: '0%', l: tr('Phí đăng ký', 'Signup fee') },
+          { v: '24/7', l: tr('Hỗ trợ', 'Support') },
+          { v: '12K+', l: tr('Thành viên', 'Members') },
         ].map(s => (
           <div key={s.l}>
             <p className="text-lg font-black text-white">{s.v}</p>
@@ -186,6 +189,7 @@ function LeftPanel() {
 /* ─── Main Page ─────────────────────────────────────────────── */
 export default function RegisterPage() {
   const { t } = useClientTranslation();
+  const tr = useDualText();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
@@ -200,17 +204,17 @@ export default function RegisterPage() {
   const handleSocialSignIn = async (provider: 'google' | 'facebook') => {
     setSocialLoading(provider);
     try { await signIn(provider, { callbackUrl: '/' }); }
-    catch { toast.error('Đăng nhập thất bại. Vui lòng thử lại'); setSocialLoading(null); }
+    catch { toast.error(tr('Đăng nhập thất bại. Vui lòng thử lại', 'Login failed. Please try again')); setSocialLoading(null); }
   };
 
   const schema = z.object({
-    email: z.string().email('Email không hợp lệ'),
-    username: z.string().min(3, 'Tối thiểu 3 ký tự').max(20, 'Tối đa 20 ký tự'),
-    password: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'Cần chữ hoa, chữ thường và số'),
+    email: z.string().email(tr('Email không hợp lệ', 'Invalid email')),
+    username: z.string().min(3, tr('Tối thiểu 3 ký tự', 'Minimum 3 characters')).max(20, tr('Tối đa 20 ký tự', 'Maximum 20 characters')),
+    password: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, tr('Cần chữ hoa, chữ thường và số', 'Needs uppercase, lowercase, and a number')),
     confirmPassword: z.string(),
-    terms: z.boolean().refine(v => v === true, 'Vui lòng đồng ý điều khoản'),
+    terms: z.boolean().refine(v => v === true, tr('Vui lòng đồng ý điều khoản', 'Please accept the terms')),
   }).refine(d => d.password === d.confirmPassword, {
-    message: 'Mật khẩu xác nhận không khớp',
+    message: tr('Mật khẩu xác nhận không khớp', 'Passwords do not match'),
     path: ['confirmPassword'],
   });
 
@@ -223,7 +227,7 @@ export default function RegisterPage() {
   const password = watch('password', '');
 
   const onSubmit = async (data: FormData) => {
-    if (siteKey && !captchaToken) { toast.error('Vui lòng hoàn thành CAPTCHA'); return; }
+    if (siteKey && !captchaToken) { toast.error(tr('Vui lòng hoàn thành CAPTCHA', 'Please complete the CAPTCHA')); return; }
     setIsLoading(true);
     try {
       await apiClient.post('/api/auth/register', {
@@ -232,11 +236,11 @@ export default function RegisterPage() {
         password: data.password,
         captcha: captchaToken || 'no-captcha',
       });
-      toast.success('Tạo tài khoản thành công! Đang chuyển hướng...');
+      toast.success(tr('Tạo tài khoản thành công! Đang chuyển hướng...', 'Account created! Redirecting...'));
       router.push('/login');
     } catch (err: any) {
       const resData = err.response?.data;
-      const message = resData?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+      const message = resData?.message || tr('Đăng ký thất bại. Vui lòng thử lại.', 'Registration failed. Please try again.');
       const code = resData?.code;
 
       toast.error(message);
@@ -293,8 +297,8 @@ export default function RegisterPage() {
             </div>
 
             <div className="mb-7">
-              <h2 className="text-3xl font-black text-white mb-1.5">Tạo tài khoản</h2>
-              <p className="text-white/40 text-sm">Miễn phí mãi mãi. Không cần thẻ tín dụng.</p>
+              <h2 className="text-3xl font-black text-white mb-1.5">{tr('Tạo tài khoản', 'Create account')}</h2>
+              <p className="text-white/40 text-sm">{tr('Miễn phí mãi mãi. Không cần thẻ tín dụng.', 'Free forever. No credit card required.')}</p>
             </div>
 
             {/* Social */}
@@ -313,7 +317,7 @@ export default function RegisterPage() {
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                   </svg>
                 )}
-                Đăng ký với Google
+                {tr('Đăng ký với Google', 'Sign up with Google')}
               </button>
 
               <div className="relative group">
@@ -323,11 +327,11 @@ export default function RegisterPage() {
                   <svg className="w-5 h-5 opacity-40" fill="#1877F2" viewBox="0 0 24 24">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                   </svg>
-                  Đăng ký với Facebook
+                  {tr('Đăng ký với Facebook', 'Sign up with Facebook')}
                   <span className="ml-auto text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">Beta</span>
                 </button>
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-[#12121e] border border-white/10 rounded-lg text-xs text-white/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl z-10">
-                  Cần xác minh doanh nghiệp — Dùng Google nhé!
+                  {tr('Cần xác minh doanh nghiệp — Dùng Google nhé!', 'Business verification needed — please use Google!')}
                 </div>
               </div>
             </div>
@@ -335,7 +339,7 @@ export default function RegisterPage() {
             {/* Divider */}
             <div className="flex items-center gap-3 mb-5">
               <div className="flex-1 h-px bg-white/8" />
-              <span className="text-[11px] text-white/30 uppercase tracking-widest font-semibold">hoặc dùng email</span>
+              <span className="text-[11px] text-white/30 uppercase tracking-widest font-semibold">{tr('hoặc dùng email', 'or use email')}</span>
               <div className="flex-1 h-px bg-white/8" />
             </div>
 
@@ -360,7 +364,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-white/70 mb-1.5">Mật khẩu</label>
+                <label className="block text-sm font-semibold text-white/70 mb-1.5">{tr('Mật khẩu', 'Password')}</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                   <input type={showPw ? 'text' : 'password'} {...register('password')} placeholder="••••••••" autoComplete="new-password"
@@ -374,7 +378,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-white/70 mb-1.5">Xác nhận mật khẩu</label>
+                <label className="block text-sm font-semibold text-white/70 mb-1.5">{tr('Xác nhận mật khẩu', 'Confirm password')}</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                   <input type={showConfirm ? 'text' : 'password'} {...register('confirmPassword')} placeholder="••••••••" autoComplete="new-password"
@@ -396,10 +400,10 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <span className="text-xs text-white/40 leading-relaxed">
-                  Tôi đồng ý với{' '}
-                  <Link href="/terms" className="text-[#9945ff] hover:underline" target="_blank">Điều khoản dịch vụ</Link>
-                  {' '}và{' '}
-                  <Link href="/privacy" className="text-[#9945ff] hover:underline" target="_blank">Chính sách bảo mật</Link>
+                  {tr('Tôi đồng ý với', 'I agree to')}{' '}
+                  <Link href="/terms" className="text-[#9945ff] hover:underline" target="_blank">{tr('Điều khoản dịch vụ', 'Terms of Service')}</Link>
+                  {' '}{tr('và', 'and')}{' '}
+                  <Link href="/privacy" className="text-[#9945ff] hover:underline" target="_blank">{tr('Chính sách bảo mật', 'Privacy Policy')}</Link>
                 </span>
               </label>
               {errors.terms && <p className="text-xs text-red-400 -mt-1">{errors.terms.message}</p>}
@@ -417,17 +421,17 @@ export default function RegisterPage() {
                 className="w-full py-3.5 btn-purple-rainbow rounded-xl text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 mt-1"
               >
                 {isLoading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />Đang tạo...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{tr('Đang tạo...', 'Creating...')}</>
                 ) : (
-                  <>Tạo tài khoản miễn phí <ArrowRight className="w-4 h-4" /></>
+                  <>{tr('Tạo tài khoản miễn phí', 'Create free account')} <ArrowRight className="w-4 h-4" /></>
                 )}
               </button>
             </form>
 
             <p className="mt-5 text-center text-sm text-white/40">
-              Đã có tài khoản?{' '}
+              {tr('Đã có tài khoản?', 'Already have an account?')}{' '}
               <Link href="/login" className="text-[#f0b90b] hover:text-[#f7c82a] font-bold transition-colors">
-                Đăng nhập →
+                {tr('Đăng nhập →', 'Sign in →')}
               </Link>
             </p>
 

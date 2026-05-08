@@ -20,6 +20,7 @@ import { CoinImage } from '@/components/ui/CoinImage';
 import { useCartStore } from '@/store/cart-store';
 import { toast } from 'sonner';
 import { useClientTranslation } from '@/lib/hooks/useClientTranslation';
+import { useDualText } from '@/lib/hooks/useDualText';
 import { ProductCard, type ProductCardData } from '@/components/product/ProductCard';
 
 import { usePriceStore } from '@/store';
@@ -277,8 +278,9 @@ const HOW_IT_WORKS_STEPS = [
   {
     step: '01',
     eyebrow: 'Marketplace',
-    title: 'Duyệt & Mua',
-    desc: 'Tìm sản phẩm và đặt hàng bằng crypto hoặc tiền tệ thông thường.',
+    titleVi: 'Duyệt & Mua', titleEn: 'Browse & Buy',
+    descVi: 'Tìm sản phẩm và đặt hàng bằng crypto hoặc tiền tệ thông thường.',
+    descEn: 'Find products and place orders with crypto or traditional currency.',
     icon: Store,
     iconTone: 'text-sky-300',
     iconSurface: 'border-sky-400/20 bg-sky-500/[0.10] shadow-sky-500/10',
@@ -287,8 +289,9 @@ const HOW_IT_WORKS_STEPS = [
   {
     step: '02',
     eyebrow: 'Escrow',
-    title: 'Escrow khóa',
-    desc: 'Thanh toán được khóa trong hợp đồng thông minh Escrow an toàn.',
+    titleVi: 'Escrow khóa', titleEn: 'Escrow lock',
+    descVi: 'Thanh toán được khóa trong hợp đồng thông minh Escrow an toàn.',
+    descEn: 'Payments are locked in a secure Escrow smart contract.',
     icon: ShieldCheck,
     iconTone: 'text-violet-300',
     iconSurface: 'border-violet-400/20 bg-violet-500/[0.10] shadow-violet-500/10',
@@ -297,8 +300,9 @@ const HOW_IT_WORKS_STEPS = [
   {
     step: '03',
     eyebrow: 'Delivery',
-    title: 'Nhận hàng',
-    desc: 'Người bán giao hàng. Xác nhận khi nhận được.',
+    titleVi: 'Nhận hàng', titleEn: 'Receive',
+    descVi: 'Người bán giao hàng. Xác nhận khi nhận được.',
+    descEn: 'Seller ships the goods. Confirm receipt when they arrive.',
     icon: Truck,
     iconTone: 'text-emerald-300',
     iconSurface: 'border-emerald-400/20 bg-emerald-500/[0.10] shadow-emerald-500/10',
@@ -307,8 +311,9 @@ const HOW_IT_WORKS_STEPS = [
   {
     step: '04',
     eyebrow: 'Settlement',
-    title: 'Hoàn tất',
-    desc: 'Admin giải ngân cho người bán hoặc hoàn tiền khi có tranh chấp.',
+    titleVi: 'Hoàn tất', titleEn: 'Settle',
+    descVi: 'Admin giải ngân cho người bán hoặc hoàn tiền khi có tranh chấp.',
+    descEn: 'Admin releases funds to the seller, or refunds the buyer if disputed.',
     icon: BadgeCheck,
     iconTone: 'text-amber-200',
     iconSurface: 'border-amber-400/20 bg-amber-500/[0.12] shadow-amber-500/10',
@@ -321,6 +326,7 @@ const HOW_IT_WORKS_STEPS = [
 function WalletBalanceSection() {
   const { isConnected, tokenBalances, totalUSDT, isLoading, refetch } = useWallet();
   const { t } = useClientTranslation();
+  const tr = useDualText();
 
   return (
     <div className={`${paymentPageTheme.secondarySurface} overflow-hidden dark:border-violet-500/25`}>
@@ -345,21 +351,21 @@ function WalletBalanceSection() {
         <div className="p-5">
           {/* Total balance */}
           <div className="mb-5">
-            <p className="text-xs text-muted-foreground mb-1">Tổng số dư (USD)</p>
+            <p className="text-xs text-muted-foreground mb-1">{tr('Tổng số dư (USD)', 'Total balance (USD)')}</p>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-foreground">{formatCurrency(totalUSDT)}</span>
               <span className="text-sm text-[#f0b90b] font-medium">USDT</span>
             </div>
             <div className="flex items-center gap-1 mt-1">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-xs text-emerald-600 dark:text-emerald-400">+2.43% hôm nay</span>
+              <span className="text-xs text-emerald-600 dark:text-emerald-400">+2.43% {tr('hôm nay', 'today')}</span>
             </div>
           </div>
 
           {/* Coins owned */}
           {tokenBalances.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Coin đang sở hữu ({tokenBalances.length})</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">{tr('Coin đang sở hữu', 'Coins owned')} ({tokenBalances.length})</p>
               {tokenBalances.slice(0, 5).map((token, i) => (
                 <motion.div
                   key={token.symbol}
@@ -385,13 +391,13 @@ function WalletBalanceSection() {
               ))}
               <Link href="/wallet">
                 <div className="flex items-center justify-center gap-1 py-2 text-xs text-[#f0b90b] hover:text-[#e6a800] transition-colors cursor-pointer">
-                  Xem tất cả <ChevronRight className="w-3.5 h-3.5" />
+                  {tr('Xem tất cả', 'View all')} <ChevronRight className="w-3.5 h-3.5" />
                 </div>
               </Link>
             </div>
           ) : (
             <div className="text-center py-6">
-              <p className="text-muted-foreground text-sm">Chưa có coin nào trong ví</p>
+              <p className="text-muted-foreground text-sm">{tr('Chưa có coin nào trong ví', 'No coins in wallet yet')}</p>
             </div>
           )}
         </div>
@@ -485,6 +491,7 @@ function MarketRow({ symbol, coinInfo, idx }: { symbol: string; coinInfo: typeof
 /* ─── Market Table ───────────────────────────────── */
 function MarketTable({ symbols, search }: { symbols: string[]; search: string }) {
   const { t } = useClientTranslation();
+  const tr = useDualText();
   const { isConnected } = usePriceStore();
 
   const filtered = symbols.filter(sym =>
@@ -506,7 +513,7 @@ function MarketTable({ symbols, search }: { symbols: string[]; search: string })
           </span>
           <Link href="/trading/BTCUSDT">
             <Button variant="ghost" size="sm" className="text-[#f0b90b] hover:text-[#e6a800] hover:bg-[#f0b90b]/8 text-xs h-7 gap-1">
-              Xem tất cả <ChevronRight className="w-3 h-3" />
+              {tr('Xem tất cả', 'View all')} <ChevronRight className="w-3 h-3" />
             </Button>
           </Link>
         </div>
@@ -517,11 +524,11 @@ function MarketTable({ symbols, search }: { symbols: string[]; search: string })
           <thead>
             <tr className="border-b border-border/50 text-xs text-muted-foreground uppercase">
               <th className="px-5 py-3 text-left font-medium">Coin</th>
-              <th className="px-5 py-3 text-right font-medium">Giá</th>
+              <th className="px-5 py-3 text-right font-medium">{tr('Giá', 'Price')}</th>
               <th className="px-5 py-3 text-right font-medium">24h %</th>
-              <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">KL 24h</th>
-              <th className="px-5 py-3 text-right font-medium hidden md:table-cell">Cao/Thấp</th>
-              <th className="px-5 py-3 text-center font-medium">Biểu đồ</th>
+              <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">{tr('KL 24h', '24h Vol')}</th>
+              <th className="px-5 py-3 text-right font-medium hidden md:table-cell">{tr('Cao/Thấp', 'High/Low')}</th>
+              <th className="px-5 py-3 text-center font-medium">{tr('Biểu đồ', 'Chart')}</th>
             </tr>
           </thead>
           <tbody>
@@ -544,10 +551,10 @@ function MarketTable({ symbols, search }: { symbols: string[]; search: string })
  * uncomment the matching row here.
  */
 const HOME_CATEGORIES = [
-  { id: 'all',         label: 'Tất cả',     icon: Sparkles, color: '#f0b90b', slug: undefined },
-  { id: 'electronics', label: 'Electronics', icon: Laptop,   color: '#3b82f6', slug: 'electronics' },
-  { id: 'fashion',     label: 'Fashion',     icon: Shirt,    color: '#ec4899', slug: 'fashion' },
-  { id: 'home',        label: 'Home',        icon: HomeIcon, color: '#10b981', slug: 'home' },
+  { id: 'all',         labelVi: 'Tất cả',    labelEn: 'All',         icon: Sparkles, color: '#f0b90b', slug: undefined },
+  { id: 'electronics', labelVi: 'Điện tử',   labelEn: 'Electronics', icon: Laptop,   color: '#3b82f6', slug: 'electronics' },
+  { id: 'fashion',     labelVi: 'Thời trang',labelEn: 'Fashion',     icon: Shirt,    color: '#ec4899', slug: 'fashion' },
+  { id: 'home',        labelVi: 'Nhà cửa',   labelEn: 'Home',        icon: HomeIcon, color: '#10b981', slug: 'home' },
 ];
 
 const TARGET_COUNT = 12;
@@ -596,6 +603,7 @@ const COIN_TABS = [
 
 export default function HomePage() {
   const { t } = useClientTranslation();
+  const tr = useDualText();
   const { isAuthenticated, isLoading } = useAuth();
   const [products, setProducts] = useState<ProductCardData[]>([]);
   const [prodLoading, setProdLoading] = useState(true);
@@ -617,8 +625,8 @@ export default function HomePage() {
   const router = useRouter();
   useEffect(() => {
     if (searchParams?.get('welcome') === '1') {
-      toast.success('🎉 Chào mừng bạn trở lại!', {
-        description: 'Bạn đã đăng nhập thành công vào Web3Market.',
+      toast.success(tr('🎉 Chào mừng bạn trở lại!', '🎉 Welcome back!'), {
+        description: tr('Bạn đã đăng nhập thành công vào Web3Market.', 'You have successfully signed in to Web3Market.'),
         duration: 5000,
       });
       // Clean up URL without reload
@@ -687,7 +695,7 @@ export default function HomePage() {
       <div className="min-h-screen flex items-center justify-center bg-transparent">
         <div className="text-center">
           <div className="w-12 h-12 rounded-full border-2 border-[#f0b90b] border-t-transparent animate-spin mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">Đang tải...</p>
+          <p className="text-muted-foreground text-sm">{tr('Đang tải...', 'Loading...')}</p>
         </div>
       </div>
     );
@@ -759,25 +767,25 @@ export default function HomePage() {
                   <span>Powered by Smart Contracts</span>
                 </div>
                 <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-foreground leading-tight mb-6">
-                  Mua sắm &{' '}
+                  {tr('Mua sắm', 'Shop')} &{' '}
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f0b90b] via-[#e6a800] to-[#f0b90b]">
-                    Thanh toán Crypto
+                    {tr('Thanh toán Crypto', 'Pay with Crypto')}
                   </span>
                 </h1>
                 <p className="text-lg text-muted-foreground mb-8 max-w-lg leading-relaxed">
-                  Sàn thương mại điện tử Web3 bảo mật với hợp đồng Escrow thông minh. Giao dịch minh bạch, an toàn.
+                  {tr('Sàn thương mại điện tử Web3 bảo mật với hợp đồng Escrow thông minh. Giao dịch minh bạch, an toàn.', 'A secure Web3 e-commerce platform with smart Escrow contracts. Transparent, safe transactions.')}
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Link href="/products">
                     <Button size="lg" className="bg-[#f0b90b] hover:bg-[#e6a800] text-black font-bold px-8 shadow-lg shadow-yellow-500/20 hover:shadow-yellow-500/40 transition-shadow">
                       <ShoppingBag className="w-5 h-5 mr-2" />
-                      Mua sắm ngay
+                      {tr('Mua sắm ngay', 'Shop now')}
                     </Button>
                   </Link>
                   <Link href="/trading/BTCUSDT">
                     <Button size="lg" variant="outline" className={`font-semibold px-8 ${paymentPageTheme.ghostButton}`}>
                       <BarChart3 className="w-5 h-5 mr-2" />
-                      Xem thị trường
+                      {tr('Xem thị trường', 'View market')}
                     </Button>
                   </Link>
                 </div>
@@ -785,9 +793,9 @@ export default function HomePage() {
                 {/* Mini stats - enhanced with icons */}
                 <div className="flex gap-4 mt-10">
                   {[
-                    { label: 'Người dùng', value: '10K+', icon: '👥' },
-                    { label: 'Sản phẩm', value: '5K+', icon: '📦' },
-                    { label: 'Giao dịch', value: '$2M+', icon: '💰' },
+                    { label: tr('Người dùng', 'Users'), value: '10K+', icon: '👥' },
+                    { label: tr('Sản phẩm', 'Products'), value: '5K+', icon: '📦' },
+                    { label: tr('Giao dịch', 'Trades'), value: '$2M+', icon: '💰' },
                     { label: 'Chains', value: '5+', icon: '⛓️' },
                   ].map((s, i) => (
                     <motion.div
@@ -830,14 +838,14 @@ export default function HomePage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Sản phẩm nổi bật</h2>
+                <h2 className="text-2xl font-bold text-foreground">{tr('Sản phẩm nổi bật', 'Featured products')}</h2>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Khám phá {TARGET_COUNT} sản phẩm — chọn danh mục và coin thanh toán.
+                  {tr(`Khám phá ${TARGET_COUNT} sản phẩm — chọn danh mục và coin thanh toán.`, `Discover ${TARGET_COUNT} products — pick a category and payment coin.`)}
                 </p>
               </div>
               <Link href="/products">
                 <Button variant="ghost" size="sm" className="text-[#f0b90b] hover:text-[#e6a800] hover:bg-[#f0b90b]/8 gap-1 text-sm">
-                  Xem tất cả <ArrowRight className="w-3.5 h-3.5" />
+                  {tr('Xem tất cả', 'View all')} <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </Link>
             </div>
@@ -865,7 +873,7 @@ export default function HomePage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.04 }}
                       onClick={() => { setFeaturedCategory(cat.id); setActiveCoinFilter(null); }}
-                      title={isBorrowed ? `Đang mượn sản phẩm từ danh mục này` : cat.label}
+                      title={isBorrowed ? tr('Đang mượn sản phẩm từ danh mục này', 'Borrowing products from this category') : tr(cat.labelVi, cat.labelEn)}
                       className={[
                         'flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-semibold transition-all duration-200',
                         isActive
@@ -880,7 +888,7 @@ export default function HomePage() {
                         className="w-3.5 h-3.5 flex-shrink-0"
                         style={{ color: isActive ? 'black' : isBorrowed ? '#f59e0b' : cat.color }}
                       />
-                      <span>{cat.label}</span>
+                      <span>{tr(cat.labelVi, cat.labelEn)}</span>
                       {isBorrowed && !isActive && (
                         <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 rounded px-1">↗</span>
                       )}
@@ -892,7 +900,7 @@ export default function HomePage() {
 
             {/* ── Row 2: Coin filter ── */}
             <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-hide mb-6">
-              <span className="text-xs text-muted-foreground flex-shrink-0 mr-1">Coin:</span>
+              <span className="text-xs text-muted-foreground flex-shrink-0 mr-1">{tr('Coin:', 'Coin:')}</span>
               {/* All coins button */}
               <button
                 onClick={() => setActiveCoinFilter(null)}
@@ -901,7 +909,7 @@ export default function HomePage() {
                   : 'bg-white border-slate-200 text-muted-foreground hover:border-primary/40 hover:bg-slate-50 dark:bg-slate-950/45 dark:border-violet-500/25 dark:text-foreground dark:hover:border-violet-400/55 dark:hover:bg-white/5 dark:backdrop-blur-xl'
                   }`}
               >
-                Tất cả
+                {tr('Tất cả', 'All')}
               </button>
               {COIN_TABS.map((tab) => {
                 const priceData = prices[tab.symbol + 'USDT'];
@@ -973,17 +981,17 @@ export default function HomePage() {
                       : <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />}
                     <p className="text-muted-foreground text-sm">
                       {activeCoinFilter
-                        ? `Chưa có sản phẩm thanh toán bằng ${activeCoinFilter}`
-                        : 'Chưa có sản phẩm nào'}
+                        ? tr(`Chưa có sản phẩm thanh toán bằng ${activeCoinFilter}`, `No products accept ${activeCoinFilter} payment yet`)
+                        : tr('Chưa có sản phẩm nào', 'No products yet')}
                     </p>
                     {activeCoinFilter && (
                       <button onClick={() => setActiveCoinFilter(null)}
                         className="mt-3 text-xs text-[#f0b90b] hover:underline">
-                        Xóa bộ lọc coin →
+                        {tr('Xóa bộ lọc coin →', 'Clear coin filter →')}
                       </button>
                     )}
                     <Link href="/products" className="mt-2 block text-xs text-muted-foreground hover:underline">
-                      Xem tất cả sản phẩm →
+                      {tr('Xem tất cả sản phẩm →', 'View all products →')}
                     </Link>
                   </motion.div>
                 );
@@ -998,7 +1006,7 @@ export default function HomePage() {
                       className="text-xs text-amber-500 mb-4 flex items-center gap-1.5"
                     >
                       <span>✦</span>
-                      Chưa đủ {TARGET_COUNT} sản phẩm — đang hiển thị thêm từ:{' '}
+                      {tr(`Chưa đủ ${TARGET_COUNT} sản phẩm — đang hiển thị thêm từ:`, `Not enough ${TARGET_COUNT} products — showing extras from:`)}{' '}
                       <span className="font-semibold capitalize">
                         {Array.from(borrowedCategories).join(', ')}
                       </span>
@@ -1089,8 +1097,8 @@ export default function HomePage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">
                     {item.eyebrow}
                   </p>
-                  <h3 className="mt-3 text-xl font-bold text-foreground">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{item.desc}</p>
+                  <h3 className="mt-3 text-xl font-bold text-foreground">{tr(item.titleVi, item.titleEn)}</h3>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{tr(item.descVi, item.descEn)}</p>
                   <div className={`mt-6 h-px w-full bg-gradient-to-r ${item.divider}`} />
                 </motion.div>
               ))}

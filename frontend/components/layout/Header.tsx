@@ -18,6 +18,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import { useTranslation } from 'react-i18next';
+import { useDualText } from '@/lib/hooks/useDualText';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { useCartStore } from '@/store/cart-store';
 import { usePriceStore } from '@/store';
@@ -121,6 +122,7 @@ export function Header() {
   const { isAuthenticated, user } = useAuth();
   const { disconnect } = useDisconnect();
   const { t, i18n } = useTranslation();
+  const tr = useDualText();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -313,7 +315,7 @@ export function Header() {
                       <WhaleAlertBadge />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Theo dõi cá voi</TooltipContent>
+                  <TooltipContent>{tr('Theo dõi cá voi', 'Whale tracker')}</TooltipContent>
                 </Tooltip>
 
                 <ThemeToggle />
@@ -329,7 +331,7 @@ export function Header() {
                           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#8247e5] rounded-full" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent>Thông báo</TooltipContent>
+                      <TooltipContent>{tr('Thông báo', 'Notifications')}</TooltipContent>
                     </Tooltip>
 
                     <Separator orientation="vertical" className="h-6 mx-1" />
@@ -356,7 +358,7 @@ export function Header() {
                                       <ChevronDown className="w-3 h-3 text-muted-foreground" />
                                     </button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Đổi mạng</TooltipContent>
+                                  <TooltipContent>{tr('Đổi mạng', 'Switch network')}</TooltipContent>
                                 </Tooltip>
 
                                 <DropdownMenu>
@@ -371,7 +373,7 @@ export function Header() {
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-64">
                                     <DropdownMenuLabel>
-                                      <p className="text-xs text-muted-foreground mb-1">Ví đang kết nối</p>
+                                      <p className="text-xs text-muted-foreground mb-1">{tr('Ví đang kết nối', 'Connected wallet')}</p>
                                       <div className="flex items-center gap-2">
                                         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#8247e5] flex-shrink-0" />
                                         <p className="font-mono text-xs text-foreground truncate flex-1">{account.address}</p>
@@ -387,19 +389,19 @@ export function Header() {
                                         </button>
                                       </div>
                                       {account.displayBalance && (
-                                        <p className="text-[11px] text-muted-foreground mt-1">Số dư: <span className="text-foreground font-semibold">{account.displayBalance}</span></p>
+                                        <p className="text-[11px] text-muted-foreground mt-1">{tr('Số dư:', 'Balance:')} <span className="text-foreground font-semibold">{account.displayBalance}</span></p>
                                       )}
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={openAccountModal} className="gap-2">
                                       <Wallet className="w-4 h-4" />
-                                      Quản lý ví / Đổi tài khoản
+                                      {tr('Quản lý ví / Đổi tài khoản', 'Manage wallet / Switch account')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={openChainModal} className="gap-2">
                                       {chain.hasIcon && chain.iconUrl
                                         ? <img src={chain.iconUrl} alt={chain.name} className="w-4 h-4 rounded-full" />
                                         : <Shield className="w-4 h-4" />}
-                                      Đổi mạng ({chain.name})
+                                      {tr('Đổi mạng', 'Switch network')} ({chain.name})
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
@@ -407,7 +409,7 @@ export function Header() {
                                       className="text-destructive focus:text-destructive focus:bg-destructive/10 gap-2"
                                     >
                                       <LogOut className="w-4 h-4" />
-                                      Ngắt kết nối ví
+                                      {tr('Ngắt kết nối ví', 'Disconnect wallet')}
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -423,7 +425,7 @@ export function Header() {
                                     <Wallet className="w-4 h-4" />
                                   </Link>
                                 </TooltipTrigger>
-                                <TooltipContent>Kết nối ví Web3</TooltipContent>
+                                <TooltipContent>{tr('Kết nối ví Web3', 'Connect Web3 wallet')}</TooltipContent>
                               </Tooltip>
                             )}
                           </div>
@@ -505,7 +507,7 @@ export function Header() {
               <button
                 className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                aria-label={mobileMenuOpen ? 'Đóng menu' : 'Mở menu'}
+                aria-label={mobileMenuOpen ? tr('Đóng menu', 'Close menu') : tr('Mở menu', 'Open menu')}
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -589,10 +591,10 @@ export function Header() {
                 {!isAuthenticated ? (
                   <div className="flex gap-2">
                     <a href="/login" className="flex-1">
-                      <Button variant="outline" className="w-full border-border">Đăng nhập</Button>
+                      <Button variant="outline" className="w-full border-border">{tr('Đăng nhập', 'Login')}</Button>
                     </a>
                     <a href="/register" className="flex-1">
-                      <Button className="w-full btn-purple-rainbow font-semibold">Đăng ký</Button>
+                      <Button className="w-full btn-purple-rainbow font-semibold">{tr('Đăng ký', 'Register')}</Button>
                     </a>
                   </div>
                 ) : (
@@ -630,7 +632,7 @@ export function Header() {
               <div className="flex items-center gap-2 text-xs text-amber-400">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>
-                  Ví MetaMask (<strong className="font-mono">{connectedWallet?.slice(0, 6)}…{connectedWallet?.slice(-4)}</strong>) khác ví liên kết tài khoản (<strong className="font-mono">{linkedWallet?.slice(0, 6)}…{linkedWallet?.slice(-4)}</strong>). Thanh toán sẽ dùng ví đang kết nối.
+                  {tr('Ví MetaMask', 'MetaMask wallet')} (<strong className="font-mono">{connectedWallet?.slice(0, 6)}…{connectedWallet?.slice(-4)}</strong>) {tr('khác ví liên kết tài khoản', 'differs from linked wallet')} (<strong className="font-mono">{linkedWallet?.slice(0, 6)}…{linkedWallet?.slice(-4)}</strong>). {tr('Thanh toán sẽ dùng ví đang kết nối.', 'Payments will use the currently connected wallet.')}
                 </span>
               </div>
               <button

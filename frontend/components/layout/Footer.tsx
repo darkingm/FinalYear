@@ -15,19 +15,10 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { FaGithub, FaXTwitter } from 'react-icons/fa6';
-import { useTranslation } from 'react-i18next';
-import { useEffect, useState } from 'react';
+import { useDualText } from '@/lib/hooks/useDualText';
 
 export function Footer() {
-  const { t } = useTranslation();
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Helper: only translate after mount (avoids SSR/client mismatch)
-  const vi = (viText: string, enText: string) => isMounted ? viText : enText;
+  const vi = useDualText();
 
   return (
     <footer className="bg-background text-muted-foreground border-t border-border">
