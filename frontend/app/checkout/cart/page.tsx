@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   ArrowLeft, Loader2, Shield, Wallet,
-  CheckCircle, Package, Lock, Info, CreditCard, AlertTriangle,
+  CheckCircle, Package, Lock, Info, CreditCard, AlertTriangle, AlertCircle,
 } from 'lucide-react';
 import {
   useAccount, useWalletClient, useSwitchChain,
@@ -116,9 +116,20 @@ function Steps({ current }: { current: number }) {
 /* ─── Main Page ─────────────────────────────────────────────────────── */
 export default function CartCheckoutPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired, user } = useAuth();
   const { items, getTotal, getTotalItems, clearCart } = useCartStore();
   const { address, isConnected, chainId } = useAccount();
+  const linkedWallet = (user as any)?.walletAddress as string | undefined;
+  // Wallet-mismatch guard. The buyer's session is tied to a specific wallet
+  // address (linked at login time or via /wallet). If the currently connected
+  // browser wallet is a DIFFERENT address — typical when the user has both
+  // MetaMask and OKX/Coinbase installed and the wrong extension intercepts
+  // window.ethereum — we refuse to send the payment. Otherwise the seller
+  // would receive funds from an account the buyer hasn't proven ownership
+  // of, and the post-purchase escrow flow (refund, dispute) would point at
+  // the wrong wallet.
+  const walletMismatch = !!(address && linkedWallet
+    && address.toLowerCase() !== linkedWallet.toLowerCase());
   const { data: walletClient } = useWalletClient();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
@@ -177,7 +188,6 @@ export default function CartCheckoutPage() {
     return () => clearInterval(iv);
   }, [quote]);
 
-  const acceptedCrypto = ['ETH', 'MATIC', 'USDT', 'USDC'];
   const coinPrice = useCoinPrice(selectedToken);
 
   const quoteNet = quote ? CHAIN_META[quote.chain_id] : null;
@@ -186,8 +196,36 @@ export default function CartCheckoutPage() {
     || quote.token_address === '0x0000000000000000000000000000000000000000'
     || quote.token_address === '0x0000000000000000000000000000000000001010';
 
+  // Token list shown at checkout MUST be the intersection of (a) the tokens
+  // every product in the cart explicitly accepts and (b) the tokens deployed
+  // on the chain the buyer picked. Earlier this used a hardcoded
+  // ['ETH','MATIC','USDT','USDC'] which silently dropped any seller-set
+  // token (e.g. BNB on BSC) and showed wallets things the seller never
+  // agreed to receive — the visible mismatch the user saw between home /
+  // detail / checkout was this.
   const chainSupportedTokens = CHAIN_TOKENS[selectedNet] || ['ETH'];
-  const availableTokens = acceptedCrypto.filter(t => chainSupportedTokens.includes(t));
+  const cartAcceptedSymbols = useMemo(() => {
+    if (items.length === 0) return new Set<string>(chainSupportedTokens);
+    let intersection: Set<string> | null = null;
+    for (const item of items) {
+      const symbols = new Set<string>(
+        (item.accepted_tokens ?? [])
+          .map((t) => String(t.symbol || '').toUpperCase())
+          .filter(Boolean),
+      );
+      if (symbols.size === 0) continue; // skip items with no token config
+      if (intersection === null) {
+        intersection = symbols;
+      } else {
+        const next: Set<string> = new Set();
+        intersection.forEach((s) => { if (symbols.has(s)) next.add(s); });
+        intersection = next;
+      }
+    }
+    return intersection ?? new Set<string>(chainSupportedTokens);
+  }, [items, chainSupportedTokens.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const availableTokens = chainSupportedTokens.filter((t) => cartAcceptedSymbols.has(t));
   const tokensToShow = availableTokens.length > 0 ? availableTokens : chainSupportedTokens;
 
   // Auto-correct token when chain changes
@@ -228,6 +266,13 @@ export default function CartCheckoutPage() {
   /* ─── Handlers ─────────────────────────────────────────────────────── */
   const handleGetQuote = async () => {
     if (!isConnected || !address) { toast.error('Kết nối ví MetaMask trước'); return; }
+    if (walletMismatch) {
+      toast.error(
+        `Ví đang kết nối (${address?.slice(0, 6)}…${address?.slice(-4)}) không phải ví đã liên kết với tài khoản (${linkedWallet?.slice(0, 6)}…${linkedWallet?.slice(-4)}). Hãy ngắt kết nối và chọn lại đúng ví.`,
+        { duration: 8000 }
+      );
+      return;
+    }
     setQuote(null);
     setQuoteError(null);
     setQuoteLoading(true);
@@ -327,6 +372,13 @@ export default function CartCheckoutPage() {
 
   const handlePay = async () => {
     if (!quote || !paymentBatchSession || !walletClient || !address) { toast.error('Kết nối ví'); return; }
+    if (walletMismatch) {
+      toast.error(
+        `Ví đang kết nối khác ví đã liên kết (${linkedWallet?.slice(0, 6)}…${linkedWallet?.slice(-4)}). Ngắt kết nối và chọn đúng ví trước khi thanh toán.`,
+        { duration: 8000 }
+      );
+      return;
+    }
     if (isWrongChain) { await handleSwitchChain(); return; }
     if (timeLeft === 0) {
       toast.error('Báo giá đã hết hạn — lấy lại báo giá');
@@ -644,10 +696,26 @@ export default function CartCheckoutPage() {
                     )}
                   </div>
 
+                  {/* Wallet mismatch warning — block if connected wallet
+                      isn't the one linked to this account */}
+                  {walletMismatch && (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-300">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-bold mb-0.5">Ví đang kết nối không khớp ví đã liên kết</p>
+                        <p>
+                          Đang kết nối: <span className="font-mono">{address?.slice(0, 6)}…{address?.slice(-4)}</span><br />
+                          Ví đã liên kết: <span className="font-mono">{linkedWallet?.slice(0, 6)}…{linkedWallet?.slice(-4)}</span><br />
+                          Mở extension ví và chuyển về đúng địa chỉ trên, hoặc dùng nút "Ngắt kết nối" rồi chọn lại đúng ví.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Get Quote Button */}
                   <button
                     onClick={handleGetQuote}
-                    disabled={quoteLoading || !isConnected}
+                    disabled={quoteLoading || !isConnected || walletMismatch}
                     className="w-full py-4 bg-[#8247e5] text-white font-black rounded-xl text-base hover:bg-[#723bc9] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
                   >
                     {quoteLoading
@@ -768,7 +836,7 @@ export default function CartCheckoutPage() {
                   ) : (
                     <button
                       onClick={handlePay}
-                      disabled={submitting || !isConnected || !walletClient}
+                      disabled={submitting || !isConnected || !walletClient || walletMismatch}
                       className="w-full py-4 bg-[#8247e5] hover:bg-[#723bc9] text-white font-black rounded-xl text-lg flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {submitting

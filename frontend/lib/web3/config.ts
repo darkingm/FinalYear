@@ -1,5 +1,12 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { metaMaskWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets';
+import {
+  metaMaskWallet,
+  walletConnectWallet,
+  coinbaseWallet,
+  okxWallet,
+  rainbowWallet,
+  injectedWallet,
+} from '@rainbow-me/rainbowkit/wallets';
 import type { Config } from 'wagmi';
 import {
   polygon,
@@ -88,9 +95,23 @@ const wagmiConfig: Config = getDefaultConfig({
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'cea17a07a0cb8c74b022c41e21294643',
   chains: activeChains,
   ssr: true,
+  // Each wallet listed here gets its OWN connector entry. With only
+  // metaMaskWallet listed, browsers that have multiple wallet extensions
+  // (OKX, Coinbase) end up firing whichever one currently owns
+  // window.ethereum — so a user who clicked "MetaMask" could see an
+  // OKX popup. Listing each wallet explicitly + the EIP-6963 injected
+  // fallback means RainbowKit shows them as separate options and routes
+  // each click to the correct provider.
   wallets: [{
     groupName: 'Ví',
-    wallets: [metaMaskWallet, walletConnectWallet],
+    wallets: [
+      metaMaskWallet,
+      coinbaseWallet,
+      okxWallet,
+      rainbowWallet,
+      walletConnectWallet,
+      injectedWallet,
+    ],
   }],
 }) as unknown as Config;
 

@@ -193,8 +193,12 @@ export default function CheckoutPage() {
   const params = useParams();
   const router = useRouter();
   const orderId = typeof params?.orderId === 'string' ? parseInt(params.orderId, 10) : 0;
-  const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, reauthRequired, user } = useAuth();
   const { address, isConnected, chainId } = useAccount();
+  const linkedWallet = (user as any)?.walletAddress as string | undefined;
+  // Same wallet-mismatch guard as cart checkout — see comment there.
+  const walletMismatch = !!(address && linkedWallet
+    && address.toLowerCase() !== linkedWallet.toLowerCase());
   const { data: walletClient } = useWalletClient();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
@@ -360,6 +364,13 @@ export default function CheckoutPage() {
   /* ─── Get Quote ─────────────────────────────────────────────────────── */
   const handleGetQuote = async () => {
     if (!isConnected || !address) { toast.error('Kết nối ví MetaMask trước'); return; }
+    if (walletMismatch) {
+      toast.error(
+        `Ví đang kết nối (${address?.slice(0, 6)}…${address?.slice(-4)}) khác ví đã liên kết tài khoản (${linkedWallet?.slice(0, 6)}…${linkedWallet?.slice(-4)}). Đổi sang đúng ví trước khi thanh toán.`,
+        { duration: 8000 }
+      );
+      return;
+    }
     if (order && !canCreateFreshPaymentSession(order.status)) {
       if (hasSubmittedPaymentInFlight(order.status)) {
         toast.info('Đơn hàng đã có giao dịch on-chain. Đang kiểm tra lại trạng thái blockchain.');
@@ -518,6 +529,10 @@ export default function CheckoutPage() {
 
   /* ─── Approve ERC-20 ─────────────────────────────────────────────────── */
   const handleApprove = async () => {
+    if (walletMismatch) {
+      toast.error(`Sai ví — ngắt kết nối và chọn ví ${linkedWallet?.slice(0, 6)}…${linkedWallet?.slice(-4)} trước.`);
+      return;
+    }
     if (!quote || !address) return;
     if (nativeBalance && Number(nativeBalance.formatted) < 0.001) {
       toast.error('Giao dịch thất bại! Bạn cần tối thiểu 0.001 MATIC/BNB/ETH trong ví để làm phí Gas giao dịch.');
@@ -545,6 +560,10 @@ export default function CheckoutPage() {
   /* ─── Pay — 4-step state machine with live progress ─────────────────── */
   const handlePay = async () => {
     if (!quote || !walletClient || !address) { toast.error('Kết nối ví'); return; }
+    if (walletMismatch) {
+      toast.error(`Sai ví — ngắt kết nối và chọn ví ${linkedWallet?.slice(0, 6)}…${linkedWallet?.slice(-4)} trước.`);
+      return;
+    }
     if (isWrongChain) { await handleSwitchChain(); return; }
     if (!paymentSession) {
       if (order && hasSubmittedPaymentInFlight(order.status)) {
