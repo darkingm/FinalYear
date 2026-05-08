@@ -196,13 +196,14 @@ export default function CartCheckoutPage() {
     || quote.token_address === '0x0000000000000000000000000000000000000000'
     || quote.token_address === '0x0000000000000000000000000000000000001010';
 
-  // Token list shown at checkout MUST be the intersection of (a) the tokens
-  // every product in the cart explicitly accepts and (b) the tokens deployed
-  // on the chain the buyer picked. Earlier this used a hardcoded
-  // ['ETH','MATIC','USDT','USDC'] which silently dropped any seller-set
-  // token (e.g. BNB on BSC) and showed wallets things the seller never
-  // agreed to receive — the visible mismatch the user saw between home /
-  // detail / checkout was this.
+  // Token list at checkout = intersection of:
+  //   (a) tokens every cart item's seller explicitly accepts ON the selected
+  //       chain (each accepted_token row carries its own chain_id), and
+  //   (b) tokens deployed on the buyer's selected chain.
+  // We don't fall back to "all chain tokens" when the intersection is empty
+  // because doing so would let the buyer pay with a token the seller never
+  // agreed to receive. Instead we surface the empty state — the UI tells
+  // the user the only chain(s) the cart can actually pay on.
   const chainSupportedTokens = CHAIN_TOKENS[selectedNet] || ['ETH'];
   const cartAcceptedSymbols = useMemo(() => {
     if (items.length === 0) return new Set<string>(chainSupportedTokens);
@@ -210,10 +211,11 @@ export default function CartCheckoutPage() {
     for (const item of items) {
       const symbols = new Set<string>(
         (item.accepted_tokens ?? [])
+          .filter((t) => !t.chain_id || t.chain_id === selectedNet)
           .map((t) => String(t.symbol || '').toUpperCase())
           .filter(Boolean),
       );
-      if (symbols.size === 0) continue; // skip items with no token config
+      if (symbols.size === 0) continue;
       if (intersection === null) {
         intersection = symbols;
       } else {
@@ -222,10 +224,36 @@ export default function CartCheckoutPage() {
         intersection = next;
       }
     }
-    return intersection ?? new Set<string>(chainSupportedTokens);
-  }, [items, chainSupportedTokens.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+    return intersection ?? new Set<string>();
+  }, [items, selectedNet, chainSupportedTokens.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const availableTokens = chainSupportedTokens.filter((t) => cartAcceptedSymbols.has(t));
+
+  // Chains where the WHOLE cart can be paid (intersection of every item's
+  // accepted-token chains). Used to suggest the right chain when the
+  // current selection has no overlap.
+  const validCartChains = useMemo(() => {
+    if (items.length === 0) return new Set<number>();
+    let intersection: Set<number> | null = null;
+    for (const item of items) {
+      const chains = new Set<number>(
+        (item.accepted_tokens ?? [])
+          .map((t) => t.chain_id)
+          .filter((id): id is number => typeof id === 'number'),
+      );
+      if (chains.size === 0) continue;
+      if (intersection === null) {
+        intersection = chains;
+      } else {
+        const next: Set<number> = new Set();
+        intersection.forEach((c) => { if (chains.has(c)) next.add(c); });
+        intersection = next;
+      }
+    }
+    return intersection ?? new Set<number>();
+  }, [items]);
+
+  const cartUnpayableOnChain = items.length > 0 && availableTokens.length === 0;
   const tokensToShow = availableTokens.length > 0 ? availableTokens : chainSupportedTokens;
 
   // Auto-correct token when chain changes
@@ -617,27 +645,55 @@ export default function CartCheckoutPage() {
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Mạng blockchain</p>
                     <div className="space-y-2">
-                      {PAYMENT_NETWORKS.map(net => (
-                        <button
-                          key={net.chainId}
-                          onClick={() => { setSelectedNet(net.chainId); setQuote(null); setPaymentBatchSession(null); }}
-                          className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${selectedNet === net.chainId
-                            ? 'border-[#8247e5]/60 bg-[#8247e5]/10'
-                            : 'border-border hover:border-[#8247e5]/30'
-                            }`}
-                        >
-                          <span className="text-xl flex-shrink-0">{net.icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm">{net.name}</span>
-                              <NetworkBadge net={net} />
+                      {PAYMENT_NETWORKS.map(net => {
+                        const cartCanPayHere = validCartChains.size === 0 || validCartChains.has(net.chainId);
+                        return (
+                          <button
+                            key={net.chainId}
+                            onClick={() => { setSelectedNet(net.chainId); setQuote(null); setPaymentBatchSession(null); }}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${selectedNet === net.chainId
+                              ? 'border-[#8247e5]/60 bg-[#8247e5]/10'
+                              : cartCanPayHere
+                                ? 'border-border hover:border-[#8247e5]/30'
+                                : 'border-border opacity-50'
+                              }`}
+                          >
+                            <span className="text-xl flex-shrink-0">{net.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm">{net.name}</span>
+                                <NetworkBadge net={net} />
+                                {!cartCanPayHere && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                                    Không khả dụng
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">{net.description}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{net.description}</p>
-                          </div>
-                          {selectedNet === net.chainId && <CheckCircle className="w-4 h-4 text-[#8247e5] flex-shrink-0" />}
-                        </button>
-                      ))}
+                            {selectedNet === net.chainId && <CheckCircle className="w-4 h-4 text-[#8247e5] flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
                     </div>
+
+                    {/* Empty-intersection warning: cart's items don't accept any token on selectedNet */}
+                    {cartUnpayableOnChain && (
+                      <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-300">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold mb-0.5">Mạng này không nhận token nào trong giỏ</p>
+                          <p>
+                            Người bán không cấu hình nhận thanh toán bằng {chainSupportedTokens.join('/')} trên {CHAIN_META[selectedNet]?.name || `chain ${selectedNet}`}.{' '}
+                            {validCartChains.size > 0 ? (
+                              <>Hãy đổi sang một trong các mạng: {[...validCartChains].map(c => CHAIN_META[c]?.name || c).join(', ')}.</>
+                            ) : (
+                              <>Liên hệ người bán để cấu hình token thanh toán.</>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Token selector */}
@@ -715,7 +771,7 @@ export default function CartCheckoutPage() {
                   {/* Get Quote Button */}
                   <button
                     onClick={handleGetQuote}
-                    disabled={quoteLoading || !isConnected || walletMismatch}
+                    disabled={quoteLoading || !isConnected || walletMismatch || cartUnpayableOnChain}
                     className="w-full py-4 bg-[#8247e5] text-white font-black rounded-xl text-base hover:bg-[#723bc9] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
                   >
                     {quoteLoading
