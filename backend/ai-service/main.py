@@ -34,21 +34,27 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "google/gemma-3-12b-it:free")
 MAIN_SERVICE_URL  = os.getenv("MAIN_SERVICE_URL", "http://main-api:3001")
 
-# Determine active provider chain — Groq is the only one with tool-calling
-# support enabled in this service, so when an authenticated user chats we
-# strongly prefer Groq.
+# Cascade order for the un-authenticated path (general chit-chat). Gemini
+# has the best free-tier quota and tone for VN, so it leads. Groq is the
+# tool-calling agent for logged-in users and stays as a chat fallback if
+# Gemini is rate-limited. OpenRouter / Grok are extra backups.
 PROVIDERS: list[str] = []
-if GROQ_API_KEY:
-    PROVIDERS.append("groq")
 if GEMINI_API_KEY:
     PROVIDERS.append("gemini")
+if GROQ_API_KEY:
+    PROVIDERS.append("groq")
 if OPENROUTER_API_KEY:
     PROVIDERS.append("openrouter")
 if GROK_API_KEY:
     PROVIDERS.append("grok")
 
+# Tool calling only runs on Groq (we don't bother implementing the Gemini
+# functionDeclarations format in this service). When the user is logged in
+# we always try Groq FIRST regardless of cascade order.
+TOOL_PROVIDER = "groq" if GROQ_API_KEY else None
+
 PRIMARY = PROVIDERS[0] if PROVIDERS else "none"
-logger.info(f"AI providers available: {PROVIDERS}, primary: {PRIMARY}")
+logger.info(f"AI providers available: {PROVIDERS}, chat-primary: {PRIMARY}, tool-provider: {TOOL_PROVIDER}")
 
 SYSTEM_PROMPT = """Bạn là AI Assistant của CryptoMarket - sàn thương mại điện tử Web3.
 
@@ -475,18 +481,19 @@ async def chat(req: ChatRequest, authorization: Optional[str] = Header(default=N
 
     raw_messages = [m.model_dump(exclude_none=True) for m in req.messages]
 
-    # Prefer Groq with tool-calling whenever the user is authenticated.
-    # When the user is anonymous we fall back to the cheaper provider chain
-    # without tools (saves both tokens and an unnecessary 401 round-trip).
-    if "groq" in PROVIDERS:
+    # When the user is authenticated AND Groq is wired up, run the
+    # tool-calling agent first — that's the only path that can actually
+    # mutate the user's data on their behalf.
+    if authorization and TOOL_PROVIDER == "groq":
         try:
-            result = await call_groq_with_tools(raw_messages, system_msg, authorization or "")
+            result = await call_groq_with_tools(raw_messages, system_msg, authorization)
             return {"reply": result["reply"], "provider": "groq", "model": GROQ_MODEL,
                     "tool_iterations": result.get("iterations", 1)}
         except Exception as e:
-            logger.warning(f"Groq tool-calling failed, falling back: {e}")
+            logger.warning(f"Groq tool-calling failed, falling back to chat cascade: {e}")
 
-    # Fallback: simpler providers without tool calling
+    # General chat cascade — Gemini first per user preference, then Groq /
+    # OpenRouter / Grok as backups. No tool calling on this path.
     for provider in PROVIDERS:
         if provider == "groq":
             caller = call_groq_simple
@@ -510,11 +517,13 @@ async def chat(req: ChatRequest, authorization: Optional[str] = Header(default=N
 
 
 @app.get("/health")
+@app.get("/api/ai/health")
 def health():
     return {
         "status": "ok",
         "providers": PROVIDERS,
-        "primary": PRIMARY,
-        "tools_enabled": "groq" in PROVIDERS,
+        "chat_primary": PRIMARY,
+        "tool_provider": TOOL_PROVIDER,
+        "tools_enabled": TOOL_PROVIDER is not None,
         "tool_count": len(TOOLS),
     }
