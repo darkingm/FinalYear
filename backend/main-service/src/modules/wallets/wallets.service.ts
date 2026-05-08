@@ -107,17 +107,46 @@ export class WalletsService {
             );
         }
 
-        const res = await query(
-            `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary, is_verified, verified_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $7 THEN NOW() ELSE NULL END)
-       ON CONFLICT (user_id, chain_type, address) DO UPDATE
-       SET label = EXCLUDED.label, is_primary = EXCLUDED.is_primary,
-           is_verified = user_wallets.is_verified OR EXCLUDED.is_verified,
-           verified_at = COALESCE(user_wallets.verified_at, EXCLUDED.verified_at),
-           updated_at = NOW()
-       RETURNING *`,
+        // Migration 020 created two PARTIAL unique indexes on user_wallets:
+        //   - uq_user_wallets_evm_address_lower  UNIQUE (lower(address))
+        //                                        WHERE chain_type='evm'
+        //     (an EVM wallet can only belong to ONE user globally)
+        //   - uq_user_wallets_user_chain_address_nonevm  UNIQUE
+        //     (user_id, chain_type, address) WHERE chain_type<>'evm'
+        // The ON CONFLICT inferrer needs to match a real index, so we use
+        // two different branches per chain_type. Previously the code always
+        // used `ON CONFLICT (user_id, chain_type, address)` which doesn't
+        // match either index for EVM — every EVM link returned 500
+        // 'no unique or exclusion constraint matching the ON CONFLICT
+        // specification'.
+        const insertSql = chain_type === 'evm'
+            ? `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary, is_verified, verified_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $7 THEN NOW() ELSE NULL END)
+               ON CONFLICT (lower(address)) WHERE chain_type = 'evm' DO UPDATE
+               SET label = EXCLUDED.label, is_primary = EXCLUDED.is_primary,
+                   is_verified = user_wallets.is_verified OR EXCLUDED.is_verified,
+                   verified_at = COALESCE(user_wallets.verified_at, EXCLUDED.verified_at),
+                   updated_at = NOW()
+               RETURNING *`
+            : `INSERT INTO user_wallets (user_id, chain_type, chain_id, address, label, is_primary, is_verified, verified_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $7 THEN NOW() ELSE NULL END)
+               ON CONFLICT (user_id, chain_type, address) WHERE chain_type <> 'evm' DO UPDATE
+               SET label = EXCLUDED.label, is_primary = EXCLUDED.is_primary,
+                   is_verified = user_wallets.is_verified OR EXCLUDED.is_verified,
+                   verified_at = COALESCE(user_wallets.verified_at, EXCLUDED.verified_at),
+                   updated_at = NOW()
+               RETURNING *`;
+        const res = await query(insertSql,
             [userId, chain_type, chain_id || null, address, label || null, is_primary ?? false, isVerified]
         );
+
+        // For EVM the partial unique is global (one wallet → one user). If
+        // the address already belonged to a different user, the ON CONFLICT
+        // updated THEIR row — not ours. Detect that and reject so an attacker
+        // can't 'steal' a wallet by re-linking it under their own account.
+        if (chain_type === 'evm' && res.rows[0] && res.rows[0].user_id !== userId) {
+            throw new AppError('This wallet is already linked to another account', 409);
+        }
 
         logger.info('Wallet added', { user_id: userId, chain_type, address, is_verified: isVerified });
 
