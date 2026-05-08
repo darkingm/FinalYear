@@ -174,7 +174,16 @@ function ComparisonGrid({
 
   const buyerMismatch = !sameAddr(db.buyerWallet, oc.buyer);
   const sellerMismatch = !sameAddr(db.sellerWallet, oc.seller);
-  const tokenMismatch = !sameAddr(db.tokenAddress, oc.token);
+  // For NATIVE tokens (BNB on BSC, ETH on Ethereum) the DB stores token_address
+  // as NULL because there's no ERC-20 contract; the on-chain escrow stores
+  // ZERO_ADDRESS for the same reason. Treat both as equivalent — otherwise
+  // every native-token order incorrectly trips the 'sai lệch DB / blockchain'
+  // banner.
+  const dbTokenIsNative = !db.tokenAddress || db.tokenAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase();
+  const ocTokenIsNative = !oc.token || oc.token.toLowerCase() === ZERO_ADDRESS.toLowerCase();
+  const tokenMismatch = (dbTokenIsNative && ocTokenIsNative)
+    ? false
+    : !sameAddr(db.tokenAddress, oc.token);
   const totalAmountOnchain = oc.amount + oc.fee;
   const amountMismatch = dbAmount !== null && dbAmount !== totalAmountOnchain;
 
