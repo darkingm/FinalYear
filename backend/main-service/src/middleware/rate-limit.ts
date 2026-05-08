@@ -34,12 +34,14 @@ const skipInternalNetwork = (req: any): boolean => {
 };
 
 /**
- * General API rate limiting — 300 req / 15 min per IP
- * Applies to all endpoints as baseline protection.
+ * General API rate limiting — 2000 req / 15 min per IP
+ * Loose by design: this is a demo / FYP and getting 429s during a live
+ * defense is far worse than the marginal abuse protection. Real production
+ * would tighten this back to ~300 / 15 min.
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 2000,
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
@@ -51,13 +53,14 @@ export const apiLimiter = rateLimit({
 });
 
 /**
- * Auth endpoint limiter — 30 attempts / 5 min per IP
+ * Auth endpoint limiter — 200 attempts / 5 min per IP
  * Applied per route: /login, /register, /wallet-login, /forgot-password
  *
- * 30 req / 5 min = 6 per min = reasonable for a real user who may:
- * - Try wrong password a few times
- * - Switch between tabs/devices
- * - Be a developer testing the flow
+ * Why so high? NextAuth fires multiple requests per "single" login from the
+ * user's POV (csrf → callback/credentials → session) and React strict-mode
+ * + page reloads can multiply that 2-3×. 200 / 5 min = ~40 / min = safe for
+ * any reasonable testing pattern, still tight enough that a real brute-force
+ * (thousands of attempts per second) is blocked.
  *
  * IMPORTANT: NextAuth makes server-to-server calls from the frontend server
  * to this backend. Those calls come from internal Docker IPs (172.x.x.x)
@@ -66,7 +69,7 @@ export const apiLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 30,
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
@@ -78,13 +81,14 @@ export const authLimiter = rateLimit({
 });
 
 /**
- * Strict limiter — 5 req / 15 min
- * Only for: /reset-password (actual password reset with token)
- * This should be very strict — password reset tokens are sensitive.
+ * Strict limiter — 30 req / 15 min
+ * Only for: /reset-password (actual password reset with token).
+ * Higher than the original 5 because demo testers hit it multiple times,
+ * but still tight enough that a token-grinding attack is impractical.
  */
 export const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
