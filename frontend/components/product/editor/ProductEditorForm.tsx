@@ -141,10 +141,22 @@ export function ProductEditorForm({
       try {
         const response = await apiClient.get('/api/products/tokens');
         const tokens = response.data?.data ?? [];
-        const rates = await fetchTokenRates(tokens.map((token: any) => token.symbol));
+        // Backend returns one row per (symbol, chain) pair — for the editor we
+        // collapse to one row per symbol so the seller sets a single price per
+        // coin type. Pick the lowest token_id for each symbol as the canonical
+        // entry; the backend resolves the actual receiving chain at checkout.
+        const seenSymbols = new Set<string>();
+        const dedupedTokens = (tokens as any[])
+          .filter((token) => {
+            const sym = String(token.symbol || '').toUpperCase();
+            if (!sym || seenSymbols.has(sym)) return false;
+            seenSymbols.add(sym);
+            return true;
+          });
+        const rates = await fetchTokenRates(dedupedTokens.map((token: any) => token.symbol));
         if (ignore) return;
 
-        const catalog: ProductEditorSeedToken[] = tokens.map((token: any) => ({
+        const catalog: ProductEditorSeedToken[] = dedupedTokens.map((token: any) => ({
           token_id: token.token_id,
           symbol: String(token.symbol || '').toUpperCase(),
           name: token.name,

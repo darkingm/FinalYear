@@ -120,6 +120,28 @@ export class WalletsService {
         );
 
         logger.info('Wallet added', { user_id: userId, chain_type, address, is_verified: isVerified });
+
+        // ── Auto-heal seller payout wallet ──────────────────────────────
+        // If this user has a seller_profile whose payout_wallet is still
+        // NULL, set it to the wallet they just verified. Without this the
+        // seller would have to do a second manual step before buyers can
+        // pay them in crypto, and beginners forget. We only set when
+        // payout_wallet IS NULL — never overwrite an explicit choice.
+        if (chain_type === 'evm' && isVerified) {
+            try {
+                await query(
+                    `UPDATE seller_profiles
+                        SET payout_wallet = $1, updated_at = NOW()
+                      WHERE user_id = $2 AND payout_wallet IS NULL`,
+                    [address.toLowerCase(), userId]
+                );
+            } catch (err: any) {
+                logger.warn('Auto-heal seller payout_wallet failed (non-fatal)', {
+                    userId, address, err: err?.message,
+                });
+            }
+        }
+
         return { ...res.rows[0], chain_info: CHAIN_INFO[chain_id!] };
     }
 

@@ -40,11 +40,22 @@ export async function checkoutCart(req: AuthRequest, res: Response, next: NextFu
       }
 
       const productResult = await client.query(
-        'SELECT * FROM products WHERE product_id = $1 AND status = $2 FOR SHARE',
+        `SELECT p.*, sp.user_id AS seller_user_id
+           FROM products p
+           LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
+          WHERE p.product_id = $1 AND p.status = $2
+          FOR SHARE OF p`,
         [product_id, 'active']
       );
       if (productResult.rows.length === 0) throw new AppError(`Product ${product_id} not found or inactive`, 404);
       const product = productResult.rows[0];
+
+      // Block sellers from buying their own products. The marketplace assumes
+      // buyer ≠ seller — the escrow flow, payout split, and dispute UX all
+      // break if the same user is on both sides of the trade.
+      if (product.seller_user_id && product.seller_user_id === buyerId) {
+        throw new AppError(`You cannot buy your own product (${product.name})`, 400);
+      }
 
       const inventoryResult = await client.query(
         'SELECT * FROM inventory WHERE product_id = $1 FOR UPDATE',
@@ -152,11 +163,21 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     await client.query('BEGIN');
 
     const productResult = await client.query(
-      'SELECT * FROM products WHERE product_id = $1 AND status = $2 FOR SHARE',
+      `SELECT p.*, sp.user_id AS seller_user_id
+         FROM products p
+         LEFT JOIN seller_profiles sp ON p.seller_id = sp.seller_id
+        WHERE p.product_id = $1 AND p.status = $2
+        FOR SHARE OF p`,
       [product_id, 'active']
     );
     if (productResult.rows.length === 0) throw new AppError('Product not found or inactive', 404);
     const product = productResult.rows[0];
+
+    // Block sellers from buying their own products — see checkoutCart for the
+    // full rationale (escrow / payout split / dispute UX assume buyer ≠ seller).
+    if (product.seller_user_id && product.seller_user_id === buyerId) {
+      throw new AppError('You cannot buy your own product', 400);
+    }
 
     const inventoryResult = await client.query(
       'SELECT * FROM inventory WHERE product_id = $1 FOR UPDATE',
