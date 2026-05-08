@@ -3,28 +3,52 @@
  * AIChatBubble — floating AI assistant, visible on all pages
  * - Collapsed: gold brain icon, bottom-right
  * - Expanded: chat panel, calls /api/ai/chat
+ *
+ * When the user is logged in, we forward their JWT to the AI service so
+ * the agent can call back into the marketplace API on their behalf
+ * (read profile, update profile fields, list/unlink wallets, set primary,
+ * pick payout wallet, list recent orders).
  */
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, X, Send, Loader2, ChevronDown, Sparkles, RefreshCw } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 
 interface Msg { role: 'user' | 'assistant'; content: string }
 
-const INIT: Msg = {
+const INIT_GUEST: Msg = {
     role: 'assistant',
     content: 'Xin chào! Tôi là AI Assistant của Web3Market 👋\nTôi có thể giúp bạn về:\n• Giá coin & thị trường crypto\n• Gợi ý sản phẩm\n• Hướng dẫn thanh toán & ví Web3\n• RWA token hóa tài sản\n\nHỏi gì đi nào!',
 };
+const INIT_AUTH: Msg = {
+    role: 'assistant',
+    content: 'Xin chào! 👋 Vì bạn đã đăng nhập, tôi có thể giúp bạn thao tác trực tiếp:\n• Xem / cập nhật profile\n• Quản lý ví đã liên kết (đặt chính, gỡ liên kết)\n• Đặt ví nhận thanh toán cho seller\n• Xem đơn hàng gần đây\n\nVí dụ: "đổi tên hiển thị thành Kien", "ví nào đang chính?", "đơn hàng mới nhất của tôi"',
+};
 
-const SUGGESTIONS = ['Giá BTC hôm nay?', 'RWA là gì?', 'Cách kết nối MetaMask?', 'Sản phẩm nổi bật'];
+const SUGGESTIONS_GUEST = ['Giá BTC hôm nay?', 'RWA là gì?', 'Cách kết nối MetaMask?', 'Sản phẩm nổi bật'];
+const SUGGESTIONS_AUTH = ['Profile của tôi?', 'Liệt kê ví đã liên kết', 'Đơn hàng gần nhất', 'Đổi tên hiển thị'];
 
 export function AIChatBubble() {
+    const { data: session, status } = useSession();
+    const isAuthed = status === 'authenticated';
+    const accessToken = (session as any)?.accessToken as string | undefined;
+
     const [open, setOpen] = useState(false);
-    const [messages, setMessages] = useState<Msg[]>([INIT]);
+    const [messages, setMessages] = useState<Msg[]>([isAuthed ? INIT_AUTH : INIT_GUEST]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [unread, setUnread] = useState(0);
     const bottomRef = useRef<HTMLDivElement>(null);
+
+    // Re-seed the welcome message if auth status changes mid-session.
+    useEffect(() => {
+        setMessages((prev) => {
+            // only replace if the only message is the previous welcome variant
+            if (prev.length !== 1) return prev;
+            return [isAuthed ? INIT_AUTH : INIT_GUEST];
+        });
+    }, [isAuthed]);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,9 +68,11 @@ export function AIChatBubble() {
         setLoading(true);
 
         try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
             const res = await fetch('/api/ai/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })) }),
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -65,7 +91,7 @@ export function AIChatBubble() {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); }
     };
 
-    const reset = () => setMessages([INIT]);
+    const reset = () => setMessages([isAuthed ? INIT_AUTH : INIT_GUEST]);
 
     return (
         <>
@@ -167,7 +193,7 @@ export function AIChatBubble() {
                         {/* Suggestions (only show on first load) */}
                         {messages.length === 1 && (
                             <div className="px-3 pb-1 flex gap-1.5 flex-wrap flex-shrink-0">
-                                {SUGGESTIONS.map(s => (
+                                {(isAuthed ? SUGGESTIONS_AUTH : SUGGESTIONS_GUEST).map(s => (
                                     <button
                                         key={s}
                                         onClick={() => send(s)}
