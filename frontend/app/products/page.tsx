@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
@@ -146,6 +146,9 @@ function ProductsPageContent() {
   // Products tab state
   const [products, setProducts] = useState<ProductCardData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
   const [category, setCategory] = useState(searchParams.get('category') || '');
@@ -154,6 +157,7 @@ function ProductsPageContent() {
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
   const [sortOpen, setSortOpen] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // NFT tab state
   const [nftProducts, setNftProducts] = useState<TokenProduct[]>([]);
@@ -161,23 +165,30 @@ function ProductsPageContent() {
   const [nftCategory, setNftCategory] = useState('');
   const [nftChain, setNftChain] = useState('');
 
-  // Fetch regular products
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
+  // Fetch regular products (paginated, append-on-loadmore)
+  const PAGE_SIZE = 24;
+  const fetchProducts = useCallback(async (targetPage: number) => {
+    if (targetPage === 1) setLoading(true); else setLoadingMore(true);
     try {
       const params = new URLSearchParams();
+      params.append('page', String(targetPage));
+      params.append('limit', String(PAGE_SIZE));
       if (category) params.append('category', category);
       if (search) params.append('search', search);
+      if (priceRange.min) params.append('minPrice', priceRange.min);
+      if (priceRange.max) params.append('maxPrice', priceRange.max);
       const res = await apiClient.get(`/api/products?${params}`, publicRequestConfig);
       let data: ProductCardData[] = res.data.data ?? [];
-      if (priceRange.min) data = data.filter(p => Number(p.base_price_usd) >= Number(priceRange.min));
-      if (priceRange.max) data = data.filter(p => Number(p.base_price_usd) <= Number(priceRange.max));
+      // Client-side sort (server sorts by created_at DESC by default)
       if (sort === 'price_asc') data.sort((a, b) => Number(a.base_price_usd) - Number(b.base_price_usd));
       if (sort === 'price_desc') data.sort((a, b) => Number(b.base_price_usd) - Number(a.base_price_usd));
-      setProducts(data);
+      const pagination = res.data.pagination;
+      const totalPages = pagination?.totalPages ?? (data.length < PAGE_SIZE ? targetPage : targetPage + 1);
+      setHasMore(targetPage < totalPages);
+      setProducts(prev => targetPage === 1 ? data : [...prev, ...data]);
     } catch { toast.error('Không thể tải sản phẩm'); }
-    finally { setLoading(false); }
-  }, [category, search, priceRange, sort]);
+    finally { setLoading(false); setLoadingMore(false); }
+  }, [category, search, priceRange.min, priceRange.max, sort]);
 
   // Fetch NFT/tokenized products
   const fetchNFTProducts = useCallback(async () => {
@@ -196,7 +207,32 @@ function ProductsPageContent() {
     finally { setNftLoading(false); }
   }, [nftCategory, nftChain]);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  // Reset pagination + reload when filters change
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+    fetchProducts(1);
+  }, [fetchProducts]);
+
+  // Load more when sentinel hits viewport
+  useEffect(() => {
+    if (!hasMore || loading || loadingMore) return;
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          const next = page + 1;
+          setPage(next);
+          fetchProducts(next);
+        }
+      },
+      { rootMargin: '300px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, page, fetchProducts]);
+
   useEffect(() => {
     if (activeTab === 'nft') fetchNFTProducts();
   }, [activeTab, fetchNFTProducts]);
@@ -382,7 +418,7 @@ function ProductsPageContent() {
                           onChange={e => setPriceRange(p => ({ ...p, max: e.target.value }))}
                           className="w-28 px-3 py-2 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-foreground" />
                       </div>
-                      <button onClick={fetchProducts} className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-xl hover:opacity-90">Áp dụng</button>
+                      <button onClick={() => { setPage(1); setHasMore(true); fetchProducts(1); }} className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-xl hover:opacity-90">Áp dụng</button>
                       {hasActiveFilters && (
                         <button onClick={clearFilters} className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-xl transition-colors">
                           <X className="w-3.5 h-3.5" /> Xóa bộ lọc
@@ -447,25 +483,44 @@ function ProductsPageContent() {
                 </div>
               </motion.div>
             ) : (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={`${viewMode}-${category}-${sort}`}
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className={viewMode === 'grid'
-                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'
-                    : 'space-y-4'}
-                >
-                  {products.map((product, index) => (
-                    <ProductCard
-                      key={product.product_id}
-                      product={product}
-                      index={index}
-                      variant={viewMode}
-                      showAddToCart
-                    />
-                  ))}
-                </motion.div>
-              </AnimatePresence>
+              <>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={`${viewMode}-${category}-${sort}`}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className={viewMode === 'grid'
+                      ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'
+                      : 'space-y-4'}
+                  >
+                    {products.map((product, index) => (
+                      <ProductCard
+                        key={product.product_id}
+                        product={product}
+                        index={index}
+                        variant={viewMode}
+                        showAddToCart
+                      />
+                    ))}
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Infinite-scroll sentinel + loading footer */}
+                {hasMore && (
+                  <div ref={sentinelRef} className="flex items-center justify-center py-8">
+                    {loadingMore ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        Đang tải thêm...
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground/60">Cuộn xuống để tải thêm</div>
+                    )}
+                  </div>
+                )}
+                {!hasMore && products.length > 0 && (
+                  <div className="text-center text-xs text-muted-foreground/60 py-8">— Hết sản phẩm —</div>
+                )}
+              </>
             )}
           </>
         )}
