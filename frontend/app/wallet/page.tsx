@@ -24,6 +24,7 @@ import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
 import { NetworkDiagnostics } from '@/components/web3/NetworkDiagnostics';
 import { SellerPayoutWalletSection } from '@/components/wallet/SellerPayoutWalletSection';
 import { CHAIN_META } from '@/lib/web3/config';
+import { useDualText } from '@/lib/hooks/useDualText';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface UserWallet {
@@ -84,9 +85,9 @@ const TESTNET_NETWORKS = getRecommendedCheckoutChainMetas().map((network) => ({
   faucet: network.faucetUrl,
 }));
 
-function copyText(text: string, label: string) {
+function copyText(text: string, successMsg: string) {
   navigator.clipboard.writeText(text);
-  toast.success(`Đã sao chép ${label}`);
+  toast.success(successMsg);
 }
 
 function shortAddr(addr: string) {
@@ -110,6 +111,7 @@ function WalletBalanceDisplay({ address }: { address: string }) {
 /* ─── Main component ─────────────────────────────────────────────────────── */
 export default function WalletPage() {
   const router = useRouter();
+  const tr = useDualText();
   const { isAuthenticated, isLoading: authLoading, reauthRequired } = useAuth();
   const { address, isConnected, chainId, connector } = useAccount();
   const { signMessageAsync } = useSignMessage();
@@ -193,10 +195,10 @@ export default function WalletPage() {
     prevAddrRef.current = address;
     const already = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
     if (already) {
-      toast.info(`Đã chuyển sang ví đã liên kết: ${shortAddr(address)}`);
+      toast.info(tr(`Đã chuyển sang ví đã liên kết: ${shortAddr(address)}`, `Switched to linked wallet: ${shortAddr(address)}`));
       setSelectedQRWallet(already);
     } else {
-      toast(`Ví mới: ${shortAddr(address)}`, { description: 'Nhấn "Liên kết ví này" để thêm vào danh sách', icon: '🔔' });
+      toast(tr(`Ví mới: ${shortAddr(address)}`, `New wallet: ${shortAddr(address)}`), { description: tr('Nhấn "Liên kết ví này" để thêm vào danh sách', 'Click "Link this wallet" to add it to your list'), icon: '🔔' });
     }
   }, [address, wallets]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -205,9 +207,9 @@ export default function WalletPage() {
    * so the saved entry reflects the actual provider, not a hard-coded "MetaMask".
    */
   const handleLinkWallet = async () => {
-    if (!isConnected || !address) { toast.error('Vui lòng kết nối ví trước'); return; }
+    if (!isConnected || !address) { toast.error(tr('Vui lòng kết nối ví trước', 'Please connect a wallet first')); return; }
     const already = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
-    if (already) { toast('Ví này đã được liên kết', { icon: 'ℹ️' }); return; }
+    if (already) { toast(tr('Ví này đã được liên kết', 'This wallet is already linked'), { icon: 'ℹ️' }); return; }
 
     setLinking(true);
     try {
@@ -224,30 +226,30 @@ export default function WalletPage() {
         message,
         signature,
       });
-      toast.success(`Đã liên kết ${walletKind}!`);
+      toast.success(tr(`Đã liên kết ${walletKind}!`, `${walletKind} linked!`));
       fetchData();
     } catch (err: any) {
-      if (err.code === 4001) toast.error('Người dùng từ chối ký xác nhận');
-      else toast.error(err.response?.data?.message || 'Liên kết ví thất bại');
+      if (err.code === 4001) toast.error(tr('Người dùng từ chối ký xác nhận', 'Signature rejected by user'));
+      else toast.error(err.response?.data?.message || tr('Liên kết ví thất bại', 'Wallet linking failed'));
     } finally { setLinking(false); }
   };
 
   const handleRemove = async (id: number) => {
-    if (!confirm('Xóa ví này?')) return;
+    if (!confirm(tr('Xóa ví này?', 'Delete this wallet?'))) return;
     try {
       await apiClient.delete(`/api/wallets/${id}`);
-      toast.success('Đã xóa ví');
+      toast.success(tr('Đã xóa ví', 'Wallet deleted'));
       if (selectedQRWallet?.wallet_db_id === id) setSelectedQRWallet(null);
       fetchData();
-    } catch { toast.error('Xóa ví thất bại'); }
+    } catch { toast.error(tr('Xóa ví thất bại', 'Failed to delete wallet')); }
   };
 
   const handleSetPrimary = async (id: number) => {
     try {
       await apiClient.patch(`/api/wallets/${id}/primary`);
-      toast.success('Đã đặt làm ví chính');
+      toast.success(tr('Đã đặt làm ví chính', 'Set as primary wallet'));
       fetchData();
-    } catch { toast.error('Thao tác thất bại'); }
+    } catch { toast.error(tr('Thao tác thất bại', 'Operation failed')); }
   };
 
   const addNetworkToMetaMask = async (net: typeof TESTNET_NETWORKS[0]) => {
@@ -261,8 +263,8 @@ export default function WalletPage() {
           rpcUrls: [net.rpcUrl],
         }],
       });
-      toast.success(`Đã thêm mạng ${net.name}`);
-    } catch { toast.error('Không thể thêm mạng'); }
+      toast.success(tr(`Đã thêm mạng ${net.name}`, `Added network ${net.name}`));
+    } catch { toast.error(tr('Không thể thêm mạng', 'Could not add network')); }
   };
 
   /* ─── Loading state ──────────────────────────────────────────────────── */
@@ -297,8 +299,8 @@ export default function WalletPage() {
               <Wallet className="w-5 h-5 text-[#f0b90b]" />
             </div>
             <div>
-              <h1 className="text-2xl font-black">Ví của tôi</h1>
-              <p className="text-sm text-muted-foreground">Liên kết ví (MetaMask · Coinbase · WalletConnect) · QR nạp tiền · Lịch sử</p>
+              <h1 className="text-2xl font-black">{tr('Ví của tôi', 'My Wallet')}</h1>
+              <p className="text-sm text-muted-foreground">{tr('Liên kết ví (MetaMask · Coinbase · WalletConnect) · QR nạp tiền · Lịch sử', 'Link wallet (MetaMask · Coinbase · WalletConnect) · Deposit QR · History')}</p>
             </div>
           </div>
 
@@ -310,10 +312,10 @@ export default function WalletPage() {
               {/* Wallet connect / link — works with any RainbowKit connector */}
               <div className="bg-card border border-border rounded-2xl p-5">
                 <h2 className="font-bold text-sm flex items-center gap-2 mb-4">
-                  <Link2 className="w-4 h-4 text-[#f0b90b]" /> Liên kết ví Web3
+                  <Link2 className="w-4 h-4 text-[#f0b90b]" /> {tr('Liên kết ví Web3', 'Link Web3 wallet')}
                 </h2>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Hỗ trợ MetaMask, Coinbase Wallet, WalletConnect — chọn provider khi connect
+                  {tr('Hỗ trợ MetaMask, Coinbase Wallet, WalletConnect — chọn provider khi connect', 'Supports MetaMask, Coinbase Wallet, WalletConnect — pick a provider on connect')}
                 </p>
                 <ConnectButton.Custom>
                   {({ account, openConnectModal, mounted }) => {
@@ -323,7 +325,7 @@ export default function WalletPage() {
                         onClick={openConnectModal}
                         className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#f0b90b]/40 text-[#f0b90b] text-sm font-semibold hover:border-[#f0b90b] hover:bg-[#f0b90b]/5 transition-all flex items-center justify-center gap-2"
                       >
-                        <Wallet className="w-4 h-4" /> Kết nối ví
+                        <Wallet className="w-4 h-4" /> {tr('Kết nối ví', 'Connect wallet')}
                       </button>
                     );
                     const isAlreadyLinked = wallets.some(w => w.address.toLowerCase() === account.address.toLowerCase());
@@ -332,14 +334,14 @@ export default function WalletPage() {
                         <div className={`flex items-center gap-2 p-3 rounded-xl ${isAlreadyLinked ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-emerald-500/8 border border-emerald-500/20'}`}>
                           <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-emerald-400 font-semibold">Đã kết nối</p>
+                            <p className="text-xs text-emerald-400 font-semibold">{tr('Đã kết nối', 'Connected')}</p>
                             <p className="font-mono text-xs text-muted-foreground truncate">{account.address}</p>
                           </div>
                         </div>
                         {isAlreadyLinked ? (
                           <div className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm font-bold flex items-center justify-center gap-2">
                             <CheckCircle className="w-4 h-4 text-emerald-400" />
-                            <span className="text-emerald-400">Đã liên kết</span>
+                            <span className="text-emerald-400">{tr('Đã liên kết', 'Linked')}</span>
                           </div>
                         ) : (
                           <button
@@ -348,7 +350,7 @@ export default function WalletPage() {
                             className="w-full py-2.5 rounded-xl bg-[#f0b90b] text-black text-sm font-bold hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2 transition-opacity"
                           >
                             {linking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                            {linking ? 'Đang liên kết...' : '+ Liên kết ví này'}
+                            {linking ? tr('Đang liên kết...', 'Linking...') : tr('+ Liên kết ví này', '+ Link this wallet')}
                           </button>
                         )}
                       </div>
@@ -361,7 +363,7 @@ export default function WalletPage() {
               <div className="bg-card border border-border rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-bold text-sm flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-[#f0b90b]" /> Ví đã liên kết ({wallets.length})
+                    <Shield className="w-4 h-4 text-[#f0b90b]" /> {tr('Ví đã liên kết', 'Linked wallets')} ({wallets.length})
                   </h2>
                   <button onClick={fetchData} className="text-muted-foreground hover:text-foreground p-1">
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -371,8 +373,8 @@ export default function WalletPage() {
                 {wallets.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Wallet className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-sm">Chưa có ví nào</p>
-                    <p className="text-xs mt-1">Kết nối và liên kết ví bên trên</p>
+                    <p className="text-sm">{tr('Chưa có ví nào', 'No wallets yet')}</p>
+                    <p className="text-xs mt-1">{tr('Kết nối và liên kết ví bên trên', 'Connect and link a wallet above')}</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -400,11 +402,11 @@ export default function WalletPage() {
                           </div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
                             {!w.is_primary && (
-                              <button onClick={e => { e.stopPropagation(); handleSetPrimary(w.wallet_db_id); }} title="Đặt làm ví chính" className="p-1.5 text-muted-foreground hover:text-[#f0b90b]">
+                              <button onClick={e => { e.stopPropagation(); handleSetPrimary(w.wallet_db_id); }} title={tr('Đặt làm ví chính', 'Set as primary wallet')} className="p-1.5 text-muted-foreground hover:text-[#f0b90b]">
                                 <Star className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            <button onClick={e => { e.stopPropagation(); copyText(w.address, 'địa chỉ ví'); }} className="p-1.5 text-muted-foreground hover:text-foreground">
+                            <button onClick={e => { e.stopPropagation(); copyText(w.address, tr('Đã sao chép địa chỉ ví', 'Wallet address copied')); }} className="p-1.5 text-muted-foreground hover:text-foreground">
                               <Copy className="w-3.5 h-3.5" />
                             </button>
                             <button onClick={e => { e.stopPropagation(); handleRemove(w.wallet_db_id); }} className="p-1.5 text-muted-foreground hover:text-red-400">
@@ -425,9 +427,9 @@ export default function WalletPage() {
               {/* Tabs */}
               <div className="flex gap-1 p-1 bg-muted rounded-xl">
                 {[
-                  { key: 'qr', icon: QrCode, label: 'QR Nạp tiền' },
-                  { key: 'escrow', icon: ShieldCheck, label: 'Trạng thái Escrow' },
-                  { key: 'history', icon: Clock, label: 'Lịch sử' },
+                  { key: 'qr', icon: QrCode, label: tr('QR Nạp tiền', 'Deposit QR') },
+                  { key: 'escrow', icon: ShieldCheck, label: tr('Trạng thái Escrow', 'Escrow status') },
+                  { key: 'history', icon: Clock, label: tr('Lịch sử', 'History') },
                 ].map(tab => (
                   <button
                     key={tab.key}
@@ -457,16 +459,16 @@ export default function WalletPage() {
 
                           {/* Scan hint */}
                           <p className="text-xs text-muted-foreground mb-4 flex items-center gap-1.5">
-                            <QrCode className="w-3.5 h-3.5" /> Quét bằng ví crypto để gửi tiền
+                            <QrCode className="w-3.5 h-3.5" /> {tr('Quét bằng ví crypto để gửi tiền', 'Scan with a crypto wallet to send funds')}
                           </p>
 
                           {/* Address box */}
                           <div className="w-full p-4 bg-background border border-border rounded-xl mb-3">
-                            <p className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wider">Địa chỉ ví</p>
+                            <p className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wider">{tr('Địa chỉ ví', 'Wallet address')}</p>
                             <div className="flex items-start gap-2">
                               <p className="font-mono text-sm flex-1 break-all leading-relaxed">{qrWallet.address}</p>
                               <button
-                                onClick={() => copyText(qrWallet.address, 'địa chỉ ví')}
+                                onClick={() => copyText(qrWallet.address, tr('Đã sao chép địa chỉ ví', 'Wallet address copied'))}
                                 className="flex-shrink-0 p-2 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] rounded-lg transition-colors"
                               >
                                 <Copy className="w-4 h-4" />
@@ -478,15 +480,15 @@ export default function WalletPage() {
                           <div className="w-full flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                             <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                             <p className="text-xs text-amber-400/90">
-                              ⚠️ Chỉ gửi đúng token và đúng mạng. Gửi sai mạng sẽ <strong>mất tiền vĩnh viễn</strong>.
+                              ⚠️ {tr('Chỉ gửi đúng token và đúng mạng. Gửi sai mạng sẽ', 'Only send the correct token on the correct network. Sending on the wrong network will')} <strong>{tr('mất tiền vĩnh viễn', 'permanently lose your funds')}</strong>.
                             </p>
                           </div>
                         </div>
                       ) : (
                         <div className="text-center py-14 text-muted-foreground">
                           <QrCode className="w-14 h-14 mx-auto mb-4 opacity-15" />
-                          <p className="font-semibold">Chưa có ví nào</p>
-                          <p className="text-sm mt-1">Liên kết ví để tạo QR nạp tiền</p>
+                          <p className="font-semibold">{tr('Chưa có ví nào', 'No wallets yet')}</p>
+                          <p className="text-sm mt-1">{tr('Liên kết ví để tạo QR nạp tiền', 'Link a wallet to generate a deposit QR')}</p>
                         </div>
                       )}
                     </div>
@@ -494,7 +496,7 @@ export default function WalletPage() {
                     {/* Network info accordion */}
                     <div className="bg-card border border-border rounded-2xl p-5">
                       <h3 className="font-bold text-sm flex items-center gap-2 mb-4">
-                        <ArrowDownToLine className="w-4 h-4 text-[#f0b90b]" /> Thông tin mạng nạp tiền
+                        <ArrowDownToLine className="w-4 h-4 text-[#f0b90b]" /> {tr('Thông tin mạng nạp tiền', 'Deposit network info')}
                       </h3>
                       <div className="space-y-2">
                         {TESTNET_NETWORKS.map(net => (
@@ -533,7 +535,7 @@ export default function WalletPage() {
                                         <p className="font-mono font-bold">{net.chainId}</p>
                                       </div>
                                       <div className="p-2.5 bg-background border border-border rounded-lg">
-                                        <p className="text-muted-foreground mb-0.5">Ký hiệu</p>
+                                        <p className="text-muted-foreground mb-0.5">{tr('Ký hiệu', 'Symbol')}</p>
                                         <p className="font-bold">{net.symbol}</p>
                                       </div>
                                     </div>
@@ -542,7 +544,7 @@ export default function WalletPage() {
                                     <div className="p-2.5 bg-background border border-border rounded-lg">
                                       <div className="flex items-center justify-between mb-1">
                                         <p className="text-xs text-muted-foreground">RPC URL</p>
-                                        <button onClick={() => copyText(net.rpcUrl, 'RPC URL')} className="text-muted-foreground hover:text-foreground">
+                                        <button onClick={() => copyText(net.rpcUrl, tr('Đã sao chép RPC URL', 'RPC URL copied'))} className="text-muted-foreground hover:text-foreground">
                                           <Copy className="w-3 h-3" />
                                         </button>
                                       </div>
@@ -551,7 +553,7 @@ export default function WalletPage() {
 
                                     {/* Tokens list */}
                                     <div>
-                                      <p className="text-xs text-muted-foreground mb-1.5">Tokens hỗ trợ</p>
+                                      <p className="text-xs text-muted-foreground mb-1.5">{tr('Tokens hỗ trợ', 'Supported tokens')}</p>
                                       <div className="flex flex-wrap gap-1.5">
                                         {net.tokens.map(t => (
                                           <span key={t} className="text-xs font-bold px-2.5 py-1 bg-muted rounded-full">{t}</span>
@@ -564,7 +566,7 @@ export default function WalletPage() {
                                       <a href={net.faucet} target="_blank" rel="noopener noreferrer"
                                         className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:underline">
                                         <ExternalLink className="w-3 h-3" />
-                                        Lấy {net.symbol} miễn phí tại faucet →
+                                        {tr(`Lấy ${net.symbol} miễn phí tại faucet →`, `Get free ${net.symbol} from the faucet →`)}
                                       </a>
                                     )}
 
@@ -573,7 +575,7 @@ export default function WalletPage() {
                                       onClick={() => addNetworkToMetaMask(net)}
                                       className="w-full py-2 text-xs font-semibold bg-muted hover:bg-muted/70 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                                     >
-                                      <Plus className="w-3.5 h-3.5" /> Thêm mạng này vào MetaMask
+                                      <Plus className="w-3.5 h-3.5" /> {tr('Thêm mạng này vào MetaMask', 'Add this network to MetaMask')}
                                     </button>
 
                                     {/* Hardhat Faucet — only for chain 31337 */}
@@ -590,7 +592,7 @@ export default function WalletPage() {
                                         className="w-full py-2.5 text-xs font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg flex items-center justify-center gap-2 transition-colors"
                                       >
                                         <Zap className="w-3.5 h-3.5" />
-                                        Nhận 10 ETH test (Hardhat Faucet)
+                                        {tr('Nhận 10 ETH test (Hardhat Faucet)', 'Get 10 test ETH (Hardhat Faucet)')}
                                       </button>
                                     )}
                                   </div>
@@ -605,8 +607,8 @@ export default function WalletPage() {
                       <div className="mt-4 flex items-start gap-2 p-3 bg-blue-500/8 border border-blue-500/20 rounded-xl">
                         <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-blue-400/90">
-                          Trên tất cả mạng EVM (Ethereum, Polygon, BNB...), địa chỉ ví của bạn là <strong>giống nhau</strong>.
-                          Chỉ cần chọn đúng mạng khi gửi.
+                          {tr('Trên tất cả mạng EVM (Ethereum, Polygon, BNB...), địa chỉ ví của bạn là', 'On every EVM network (Ethereum, Polygon, BNB...), your wallet address is the')} <strong>{tr('giống nhau', 'same')}</strong>.
+                          {tr('Chỉ cần chọn đúng mạng khi gửi.', 'Just pick the right network when sending.')}
                         </p>
                       </div>
                     </div>
@@ -619,7 +621,7 @@ export default function WalletPage() {
                     <div className="bg-card border border-border rounded-2xl p-5">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="font-bold text-sm flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-[#f0b90b]" /> Đơn hàng dùng Escrow on-chain
+                          <ShieldCheck className="w-4 h-4 text-[#f0b90b]" /> {tr('Đơn hàng dùng Escrow on-chain', 'Orders using on-chain Escrow')}
                         </h3>
                         <button onClick={fetchCryptoOrders} className="text-muted-foreground hover:text-foreground p-1">
                           <RefreshCw className="w-3.5 h-3.5" />
@@ -629,20 +631,19 @@ export default function WalletPage() {
                       <div className="flex items-start gap-2 p-3 bg-blue-500/8 border border-blue-500/20 rounded-xl mb-4">
                         <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-blue-400/90">
-                          Mỗi đơn dưới đây có 1 mục trong hợp đồng <strong>EscrowCore</strong> trên chain tương ứng.
-                          Mở đơn để xem dữ liệu blockchain real-time song song với database — phát hiện mọi sai lệch.
+                          {tr('Mỗi đơn dưới đây có 1 mục trong hợp đồng', 'Each order below has an entry in the')} <strong>EscrowCore</strong> {tr('trên chain tương ứng. Mở đơn để xem dữ liệu blockchain real-time song song với database — phát hiện mọi sai lệch.', 'contract on the matching chain. Open an order to see live blockchain data side-by-side with the database — surface any drift.')}
                         </p>
                       </div>
 
                       {cryptoOrdersLoading ? (
                         <div className="flex items-center justify-center py-10 text-muted-foreground">
-                          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Đang tải đơn hàng…
+                          <Loader2 className="w-5 h-5 animate-spin mr-2" /> {tr('Đang tải đơn hàng…', 'Loading orders…')}
                         </div>
                       ) : cryptoOrders.length === 0 ? (
                         <div className="text-center py-14 text-muted-foreground">
                           <ShieldCheck className="w-12 h-12 mx-auto mb-4 opacity-15" />
-                          <p className="font-semibold">Chưa có đơn nào dùng Escrow</p>
-                          <p className="text-sm mt-1">Đơn thanh toán bằng crypto sẽ hiện ở đây sau khi tạo</p>
+                          <p className="font-semibold">{tr('Chưa có đơn nào dùng Escrow', 'No Escrow orders yet')}</p>
+                          <p className="text-sm mt-1">{tr('Đơn thanh toán bằng crypto sẽ hiện ở đây sau khi tạo', 'Crypto-paid orders will appear here once created')}</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -696,7 +697,7 @@ export default function WalletPage() {
                     <div className="bg-card border border-border rounded-2xl p-5">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="font-bold text-sm flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-[#f0b90b]" /> Lịch sử nạp tiền
+                          <Clock className="w-4 h-4 text-[#f0b90b]" /> {tr('Lịch sử nạp tiền', 'Deposit history')}
                         </h3>
                         <button onClick={fetchData} className="text-muted-foreground hover:text-foreground p-1">
                           <RefreshCw className="w-3.5 h-3.5" />
@@ -706,8 +707,8 @@ export default function WalletPage() {
                       {deposits.length === 0 ? (
                         <div className="text-center py-14 text-muted-foreground">
                           <ArrowDownToLine className="w-12 h-12 mx-auto mb-4 opacity-15" />
-                          <p className="font-semibold">Chưa có giao dịch</p>
-                          <p className="text-sm mt-1">Các lần nạp tiền sẽ hiện ở đây sau khi xác nhận trên blockchain</p>
+                          <p className="font-semibold">{tr('Chưa có giao dịch', 'No transactions yet')}</p>
+                          <p className="text-sm mt-1">{tr('Các lần nạp tiền sẽ hiện ở đây sau khi xác nhận trên blockchain', 'Deposits will appear here once confirmed on-chain')}</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -729,7 +730,7 @@ export default function WalletPage() {
                               <div className="text-right flex-shrink-0">
                                 <p className={`text-xs font-semibold ${d.status === 'confirmed' ? 'text-emerald-400' : d.status === 'failed' ? 'text-red-400' : 'text-amber-400'
                                   }`}>
-                                  {d.status === 'confirmed' ? '✓ Thành công' : d.status === 'failed' ? '✗ Thất bại' : '⏳ Đang xử lý'}
+                                  {d.status === 'confirmed' ? tr('✓ Thành công', '✓ Success') : d.status === 'failed' ? tr('✗ Thất bại', '✗ Failed') : tr('⏳ Đang xử lý', '⏳ Pending')}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground mt-0.5">
                                   {new Date(d.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
