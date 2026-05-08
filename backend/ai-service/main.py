@@ -517,7 +517,9 @@ async def chat(req: ChatRequest, authorization: Optional[str] = Header(default=N
 
 
 @app.get("/health")
+@app.head("/health")
 @app.get("/api/ai/health")
+@app.head("/api/ai/health")
 def health():
     return {
         "status": "ok",
