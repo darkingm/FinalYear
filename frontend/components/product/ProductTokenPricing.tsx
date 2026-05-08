@@ -5,6 +5,7 @@ import { CoinImage } from '@/components/ui/CoinImage';
 import { buildAcceptedTokenChipState, buildLiveUsdtEstimate, resolveMarketQuoteSymbol } from '@/lib/products/pricing';
 import type { ProductAcceptedTokenView } from '@/lib/products/types';
 import { usePriceStore } from '@/store';
+import { useDualText } from '@/lib/hooks/useDualText';
 
 interface ProductTokenPricingProps {
   acceptedTokens: ProductAcceptedTokenView[];
@@ -15,11 +16,11 @@ interface ProductTokenPricingProps {
   stock?: number;
 }
 
-function renderStockLabel(stock?: number) {
+function renderStockLabel(stock: number | undefined, tr: (vi: string, en: string) => string) {
   if (stock === undefined) return null;
-  if (stock === 0) return 'Hết hàng';
-  if (stock <= 5) return `Còn ${stock}`;
-  return `${stock} còn lại`;
+  if (stock === 0) return tr('Hết hàng', 'Out of stock');
+  if (stock <= 5) return tr(`Còn ${stock}`, `${stock} left`);
+  return tr(`${stock} còn lại`, `${stock} left`);
 }
 
 export function ProductTokenPricing({
@@ -30,6 +31,7 @@ export function ProductTokenPricing({
   variant = 'card',
   stock,
 }: ProductTokenPricingProps) {
+  const tr = useDualText();
   const chipState = buildAcceptedTokenChipState(acceptedTokens, {
     selectedTokenId,
     // Card shows the first 3 tokens + a "+N" overflow badge so users can
@@ -39,7 +41,7 @@ export function ProductTokenPricing({
   });
   const interactive = typeof onSelect === 'function';
   const isDetail = variant === 'detail';
-  const stockLabel = renderStockLabel(stock);
+  const stockLabel = renderStockLabel(stock, tr);
   const ChipWrapper = interactive ? 'button' : 'div';
   const activeTextTone = isDetail ? 'text-foreground' : 'text-slate-950 dark:text-white';
   const inactiveTextTone = isDetail ? 'text-foreground/80' : 'text-slate-600 dark:text-white/72';
@@ -65,7 +67,7 @@ export function ProductTokenPricing({
   if (chipState.all.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-        Chưa cấu hình giá coin cho sản phẩm này
+        {tr('Chưa cấu hình giá coin cho sản phẩm này', 'No coin pricing configured for this product')}
       </div>
     );
   }
@@ -80,7 +82,7 @@ export function ProductTokenPricing({
             {...(interactive ? {
               type: 'button',
               onClick: () => onSelect?.(token),
-              'aria-label': `Chọn ${token.symbol} ${token.amountLabel}`,
+              'aria-label': tr(`Chọn ${token.symbol} ${token.amountLabel}`, `Choose ${token.symbol} ${token.amountLabel}`),
               'aria-pressed': token.isActive,
             } : {})}
             className={[

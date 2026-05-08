@@ -14,9 +14,11 @@ import { Button } from '@/components/ui/button';
 import { CoinImage } from '@/components/ui/CoinImage';
 import { formatTokenAmountOnly } from '@/lib/products/pricing';
 import { buildLoginRedirectUrl } from '@/lib/auth/login-redirect';
+import { useDualText } from '@/lib/hooks/useDualText';
 
 export default function CartPage() {
     const router = useRouter();
+    const tr = useDualText();
     const { items, removeItem, updateQuantity, getTotal, getTotalItems } = useCartStore();
     const { isAuthenticated, reauthRequired } = useAuth();
     const [mounted, setMounted] = useState(false);
@@ -44,9 +46,9 @@ export default function CartPage() {
                 <div className="mb-8">
                     <h1 className="text-3xl lg:text-4xl font-extrabold text-foreground flex items-center gap-3">
                         <ShoppingBag className="w-8 h-8 text-[#8247e5]" />
-                        Giỏ Hàng Của Bạn
+                        {tr('Giỏ Hàng Của Bạn', 'Your Cart')}
                         <span className="text-xl font-medium text-muted-foreground ml-2">
-                            ({totalItems} sản phẩm)
+                            ({totalItems} {tr('sản phẩm', 'items')})
                         </span>
                     </h1>
                 </div>
@@ -60,13 +62,13 @@ export default function CartPage() {
                         <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-6">
                             <ShoppingBag className="w-10 h-10 text-muted-foreground" />
                         </div>
-                        <h2 className="text-2xl font-bold text-foreground mb-3">Giỏ hàng của bạn đang trống</h2>
+                        <h2 className="text-2xl font-bold text-foreground mb-3">{tr('Giỏ hàng của bạn đang trống', 'Your cart is empty')}</h2>
                         <p className="text-muted-foreground mb-8 max-w-md">
-                            Có vẻ như bạn chưa thêm sản phẩm nào vào giỏ hàng. Hãy khám phá các sản phẩm Web3 hấp dẫn đang chờ bạn!
+                            {tr('Có vẻ như bạn chưa thêm sản phẩm nào vào giỏ hàng. Hãy khám phá các sản phẩm Web3 hấp dẫn đang chờ bạn!', "You haven't added any items yet. Explore our Web3 marketplace!")}
                         </p>
                         <Link href="/products">
                             <Button size="lg" className="h-12 px-8 rounded-xl text-base font-semibold btn-purple-rainbow shadow-lg shadow-purple-500/20">
-                                Khám Phá Cửa Hàng
+                                {tr('Khám Phá Cửa Hàng', 'Explore Store')}
                             </Button>
                         </Link>
                     </motion.div>
@@ -132,7 +134,7 @@ export default function CartPage() {
 
                                             {/* Subtotal */}
                                             <div className="text-sm font-bold text-foreground block sm:hidden">
-                                                Tổng: ${(item.base_price_usd * item.quantity).toLocaleString()}
+                                                {tr('Tổng:', 'Total:')} ${(item.base_price_usd * item.quantity).toLocaleString()}
                                             </div>
                                         </div>
 
@@ -150,7 +152,7 @@ export default function CartPage() {
                             {/* Security Badges */}
                             <div className="flex items-center gap-4 text-xs text-muted-foreground border-t border-border pt-6 mt-6">
                                 <div className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Web3 Escrow Protection</div>
-                                <div className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4 text-blue-500" /> Hỗ trợ hoàn tiền 100%</div>
+                                <div className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4 text-blue-500" /> {tr('Hỗ trợ hoàn tiền 100%', '100% refund support')}</div>
                             </div>
                         </div>
 
@@ -162,32 +164,32 @@ export default function CartPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-card border border-border rounded-3xl p-6 shadow-xl shadow-black/5"
                             >
-                                <h3 className="text-xl font-bold text-foreground mb-6">Tóm tắt đơn hàng</h3>
+                                <h3 className="text-xl font-bold text-foreground mb-6">{tr('Tóm tắt đơn hàng', 'Order summary')}</h3>
 
                                 <div className="space-y-4 mb-6">
                                     <div className="flex justify-between text-muted-foreground">
-                                        <span>Tổng phụ ({totalItems} món)</span>
+                                        <span>{tr('Tổng phụ', 'Subtotal')} ({totalItems} {tr('món', 'items')})</span>
                                         <span className="font-medium text-foreground">${total.toLocaleString()}</span>
                                     </div>
                                     <div className="flex justify-between text-muted-foreground">
-                                        <span>Phí nền tảng (Ước tính)</span>
+                                        <span>{tr('Phí nền tảng (Ước tính)', 'Platform fee (est.)')}</span>
                                         <span className="text-emerald-500 font-medium font-mono">2.5%</span>
                                     </div>
                                     <div className="flex justify-between text-muted-foreground">
-                                        <span>Phí vận chuyển</span>
-                                        <span className="font-medium text-foreground">Miễn phí</span>
+                                        <span>{tr('Phí vận chuyển', 'Shipping')}</span>
+                                        <span className="font-medium text-foreground">{tr('Miễn phí', 'Free')}</span>
                                     </div>
                                 </div>
 
                                 <div className="border-t border-border pt-4 mb-8">
                                     <div className="flex justify-between items-end">
-                                        <span className="text-foreground font-semibold">Thành tiền</span>
+                                        <span className="text-foreground font-semibold">{tr('Thành tiền', 'Total')}</span>
                                         <div className="text-right">
                                             <span className="text-3xl font-extrabold text-[#8247e5] block leading-none">
                                                 ${total.toLocaleString()}
                                             </span>
                                             <span className="text-xs text-muted-foreground block mt-1">
-                                                (Chưa bao gồm phí Gas)
+                                                {tr('(Chưa bao gồm phí Gas)', '(Gas fee not included)')}
                                             </span>
                                         </div>
                                     </div>
@@ -198,12 +200,12 @@ export default function CartPage() {
                                     size="lg"
                                     className="w-full h-14 rounded-xl text-lg font-bold btn-purple-rainbow shadow-xl shadow-purple-500/25 flex items-center justify-center gap-2 group"
                                 >
-                                    Thanh Toán Ngay
+                                    {tr('Thanh Toán Ngay', 'Checkout Now')}
                                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                                 </Button>
 
                                 <div className="mt-6 flex flex-wrap gap-2 justify-center">
-                                    <div className="px-3 py-1.5 bg-accent/20 border border-border rounded-md flex items-center gap-1 text-xs font-medium"><Zap className="w-3.5 h-3.5 text-yellow-500" /> Nhanh chóng</div>
+                                    <div className="px-3 py-1.5 bg-accent/20 border border-border rounded-md flex items-center gap-1 text-xs font-medium"><Zap className="w-3.5 h-3.5 text-yellow-500" /> {tr('Nhanh chóng', 'Fast')}</div>
                                     <div className="px-3 py-1.5 bg-accent/20 border border-border rounded-md flex items-center gap-1 text-xs font-medium"><CreditCard className="w-3.5 h-3.5" /> Crypto & Fiat</div>
                                 </div>
                             </motion.div>

@@ -60,8 +60,8 @@ describe('ProductCard', () => {
     expect(screen.getByText('Fashion')).toBeTruthy();
     expect(screen.queryByText(/4 tokens/i)).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /chọn usdt 49\.99/i }));
-    fireEvent.click(screen.getByRole('button', { name: /thêm vào giỏ hàng/i }));
+    await user.click(screen.getByRole('button', { name: /choose usdt 49\.99/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({

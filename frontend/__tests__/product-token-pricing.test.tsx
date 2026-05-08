@@ -38,18 +38,18 @@ describe('ProductTokenPricing', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: /chọn eth 0\.019996/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /choose eth 0\.019996/i })).toBeTruthy();
     expect(screen.getByText('ETH')).toBeTruthy();
     expect(screen.getByText('+1')).toBeTruthy();
     expect(screen.getByText('≈')).toBeTruthy();
     expect(screen.getAllByAltText(/^USDT$/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/\$/)).toBeNull();
-    expect(screen.getByText(/300 còn lại/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /chọn usdt 49\.99/i }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: /chọn eth 0\.019996/i }).getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: /chọn usdt 49\.99/i }).className).toContain('text-foreground');
+    expect(screen.getByText(/300 left/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /choose usdt 49\.99/i }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /choose eth 0\.019996/i }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: /choose usdt 49\.99/i }).className).toContain('text-foreground');
 
-    await user.click(screen.getByRole('button', { name: /chọn usdt 49\.99/i }));
+    await user.click(screen.getByRole('button', { name: /choose usdt 49\.99/i }));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ token_id: 2 }));
   });
 
@@ -90,9 +90,9 @@ describe('ProductTokenPricing', () => {
     expect(screen.getByText('47.99')).toBeTruthy();
     expect(screen.queryByText('Live 30s')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /chọn usdt 49\.99/i }));
+    await user.click(screen.getByRole('button', { name: /choose usdt 49\.99/i }));
 
-    expect(screen.getByRole('button', { name: /chọn usdt 49\.99/i }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /choose usdt 49\.99/i }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getAllByText('49.99').length).toBeGreaterThan(0);
     expect(screen.queryByText('Live 30s')).toBeNull();
   });

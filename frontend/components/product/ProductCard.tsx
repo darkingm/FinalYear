@@ -10,6 +10,7 @@ import { useCartStore } from '@/store/cart-store';
 import { ProductTokenPricing } from '@/components/product/ProductTokenPricing';
 import { getPrimaryProductImage, normalizeProductImages } from '@/lib/products/images';
 import type { ProductAcceptedTokenView, ProductGalleryImage } from '@/lib/products/types';
+import { useDualText } from '@/lib/hooks/useDualText';
 
 const FALLBACK = '/placeholder-product.svg';
 
@@ -48,6 +49,7 @@ export const ProductCard = memo(function ProductCard({
   variant = 'grid',
   showAddToCart = true,
 }: ProductCardProps) {
+  const tr = useDualText();
   const [imgFailed, setImgFailed] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
 
@@ -61,7 +63,7 @@ export const ProductCard = memo(function ProductCard({
     : getPrimaryProductImage(product.images as ProductGalleryImage[] | string[] | null | undefined, product.primary_image ?? null);
 
   const sellerAvatar = product.seller_user_avatar ?? product.seller_avatar ?? null;
-  const sellerLabel = product.seller_name || 'Người bán';
+  const sellerLabel = product.seller_name || tr('Người bán', 'Seller');
   const sellerHref = product.seller_slug ? `/seller/${product.seller_slug}` : null;
   const rating = Number(product.rating_avg ?? product.seller_rating ?? 0);
   const basePriceUsd = Number(product.base_price_usd || 0);
@@ -87,7 +89,7 @@ export const ProductCard = memo(function ProductCard({
       metadata: { images: normalizedImages.map((image) => image.url) },
       accepted_tokens: acceptedTokens,
     });
-    toast.success('Đã thêm vào giỏ hàng');
+    toast.success(tr('Đã thêm vào giỏ hàng', 'Added to cart'));
   };
 
   const handleBuyNow = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -127,7 +129,7 @@ export const ProductCard = memo(function ProductCard({
             />
             {product.stock === 0 ? (
               <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">Hết hàng</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">{tr('Hết hàng', 'Out of stock')}</span>
               </div>
             ) : null}
           </Link>
@@ -136,7 +138,7 @@ export const ProductCard = memo(function ProductCard({
             {/* Seller + Rating */}
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               {sellerHref ? (
-                <Link href={sellerHref} className="flex min-w-0 items-center gap-1.5 transition-colors hover:text-primary" aria-label={`Xem cửa hàng ${sellerLabel}`}>
+                <Link href={sellerHref} className="flex min-w-0 items-center gap-1.5 transition-colors hover:text-primary" aria-label={tr(`Xem cửa hàng ${sellerLabel}`, `View shop ${sellerLabel}`)}>
                   {sellerAvatar ? (
                     <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
                   ) : (
@@ -240,7 +242,7 @@ export const ProductCard = memo(function ProductCard({
           {product.stock === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
               <span className="rounded-full border border-red-500/20 bg-red-500/15 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-400">
-                Hết hàng
+                {tr('Hết hàng', 'Out of stock')}
               </span>
             </div>
           ) : null}
@@ -251,7 +253,7 @@ export const ProductCard = memo(function ProductCard({
               <button
                 onClick={handleAddToCart}
                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-black/50 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 hover:text-white"
-                aria-label="Thêm nhanh vào giỏ"
+                aria-label={tr('Thêm nhanh vào giỏ', 'Quick add to cart')}
               >
                 <ShoppingCart className="h-4 w-4" />
               </button>
@@ -264,7 +266,7 @@ export const ProductCard = memo(function ProductCard({
           {/* Seller row */}
           <div className="mb-2 flex items-center gap-1.5 text-[11px]">
             {sellerHref ? (
-              <Link href={sellerHref} className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary" aria-label={`Xem cửa hàng ${sellerLabel}`}>
+              <Link href={sellerHref} className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary" aria-label={tr(`Xem cửa hàng ${sellerLabel}`, `View shop ${sellerLabel}`)}>
                 {sellerAvatar ? (
                   <img src={sellerAvatar} className="h-4 w-4 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10" alt="" />
                 ) : (
@@ -322,7 +324,7 @@ export const ProductCard = memo(function ProductCard({
                   type="button"
                   onClick={handleAddToCart}
                   disabled={product.stock === 0}
-                  aria-label="Thêm vào giỏ hàng"
+                  aria-label={tr('Thêm vào giỏ hàng', 'Add to cart')}
                   className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
@@ -334,7 +336,7 @@ export const ProductCard = memo(function ProductCard({
                   className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#f0b90b] to-[#e6a800] text-[12px] font-extrabold text-black shadow-lg shadow-yellow-500/15 transition-all hover:shadow-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Zap className="h-3.5 w-3.5" />
-                  Mua ngay
+                  {tr('Mua ngay', 'Buy now')}
                 </button>
               </div>
             ) : null}
