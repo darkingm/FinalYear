@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "kill-port 3000 && next dev --webpack",
-    "dev:turbo": "kill-port 3000 && next dev",
-    "build": "next build --webpack",
+    "dev": "kill-port 3000 && next dev --turbopack",
+    "dev:webpack": "kill-port 3000 && next dev --webpack",
+    "build": "next build --turbopack",
+    "build:webpack": "next build --webpack",
     "start": "next start",
     "start:local": "npm run build && kill-port 3000 && next start",
     "reindex": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\grapuco-reindex.ps1",

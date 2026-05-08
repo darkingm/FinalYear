@@ -98,6 +98,12 @@ const nextConfig = {
     ];
   },
 
+  // ─── Turbopack is the default in Next 16 (`next dev/build --turbopack`). ──
+  // The webpack() function below is only consumed when running with the
+  // `--webpack` flag (e.g. `npm run build:webpack`). Turbopack handles the
+  // pino-pretty / lokijs / @react-native-async-storage fallbacks and the
+  // wagmi/viem/paypal chunk splitting automatically — no equivalent config
+  // is needed on the Turbopack side.
   webpack: (config, { isServer }) => {
     config.externals.push('pino-pretty', 'lokijs', 'encoding');
 
