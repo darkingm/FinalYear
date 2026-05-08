@@ -90,7 +90,7 @@ export function EscrowExpiryActions({
         await apiClient.post(`/api/orders/${orderId}/sync-from-chain`);
         if (cancelled) return;
         toast.success('Đã lấy lại tiền và đồng bộ trạng thái đơn hàng.');
-        escrow.refetch();
+        await escrow.refetch();
         onRefunded?.();
       } catch (e: any) {
         if (cancelled) return;

@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 /**
  * Detect requests from local/internal network.
@@ -45,7 +45,7 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req: any) => ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'unknown'),
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes',
@@ -73,7 +73,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req: any) => ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'unknown'),
   message: {
     success: false,
     message: 'Too many login attempts. Please try again in 5 minutes',
@@ -92,7 +92,7 @@ export const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipInternalNetwork,
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req: any) => ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'unknown'),
   message: {
     success: false,
     message: 'Too many requests for this action, please try again in 15 minutes',

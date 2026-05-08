@@ -952,10 +952,10 @@ export default function OrderDetailPage() {
                     onClick={handleOnChainConfirm}
                     disabled={confirmPending || confirmWaiting}
                   >
-                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />Waiting MetaMask...</> :
-                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />Confirming on-chain...</> :
-                        confirmError || writeError ? <><AlertTriangle className="w-4 h-4" />Transaction failed — Retry</> :
-                          <><Check className="w-5 h-5" />Confirm Delivery — Pay Seller</>}
+                    {confirmPending ? <><Loader2 className="w-4 h-4 animate-spin" />Đang chờ MetaMask...</> :
+                      confirmWaiting ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xác nhận on-chain...</> :
+                        confirmError || writeError ? <><AlertTriangle className="w-4 h-4" />Giao dịch thất bại — Thử lại</> :
+                          <><Check className="w-5 h-5" />Xác nhận đã nhận hàng — Trả tiền seller</>}
                   </button>
                   {/* Error detail */}
                   {(confirmError || writeError) && (

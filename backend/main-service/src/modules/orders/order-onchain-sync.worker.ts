@@ -45,11 +45,18 @@ export async function runEscrowChainSyncTick(options?: {
     /** Force-sync a specific order regardless of throttle. */
     onlyOrderId?: number;
 }): Promise<TickStats> {
+    // `Number(undefined)` returns NaN (not null/undefined), so the `??`
+    // chain does NOT fall through to the default — batchLimit ends up NaN
+    // and Postgres explodes with "invalid input syntax for type bigint".
+    // Resolve env vars through Number.isFinite() so NaN is treated as
+    // "use the default".
+    const envBatch = Number(process.env.ESCROW_SYNC_BATCH_LIMIT);
+    const envThrottle = Number(process.env.ESCROW_SYNC_THROTTLE_SECONDS);
     const batchLimit = Math.max(1, Math.min(200,
-        options?.batchLimit ?? Number(process.env.ESCROW_SYNC_BATCH_LIMIT) ?? DEFAULT_BATCH_LIMIT
+        options?.batchLimit ?? (Number.isFinite(envBatch) ? envBatch : DEFAULT_BATCH_LIMIT)
     ));
     const throttleSeconds = Math.max(0,
-        options?.throttleSeconds ?? Number(process.env.ESCROW_SYNC_THROTTLE_SECONDS) ?? DEFAULT_THROTTLE_SECONDS
+        options?.throttleSeconds ?? (Number.isFinite(envThrottle) ? envThrottle : DEFAULT_THROTTLE_SECONDS)
     );
 
     const stats: TickStats = { scanned: 0, updated: 0, errors: 0, skipped: 0 };
