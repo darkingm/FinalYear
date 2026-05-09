@@ -4,14 +4,15 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Search, Star, TrendingUp, Sparkles, ArrowUpRight, ArrowDownRight,
     ChevronRight, Loader2, X, Clock, Trash2, Droplets, BarChart3,
-    Zap, ChevronDown,
+    Zap, ChevronDown, MessageSquare,
 } from 'lucide-react';
 import { fetchTrendingPairs, searchTokenPairs } from '@/lib/whale-api';
 import { useWhaleTrackerStore, CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { TokenPair, SupportedChain } from '@/store/whale-tracker-store';
 import { getTokenLogoUrl } from '@/lib/pair-tx-fetcher';
+import { ForumPanel } from './ForumPanel';
 
-type SidebarTab = 'search' | 'watchlist' | 'trending' | 'new' | 'gainers';
+type SidebarTab = 'search' | 'watchlist' | 'trending' | 'forum';
 
 function formatK(n: number) {
     if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
@@ -243,21 +244,11 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
         return () => clearTimeout(timer);
     }, [query]);
 
-    const newPairs = trendingPairs.filter(p => {
-        if (!p.pairCreatedAt) return false;
-        const age = Date.now() - new Date(p.pairCreatedAt).getTime();
-        return age < 7 * 86400000; // < 7 days
-    });
-
-    const gainers = [...trendingPairs].sort((a, b) => b.priceChange24h - a.priceChange24h).slice(0, 15);
-    const losers = [...trendingPairs].sort((a, b) => a.priceChange24h - b.priceChange24h).slice(0, 15);
-
     const TABS: { key: SidebarTab; icon: React.ReactNode; label: string }[] = [
         { key: 'search', icon: <Search className="w-3.5 h-3.5" />, label: 'Search' },
         { key: 'watchlist', icon: <Star className="w-3.5 h-3.5" />, label: 'Watchlist' },
         { key: 'trending', icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trending' },
-        { key: 'new', icon: <Sparkles className="w-3.5 h-3.5" />, label: 'New' },
-        { key: 'gainers', icon: <ArrowUpRight className="w-3.5 h-3.5" />, label: 'Top' },
+        { key: 'forum', icon: <MessageSquare className="w-3.5 h-3.5" />, label: 'Forum' },
     ];
 
     return (
@@ -281,6 +272,11 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                 ))}
             </div>
 
+            {/* Forum takes over everything below the tab bar when selected */}
+            {tab === 'forum' && (
+                <ForumPanel tokenPair={selectedPairAddress ?? null} />
+            )}
+
             {/* Search input (always visible for search tab) */}
             {tab === 'search' && (
                 <div className="px-2.5 py-2 flex-shrink-0">
@@ -295,8 +291,8 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                 </div>
             )}
 
-            {/* Content area */}
-            <div className="flex-1 overflow-y-auto min-h-0 px-1.5 pb-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#ffffff15 transparent' }}>
+            {/* Content area — hidden when forum tab is active (forum has its own layout) */}
+            <div className={`flex-1 overflow-y-auto min-h-0 px-1.5 pb-2 ${tab === 'forum' ? 'hidden' : ''}`} style={{ scrollbarWidth: 'thin', scrollbarColor: '#ffffff15 transparent' }}>
                 {/* SEARCH TAB */}
                 {tab === 'search' && (
                     <>
@@ -387,42 +383,6 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
                     </div>
                 )}
 
-                {/* NEW PAIRS TAB */}
-                {tab === 'new' && (
-                    <div className="space-y-0.5">
-                        <p className="text-[9px] text-white/20 px-2 py-1 flex items-center gap-1">
-                            <Sparkles className="w-2.5 h-2.5" /> Pairs &lt; 7 days old
-                        </p>
-                        {newPairs.length > 0 ? newPairs.map(p => (
-                            <MiniPairRow key={p.pairAddress} pair={p}
-                                onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} showWatchlist />
-                        )) : (
-                            <div className="text-center py-8 text-[10px] text-white/20">Không có pair mới trong trending</div>
-                        )}
-                    </div>
-                )}
-
-                {/* GAINERS/LOSERS TAB */}
-                {tab === 'gainers' && (
-                    <div className="space-y-2">
-                        <div>
-                            <p className="text-[9px] text-emerald-400/60 px-2 py-1 font-bold flex items-center gap-1">
-                                <ArrowUpRight className="w-2.5 h-2.5" /> Top Gainers 24h
-                            </p>
-                            {gainers.slice(0, 8).map(p => (
-                                <MiniPairRow key={p.pairAddress} pair={p} onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} />
-                            ))}
-                        </div>
-                        <div className="border-t border-white/[0.06] pt-1">
-                            <p className="text-[9px] text-red-400/60 px-2 py-1 font-bold flex items-center gap-1">
-                                <ArrowDownRight className="w-2.5 h-2.5" /> Top Losers 24h
-                            </p>
-                            {losers.slice(0, 8).map(p => (
-                                <MiniPairRow key={p.pairAddress} pair={p} onClick={() => handleSelectPair(p)} isSelected={selectedPairAddress === p.pairAddress} />
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );

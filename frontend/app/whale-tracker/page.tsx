@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Activity, Menu, Info } from 'lucide-react';
 import { CHAIN_LABELS } from '@/store/whale-tracker-store';
 import type { SupportedChain, TokenPair } from '@/store/whale-tracker-store';
@@ -9,6 +9,11 @@ import { DexRightSidebar } from '@/components/whale-tracker/DexRightSidebar';
 import { DexChart } from '@/components/whale-tracker/DexChart';
 import { LiveTxFeed } from '@/components/whale-tracker/LiveTxFeed';
 import { Header } from '@/components/layout/Header';
+
+const LEFT_SIDEBAR_WIDTH_KEY = 'wt_left_sidebar_width';
+const LEFT_SIDEBAR_MIN = 220;
+const LEFT_SIDEBAR_MAX = 560;
+const LEFT_SIDEBAR_DEFAULT = 256;
 
 export default function WhaleTrackerPage() {
     const [selectedPair, setSelectedPair] = useState<{
@@ -24,6 +29,40 @@ export default function WhaleTrackerPage() {
     // Mobile sidebar states
     const [leftOpen, setLeftOpen] = useState(false);
     const [rightOpen, setRightOpen] = useState(false);
+
+    // Resizable left sidebar (desktop only). Width is persisted in
+    // localStorage so the user's choice survives reloads.
+    const [leftWidth, setLeftWidth] = useState<number>(LEFT_SIDEBAR_DEFAULT);
+    const draggingRef = useRef(false);
+    useEffect(() => {
+        try {
+            const saved = parseInt(localStorage.getItem(LEFT_SIDEBAR_WIDTH_KEY) || '', 10);
+            if (Number.isFinite(saved) && saved >= LEFT_SIDEBAR_MIN && saved <= LEFT_SIDEBAR_MAX) {
+                setLeftWidth(saved);
+            }
+        } catch { /* ignore */ }
+    }, []);
+    const onMouseDown = (e: React.MouseEvent) => {
+        draggingRef.current = true;
+        e.preventDefault();
+        const onMove = (ev: MouseEvent) => {
+            if (!draggingRef.current) return;
+            const next = Math.max(LEFT_SIDEBAR_MIN, Math.min(LEFT_SIDEBAR_MAX, ev.clientX));
+            setLeftWidth(next);
+        };
+        const onUp = () => {
+            draggingRef.current = false;
+            try { localStorage.setItem(LEFT_SIDEBAR_WIDTH_KEY, String(leftWidth)); } catch { /* ignore */ }
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
+    // Persist whenever width changes (covers final mouseup writes too)
+    useEffect(() => {
+        try { localStorage.setItem(LEFT_SIDEBAR_WIDTH_KEY, String(leftWidth)); } catch { /* ignore */ }
+    }, [leftWidth]);
 
     const handleSelectPair = (pair: TokenPair) => {
         setSelectedPair({
@@ -66,16 +105,22 @@ export default function WhaleTrackerPage() {
                 {/* ── Main 3-Column Layout ── */}
                 <div className="flex-1 flex overflow-hidden">
 
-                    {/* LEFT SIDEBAR — Desktop: always visible, Mobile: overlay */}
-                    <div className={`
-                        w-60 xl:w-64 flex-shrink-0 
-                        hidden lg:flex lg:flex-col
-                    `}>
+                    {/* LEFT SIDEBAR — Desktop: resizable, Mobile: overlay */}
+                    <div
+                        className="hidden lg:flex lg:flex-col flex-shrink-0"
+                        style={{ width: `${leftWidth}px` }}
+                    >
                         <DexLeftSidebar
                             onSelectPair={handleSelectPair}
                             selectedPairAddress={selectedPair?.pairAddress}
                         />
                     </div>
+                    {/* Drag handle for resizing the left sidebar */}
+                    <div
+                        onMouseDown={onMouseDown}
+                        className="hidden lg:block w-1 cursor-col-resize bg-white/[0.04] hover:bg-violet-500/40 active:bg-violet-500/60 transition-colors flex-shrink-0"
+                        title="Kéo để thay đổi kích thước"
+                    />
 
                     {/* Mobile Left Sidebar Overlay */}
                     {leftOpen && (
@@ -96,8 +141,9 @@ export default function WhaleTrackerPage() {
                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                         {selectedPair ? (
                             <>
-                                {/* Chart area */}
-                                <div className="h-[300px] lg:h-[380px] xl:h-[420px] flex-shrink-0 border-b border-white/[0.06]">
+                                {/* Chart area — smaller default so the TX feed gets more space.
+                                    Iframe still supports zoom/timeframe controls inside. */}
+                                <div className="h-[220px] lg:h-[280px] xl:h-[320px] flex-shrink-0 border-b border-white/[0.06]">
                                     <DexChart
                                         chainId={selectedPair.chainId}
                                         pairAddress={selectedPair.pairAddress}

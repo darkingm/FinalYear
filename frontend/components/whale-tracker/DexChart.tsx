@@ -21,7 +21,10 @@ export function DexChart({ chainId, pairAddress, tokenSymbol }: Props) {
 
     const embedUrl = useMemo(() => {
         if (!pairAddress) return '';
-        return `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&theme=dark&trades=0&info=0`;
+        // interval=1d gives a wide candle window (~14+ months at default zoom),
+        // so individual candles are easier to read. The user can still freely
+        // zoom in/out and switch to 5m/1h/etc. inside the iframe.
+        return `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&theme=dark&trades=0&info=0&interval=1d`;
     }, [chainId, pairAddress]);
 
     if (!isMounted || !embedUrl) {

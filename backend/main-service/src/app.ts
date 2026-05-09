@@ -22,6 +22,7 @@ import onchainRoutes from './modules/onchain/onchain.routes';
 import rwaProxyRoutes from './modules/rwa/rwa-proxy.routes';
 import kycRoutes from './modules/kyc/kyc.routes';
 import { couponsRouter } from './modules/coupons/coupons.routes';
+import { forumRouter } from './modules/forum/forum.routes';
 
 
 const app = express();
@@ -162,6 +163,7 @@ app.use('/api/onchain', onchainRoutes);
 app.use('/api/rwa', rwaProxyRoutes);
 app.use('/api/kyc', kycRoutes);
 app.use('/api/coupons', couponsRouter);
+app.use('/api/forum', forumRouter);
 
 
 app.use((_req, res) => {
