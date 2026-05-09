@@ -206,9 +206,16 @@ interface Props {
     selectedPairAddress?: string;
     isOpen?: boolean;
     onClose?: () => void;
+    /**
+     * Forward to ForumPanel — when a hashtag like $BTC is clicked inside
+     * a post or comment, the parent page is responsible for resolving
+     * the symbol to a real pair (search → top-liquidity result) and
+     * switching to it.
+     */
+    onSymbolClick?: (symbol: string) => void;
 }
 
-export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = true, onClose }: Props) {
+export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = true, onClose, onSymbolClick }: Props) {
     const [tab, setTab] = useState<SidebarTab>('search');
     const [query, setQuery] = useState('');
     const [searchResults, setSearchResults] = useState<TokenPair[]>([]);
@@ -274,7 +281,10 @@ export function DexLeftSidebar({ onSelectPair, selectedPairAddress, isOpen = tru
 
             {/* Forum takes over everything below the tab bar when selected */}
             {tab === 'forum' && (
-                <ForumPanel tokenPair={selectedPairAddress ?? null} />
+                <ForumPanel
+                    tokenPair={selectedPairAddress ?? null}
+                    onSymbolClick={onSymbolClick}
+                />
             )}
 
             {/* Search input (always visible for search tab) */}

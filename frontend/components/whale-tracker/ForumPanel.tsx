@@ -11,13 +11,14 @@
  * in the parent flips the `tokenPair` prop and re-fetches.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
-  ArrowLeft, MessageSquare, Plus, Send, Trash2, Loader2, RefreshCw, X,
+  ArrowLeft, MessageSquare, Plus, Send, Trash2, Loader2, RefreshCw, X, Hash,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { toast } from 'sonner';
+import { parseHashtags, extractHashtagSymbols } from '@/lib/forum/hashtags';
 
 interface ForumPostSummary {
   post_id: number;
@@ -48,6 +49,49 @@ interface Props {
   tokenPair?: string | null;
   /** Display label for the token (used in the empty-state CTA). */
   tokenLabel?: string;
+  /**
+   * Called when the user clicks a $SYMBOL hashtag in a post or comment.
+   * The page handler is responsible for searching the symbol → top pair
+   * → setting it as the active pair (which will load chart + token info).
+   */
+  onSymbolClick?: (symbol: string) => void;
+}
+
+/**
+ * Renders text with `$BTC` / `#ETH` style hashtags as inline clickable
+ * pills. Body / comment text uses this so authors can drop a token
+ * mention and readers can jump to its chart with one click.
+ */
+function HashtagText({
+  body,
+  onSymbolClick,
+  className = '',
+}: {
+  body: string;
+  onSymbolClick?: (symbol: string) => void;
+  className?: string;
+}) {
+  const segments = useMemo(() => parseHashtags(body), [body]);
+  return (
+    <span className={className} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {segments.map((seg, i) =>
+        seg.type === 'tag' ? (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onSymbolClick?.(seg.symbol!); }}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded bg-violet-500/15 hover:bg-violet-500/30 text-violet-300 hover:text-violet-200 text-[11px] font-bold align-baseline transition-colors"
+            title={`Xem chart ${seg.symbol}`}
+          >
+            <Hash className="w-2.5 h-2.5" />
+            {seg.symbol}
+          </button>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        ),
+      )}
+    </span>
+  );
 }
 
 const formatRelative = (iso: string) => {
@@ -68,7 +112,7 @@ const Avatar = ({ src, name }: { src: string | null; name: string }) =>
     </div>
   );
 
-export function ForumPanel({ tokenPair, tokenLabel }: Props) {
+export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
   const { isAuthenticated, user } = useAuth();
   const myUserId = (user as any)?.id ? parseInt((user as any).id) : null;
 
@@ -173,8 +217,14 @@ export function ForumPanel({ tokenPair, tokenLabel }: Props) {
                 </button>
               )}
             </div>
-            <h3 className="text-sm font-black text-white">{activePost.title}</h3>
-            <p className="text-xs text-white/70 whitespace-pre-wrap leading-relaxed">{activePost.body}</p>
+            <h3 className="text-sm font-black text-white">
+              <HashtagText body={activePost.title} onSymbolClick={onSymbolClick} />
+            </h3>
+            <HashtagText
+              body={activePost.body}
+              onSymbolClick={onSymbolClick}
+              className="text-xs text-white/70 leading-relaxed block"
+            />
           </div>
 
           <div className="border-t border-white/[0.06] pt-3">
@@ -197,7 +247,11 @@ export function ForumPanel({ tokenPair, tokenLabel }: Props) {
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-white/80 whitespace-pre-wrap break-words">{c.body}</p>
+                    <HashtagText
+                      body={c.body}
+                      onSymbolClick={onSymbolClick}
+                      className="text-xs text-white/80 block"
+                    />
                   </div>
                 </div>
               ))}
@@ -270,6 +324,27 @@ export function ForumPanel({ tokenPair, tokenLabel }: Props) {
                 </div>
                 <p className="text-xs font-semibold text-white/90 line-clamp-2 mb-1">{p.title}</p>
                 <p className="text-[10px] text-white/40 line-clamp-2 leading-relaxed">{p.body}</p>
+                {/* Hashtag preview chips on the list card. Tag text is stable
+                    (uppercase symbols only) so the row layout doesn't jiggle
+                    as posts come and go. */}
+                {(() => {
+                  const tags = extractHashtagSymbols(`${p.title}\n${p.body}`).slice(0, 4);
+                  if (tags.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {tags.map((sym) => (
+                        <button
+                          key={sym}
+                          onClick={(e) => { e.stopPropagation(); onSymbolClick?.(sym); }}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-500/10 hover:bg-violet-500/25 text-violet-300/80 hover:text-violet-200 text-[9px] font-bold transition-colors"
+                          title={`Xem chart ${sym}`}
+                        >
+                          <Hash className="w-2 h-2" />{sym}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className="text-[9px] text-white/30 flex items-center gap-0.5">
                     <MessageSquare className="w-2.5 h-2.5" /> {p.comment_count}
@@ -329,6 +404,11 @@ function CreatePostForm({
     }
   };
 
+  const detectedTags = useMemo(
+    () => extractHashtagSymbols(`${title}\n${body}`),
+    [title, body],
+  );
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.06] flex-shrink-0">
@@ -346,13 +426,31 @@ function CreatePostForm({
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Bạn muốn chia sẻ điều gì?"
+          placeholder="Bạn muốn chia sẻ điều gì? Mention token bằng $BTC, $ETH..."
           rows={8}
           maxLength={8000}
           className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 resize-none"
         />
+        {/* Hashtag tip + live preview of detected symbols */}
+        <div className="flex items-start gap-1.5 text-[10px] text-white/40">
+          <Hash className="w-3 h-3 mt-0.5 flex-shrink-0 text-violet-400" />
+          <p className="leading-snug">
+            Gõ <code className="text-violet-300">$BTC</code> hoặc <code className="text-violet-300">#ETH</code> để gắn token vào bài.
+            Người đọc bấm vào hashtag sẽ thấy chart + thông tin token.
+          </p>
+        </div>
+        {detectedTags.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            <span className="text-[10px] text-white/40">Đã phát hiện:</span>
+            {detectedTags.map((sym) => (
+              <span key={sym} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 text-[10px] font-bold">
+                <Hash className="w-2 h-2" />{sym}
+              </span>
+            ))}
+          </div>
+        )}
         {tokenPair && (
-          <p className="text-[10px] text-violet-400/70">
+          <p className="text-[10px] text-violet-400/70 pt-1">
             Bài viết sẽ được gắn tag với cặp token {tokenPair.slice(0, 8)}…{tokenPair.slice(-6)}
           </p>
         )}
