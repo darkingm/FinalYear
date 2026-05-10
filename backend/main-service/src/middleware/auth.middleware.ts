@@ -67,6 +67,25 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   }
 }
 
+/**
+ * Best-effort token decoder for endpoints that work for anonymous users
+ * but want to know who's logged in (e.g. forum list returning per-row
+ * `liked_by_me`). Never errors: missing / invalid / revoked tokens just
+ * leave `req.user` undefined.
+ */
+export async function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    req.user = { user_id: decoded.user_id, email: decoded.email, role: decoded.role };
+  } catch {
+    // bad token → treat as anonymous; don't error.
+  }
+  next();
+}
+
 /** Role-based authorization middleware factory */
 export function authorize(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {

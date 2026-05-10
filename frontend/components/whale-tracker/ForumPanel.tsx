@@ -13,7 +13,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  ArrowLeft, MessageSquare, Plus, Send, Trash2, Loader2, RefreshCw, X, Hash, Coins,
+  ArrowLeft, MessageSquare, Plus, Send, Trash2, Loader2, RefreshCw, X, Hash, Coins, Heart, Pencil, Check,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -27,6 +27,8 @@ interface ForumPostSummary {
   body: string;
   token_pair: string | null;
   comment_count: number;
+  like_count: number;
+  liked_by_me: boolean;
   created_at: string;
   updated_at: string;
   author_id: number;
@@ -38,12 +40,21 @@ interface ForumComment {
   comment_id: number;
   parent_comment_id: number | null;
   body: string;
+  like_count: number;
+  liked_by_me: boolean;
   created_at: string;
   updated_at: string;
   author_id: number;
   author_name: string;
   author_avatar: string | null;
 }
+
+type SortMode = 'newest' | 'popular' | 'comments';
+const SORT_LABELS: Record<SortMode, string> = {
+  newest: 'Mới',
+  popular: 'Phổ biến',
+  comments: 'Bàn nhiều',
+};
 
 interface Props {
   /** Optional filter: only show posts tagged with this token pair address. */
@@ -123,12 +134,16 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
   const [comments, setComments] = useState<ForumComment[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [sort, setSort] = useState<SortMode>('newest');
+  const [editingPost, setEditingPost] = useState<{ title: string; body: string } | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentBody, setEditingCommentBody] = useState('');
 
   // ── List ──────────────────────────────────────────────────────────────
   const loadList = async () => {
     setRefreshing(true);
     try {
-      const params = new URLSearchParams({ limit: '30' });
+      const params = new URLSearchParams({ limit: '30', sort });
       if (tokenPair) params.set('token_pair', tokenPair);
       const res = await apiClient.get(`/api/forum/posts?${params}`);
       if (res.data?.success) setPosts(res.data.posts);
@@ -139,7 +154,94 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
     }
   };
 
-  useEffect(() => { if (view === 'list') loadList(); }, [view, tokenPair]); // eslint-disable-line
+  useEffect(() => { if (view === 'list') loadList(); }, [view, tokenPair, sort]); // eslint-disable-line
+
+  // ── Like (post / comment) ─────────────────────────────────────────────
+  const togglePostLike = async (postId: number) => {
+    if (!isAuthenticated) { toast.error('Đăng nhập để thả tim'); return; }
+    // Optimistic flip
+    const flip = (p: ForumPostSummary) => p.post_id === postId
+      ? { ...p, liked_by_me: !p.liked_by_me, like_count: p.like_count + (p.liked_by_me ? -1 : 1) }
+      : p;
+    setPosts(ps => ps.map(flip));
+    if (activePost && activePost.post_id === postId) setActivePost(flip(activePost));
+    try {
+      const res = await apiClient.post(`/api/forum/posts/${postId}/like`);
+      if (res.data?.success) {
+        // Reconcile against server truth (covers double-clicks)
+        const reconcile = (p: ForumPostSummary) => p.post_id === postId
+          ? { ...p, liked_by_me: res.data.liked_by_me, like_count: res.data.like_count }
+          : p;
+        setPosts(ps => ps.map(reconcile));
+        if (activePost && activePost.post_id === postId) setActivePost(reconcile(activePost));
+      }
+    } catch (e: any) {
+      // Revert
+      setPosts(ps => ps.map(flip));
+      if (activePost && activePost.post_id === postId) setActivePost(flip(activePost));
+      toast.error(e.response?.data?.message || 'Thao tác thất bại');
+    }
+  };
+
+  const toggleCommentLike = async (commentId: number) => {
+    if (!isAuthenticated) { toast.error('Đăng nhập để thả tim'); return; }
+    const flip = (c: ForumComment) => c.comment_id === commentId
+      ? { ...c, liked_by_me: !c.liked_by_me, like_count: c.like_count + (c.liked_by_me ? -1 : 1) }
+      : c;
+    setComments(cs => cs.map(flip));
+    try {
+      const res = await apiClient.post(`/api/forum/comments/${commentId}/like`);
+      if (res.data?.success) {
+        setComments(cs => cs.map(c => c.comment_id === commentId
+          ? { ...c, liked_by_me: res.data.liked_by_me, like_count: res.data.like_count } : c));
+      }
+    } catch (e: any) {
+      setComments(cs => cs.map(flip));
+      toast.error(e.response?.data?.message || 'Thao tác thất bại');
+    }
+  };
+
+  // ── Edit post / comment ───────────────────────────────────────────────
+  const saveEditedPost = async () => {
+    if (!activePost || !editingPost) return;
+    if (editingPost.title.trim().length < 3) { toast.error('Tiêu đề tối thiểu 3 ký tự'); return; }
+    if (!editingPost.body.trim()) { toast.error('Nội dung không được trống'); return; }
+    try {
+      const res = await apiClient.patch(`/api/forum/posts/${activePost.post_id}`, {
+        title: editingPost.title.trim(),
+        body: editingPost.body.trim(),
+      });
+      if (res.data?.success) {
+        const merged = { ...activePost, ...res.data.post };
+        setActivePost(merged);
+        setPosts(ps => ps.map(p => p.post_id === activePost.post_id ? { ...p, ...res.data.post } : p));
+        setEditingPost(null);
+        toast.success('Đã cập nhật');
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Cập nhật thất bại');
+    }
+  };
+
+  const saveEditedComment = async () => {
+    if (editingCommentId === null) return;
+    if (!editingCommentBody.trim()) { toast.error('Nội dung không được trống'); return; }
+    try {
+      const res = await apiClient.patch(`/api/forum/comments/${editingCommentId}`, {
+        body: editingCommentBody.trim(),
+      });
+      if (res.data?.success) {
+        setComments(cs => cs.map(c => c.comment_id === editingCommentId
+          ? { ...c, body: res.data.comment.body, updated_at: res.data.comment.updated_at }
+          : c));
+        setEditingCommentId(null);
+        setEditingCommentBody('');
+        toast.success('Đã cập nhật');
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Cập nhật thất bại');
+    }
+  };
 
   // ── Detail ────────────────────────────────────────────────────────────
   const openPost = async (post: ForumPostSummary) => {
@@ -210,22 +312,80 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
               <Avatar src={activePost.author_avatar} name={activePost.author_name} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold text-white truncate">{activePost.author_name}</p>
-                <p className="text-[9px] text-white/30">{formatRelative(activePost.created_at)}</p>
+                <p className="text-[9px] text-white/30 flex items-center gap-1">
+                  {formatRelative(activePost.created_at)}
+                  {activePost.updated_at !== activePost.created_at && (
+                    <span className="italic text-white/20">· đã sửa</span>
+                  )}
+                </p>
               </div>
-              {myUserId === activePost.author_id && (
-                <button onClick={() => deletePost(activePost.post_id)} className="p-1 text-red-400/60 hover:text-red-400" title="Xoá">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+              {myUserId === activePost.author_id && !editingPost && (
+                <>
+                  <button
+                    onClick={() => setEditingPost({ title: activePost.title, body: activePost.body })}
+                    className="p-1 text-white/40 hover:text-violet-400"
+                    title="Sửa"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => deletePost(activePost.post_id)} className="p-1 text-red-400/60 hover:text-red-400" title="Xoá">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
               )}
             </div>
-            <h3 className="text-sm font-black text-white">
-              <HashtagText body={activePost.title} onSymbolClick={onSymbolClick} />
-            </h3>
-            <HashtagText
-              body={activePost.body}
-              onSymbolClick={onSymbolClick}
-              className="text-xs text-white/70 leading-relaxed block"
-            />
+            {editingPost ? (
+              <div className="space-y-2">
+                <input
+                  value={editingPost.title}
+                  onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
+                  maxLength={200}
+                  className="w-full px-2 py-1.5 bg-white/[0.04] border border-white/[0.1] rounded text-sm text-white focus:outline-none focus:border-violet-500/50"
+                />
+                <textarea
+                  value={editingPost.body}
+                  onChange={(e) => setEditingPost({ ...editingPost, body: e.target.value })}
+                  rows={6}
+                  maxLength={8000}
+                  className="w-full px-2 py-1.5 bg-white/[0.04] border border-white/[0.1] rounded text-xs text-white focus:outline-none focus:border-violet-500/50 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingPost(null)}
+                    className="flex-1 py-1.5 text-[11px] text-white/60 hover:text-white"
+                  >
+                    Huỷ
+                  </button>
+                  <button
+                    onClick={saveEditedPost}
+                    className="flex-1 py-1.5 bg-violet-600 hover:bg-violet-500 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1"
+                  >
+                    <Check className="w-3 h-3" /> Lưu
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-sm font-black text-white">
+                  <HashtagText body={activePost.title} onSymbolClick={onSymbolClick} />
+                </h3>
+                <HashtagText
+                  body={activePost.body}
+                  onSymbolClick={onSymbolClick}
+                  className="text-xs text-white/70 leading-relaxed block"
+                />
+                {/* Like row for the post */}
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    onClick={() => togglePostLike(activePost.post_id)}
+                    className={`flex items-center gap-1 text-[11px] font-semibold ${activePost.liked_by_me ? 'text-red-400' : 'text-white/40 hover:text-red-400'} transition-colors`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${activePost.liked_by_me ? 'fill-current' : ''}`} />
+                    {activePost.like_count}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="border-t border-white/[0.06] pt-3">
@@ -242,17 +402,64 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
                       <span className="text-[10px] font-bold text-white truncate">{c.author_name}</span>
                       <span className="text-[9px] text-white/25">·</span>
                       <span className="text-[9px] text-white/40">{formatRelative(c.created_at)}</span>
-                      {myUserId === c.author_id && (
-                        <button onClick={() => deleteComment(c.comment_id)} className="ml-auto p-0.5 text-red-400/50 hover:text-red-400">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                      {c.updated_at !== c.created_at && (
+                        <span className="text-[9px] text-white/25 italic">đã sửa</span>
+                      )}
+                      {myUserId === c.author_id && editingCommentId !== c.comment_id && (
+                        <span className="ml-auto flex items-center gap-1">
+                          <button
+                            onClick={() => { setEditingCommentId(c.comment_id); setEditingCommentBody(c.body); }}
+                            className="p-0.5 text-white/40 hover:text-violet-400"
+                            title="Sửa"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => deleteComment(c.comment_id)} className="p-0.5 text-red-400/50 hover:text-red-400">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </span>
                       )}
                     </div>
-                    <HashtagText
-                      body={c.body}
-                      onSymbolClick={onSymbolClick}
-                      className="text-xs text-white/80 block"
-                    />
+                    {editingCommentId === c.comment_id ? (
+                      <div className="space-y-1.5">
+                        <textarea
+                          value={editingCommentBody}
+                          onChange={(e) => setEditingCommentBody(e.target.value)}
+                          rows={2}
+                          maxLength={4000}
+                          className="w-full px-2 py-1 bg-white/[0.05] border border-white/[0.1] rounded text-xs text-white focus:outline-none focus:border-violet-500/50 resize-none"
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => { setEditingCommentId(null); setEditingCommentBody(''); }}
+                            className="flex-1 py-1 text-[10px] text-white/50 hover:text-white"
+                          >
+                            Huỷ
+                          </button>
+                          <button
+                            onClick={saveEditedComment}
+                            className="flex-1 py-1 bg-violet-600 hover:bg-violet-500 rounded text-[10px] font-bold text-white"
+                          >
+                            Lưu
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <HashtagText
+                          body={c.body}
+                          onSymbolClick={onSymbolClick}
+                          className="text-xs text-white/80 block"
+                        />
+                        <button
+                          onClick={() => toggleCommentLike(c.comment_id)}
+                          className={`mt-1 flex items-center gap-0.5 text-[10px] ${c.liked_by_me ? 'text-red-400' : 'text-white/30 hover:text-red-400'} transition-colors`}
+                        >
+                          <Heart className={`w-2.5 h-2.5 ${c.liked_by_me ? 'fill-current' : ''}`} />
+                          {c.like_count > 0 && c.like_count}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -295,6 +502,23 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
             <Plus className="w-4 h-4" />
           </button>
         )}
+      </div>
+
+      {/* Sort tabs */}
+      <div className="flex border-b border-white/[0.06] flex-shrink-0">
+        {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setSort(mode)}
+            className={`flex-1 py-1.5 text-[10px] font-semibold transition-colors ${
+              sort === mode
+                ? 'text-violet-300 bg-violet-500/10 border-b-2 border-violet-500'
+                : 'text-white/40 hover:text-white/60'
+            }`}
+          >
+            {SORT_LABELS[mode]}
+          </button>
+        ))}
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -347,11 +571,22 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
                   );
                 })()}
                 <div className="flex items-center gap-2 mt-1.5">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); togglePostLike(p.post_id); }}
+                    className={`flex items-center gap-0.5 text-[9px] ${p.liked_by_me ? 'text-red-400' : 'text-white/30 hover:text-red-400'} transition-colors`}
+                    title={p.liked_by_me ? 'Bỏ thả tim' : 'Thả tim'}
+                  >
+                    <Heart className={`w-2.5 h-2.5 ${p.liked_by_me ? 'fill-current' : ''}`} />
+                    {p.like_count}
+                  </button>
                   <span className="text-[9px] text-white/30 flex items-center gap-0.5">
                     <MessageSquare className="w-2.5 h-2.5" /> {p.comment_count}
                   </span>
+                  {p.updated_at !== p.created_at && (
+                    <span className="text-[9px] text-white/25 italic">đã sửa</span>
+                  )}
                   {p.token_pair && (
-                    <span className="text-[9px] font-mono text-violet-300/60 truncate">
+                    <span className="text-[9px] font-mono text-violet-300/60 truncate ml-auto">
                       {p.token_pair.slice(0, 6)}…{p.token_pair.slice(-4)}
                     </span>
                   )}
@@ -461,6 +696,8 @@ function CreatePostForm({
         const me = (await apiClient.get('/api/users/profile')).data?.user;
         onCreated({
           ...res.data.post,
+          like_count: res.data.post.like_count ?? 0,
+          liked_by_me: false,
           author_id: me?.user_id,
           author_name: me?.username || 'You',
           author_avatar: me?.avatar_url ?? null,
@@ -590,6 +827,8 @@ function CommentBox({ postId, onCreated }: { postId: number; onCreated: (c: Foru
         const me = user as any;
         onCreated({
           ...res.data.comment,
+          like_count: res.data.comment.like_count ?? 0,
+          liked_by_me: false,
           author_id: me?.id ? parseInt(me.id) : 0,
           author_name: me?.name || me?.username || 'You',
           author_avatar: me?.image ?? null,
