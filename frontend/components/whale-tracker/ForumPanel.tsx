@@ -11,14 +11,15 @@
  * in the parent flips the `tokenPair` prop and re-fetches.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  ArrowLeft, MessageSquare, Plus, Send, Trash2, Loader2, RefreshCw, X, Hash,
+  ArrowLeft, MessageSquare, Plus, Send, Trash2, Loader2, RefreshCw, X, Hash, Coins,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { toast } from 'sonner';
 import { parseHashtags, extractHashtagSymbols } from '@/lib/forum/hashtags';
+import { useHashtagAutocomplete, type HashtagSuggestion } from '@/lib/forum/useHashtagAutocomplete';
 
 interface ForumPostSummary {
   post_id: number;
@@ -364,6 +365,70 @@ export function ForumPanel({ tokenPair, tokenLabel, onSymbolClick }: Props) {
   );
 }
 
+// ─── Hashtag suggestion popover ────────────────────────────────────────────
+function SuggestionList({
+  items,
+  highlight,
+  onPick,
+  onHover,
+  loading,
+  query,
+}: {
+  items: HashtagSuggestion[];
+  highlight: number;
+  onPick: (symbol: string) => void;
+  onHover: (i: number) => void;
+  loading: boolean;
+  query: string;
+}) {
+  if (!loading && items.length === 0) return null;
+  return (
+    <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border border-violet-500/30 bg-[#11111c] shadow-xl shadow-black/50">
+      <div className="px-2 py-1 text-[9px] uppercase tracking-wider text-white/40 border-b border-white/[0.06] flex items-center justify-between">
+        <span>Đề xuất cho ${query}</span>
+        {loading && <Loader2 className="w-2.5 h-2.5 animate-spin text-violet-400" />}
+      </div>
+      <ul>
+        {items.map((s, i) => (
+          <li key={`${s.symbol}-${s.chain}`}>
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); onPick(s.symbol); }}
+              onMouseEnter={() => onHover(i)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 text-left ${
+                i === highlight ? 'bg-violet-500/15' : 'hover:bg-white/[0.04]'
+              }`}
+            >
+              {s.logo ? (
+                <img
+                  src={s.logo}
+                  alt=""
+                  className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                  <Coins className="w-3 h-3 text-violet-300" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-white">${s.symbol}</span>
+                  <span className="text-[9px] text-white/40 truncate">{s.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[9px] text-white/30">
+                  <span className="uppercase">{s.chain}</span>
+                  {s.liquidity > 0 && <span>· ${(s.liquidity / 1000).toFixed(1)}k liq</span>}
+                </div>
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // ─── Create post form ──────────────────────────────────────────────────────
 function CreatePostForm({
   tokenPair,
@@ -377,6 +442,10 @@ function CreatePostForm({
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const titleAc = useHashtagAutocomplete(title, setTitle, titleRef);
+  const bodyAc = useHashtagAutocomplete(body, setBody, bodyRef);
 
   const submit = async () => {
     if (title.trim().length < 3) { toast.error('Tiêu đề tối thiểu 3 ký tự'); return; }
@@ -415,22 +484,54 @@ function CreatePostForm({
         <button onClick={onCancel} className="p-1 text-white/40 hover:text-white"><X className="w-4 h-4" /></button>
         <span className="text-xs font-bold text-white/70 flex-1">Đăng bài mới</span>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Tiêu đề"
-          maxLength={200}
-          className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
-        />
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Bạn muốn chia sẻ điều gì? Mention token bằng $BTC, $ETH..."
-          rows={8}
-          maxLength={8000}
-          className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 resize-none"
-        />
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 space-y-2">
+        <div className="relative">
+          <input
+            ref={titleRef}
+            value={title}
+            onChange={(e) => titleAc.onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+            onSelect={(e) => titleAc.onSelect((e.target as HTMLInputElement).selectionStart ?? title.length)}
+            onKeyDown={titleAc.onKeyDown}
+            onBlur={() => setTimeout(titleAc.close, 150)}
+            placeholder="Tiêu đề"
+            maxLength={200}
+            className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
+          />
+          {titleAc.open && (
+            <SuggestionList
+              items={titleAc.suggestions}
+              highlight={titleAc.highlight}
+              onPick={titleAc.accept}
+              onHover={titleAc.setHighlight}
+              loading={titleAc.loading}
+              query={titleAc.query}
+            />
+          )}
+        </div>
+        <div className="relative">
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={(e) => bodyAc.onChange(e.target.value, e.target.selectionStart)}
+            onSelect={(e) => bodyAc.onSelect((e.target as HTMLTextAreaElement).selectionStart)}
+            onKeyDown={bodyAc.onKeyDown}
+            onBlur={() => setTimeout(bodyAc.close, 150)}
+            placeholder="Bạn muốn chia sẻ điều gì? Gõ $BT để gợi ý token..."
+            rows={8}
+            maxLength={8000}
+            className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 resize-none"
+          />
+          {bodyAc.open && (
+            <SuggestionList
+              items={bodyAc.suggestions}
+              highlight={bodyAc.highlight}
+              onPick={bodyAc.accept}
+              onHover={bodyAc.setHighlight}
+              loading={bodyAc.loading}
+              query={bodyAc.query}
+            />
+          )}
+        </div>
         {/* Hashtag tip + live preview of detected symbols */}
         <div className="flex items-start gap-1.5 text-[10px] text-white/40">
           <Hash className="w-3 h-3 mt-0.5 flex-shrink-0 text-violet-400" />
@@ -477,6 +578,8 @@ function CommentBox({ postId, onCreated }: { postId: number; onCreated: (c: Foru
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const ac = useHashtagAutocomplete(body, setBody, inputRef);
 
   const submit = async () => {
     if (!body.trim()) return;
@@ -501,13 +604,39 @@ function CommentBox({ postId, onCreated }: { postId: number; onCreated: (c: Foru
   };
 
   return (
-    <div className="border-t border-white/[0.06] p-2 flex-shrink-0">
+    <div className="border-t border-white/[0.06] p-2 flex-shrink-0 relative">
+      {/* Suggestion popover floats ABOVE the input — comment box sits at the
+          bottom of the panel, so anchoring the popover top:auto / bottom:full
+          keeps it from clipping out of view. */}
+      {ac.open && (
+        <div className="absolute left-2 right-2 bottom-full mb-1 z-30">
+          <SuggestionList
+            items={ac.suggestions}
+            highlight={ac.highlight}
+            onPick={ac.accept}
+            onHover={ac.setHighlight}
+            loading={ac.loading}
+            query={ac.query}
+          />
+        </div>
+      )}
       <div className="flex items-end gap-2 bg-white/[0.03] rounded-lg p-1.5">
         <textarea
+          ref={inputRef}
           value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-          placeholder="Viết bình luận..."
+          onChange={(e) => ac.onChange(e.target.value, e.target.selectionStart)}
+          onSelect={(e) => ac.onSelect((e.target as HTMLTextAreaElement).selectionStart)}
+          onBlur={() => setTimeout(ac.close, 150)}
+          onKeyDown={(e) => {
+            // Let the autocomplete consume arrow / enter / tab / esc when open
+            if (ac.open && (['ArrowDown', 'ArrowUp', 'Escape'].includes(e.key)
+              || ((e.key === 'Enter' || e.key === 'Tab') && ac.highlight >= 0))) {
+              ac.onKeyDown(e);
+              return;
+            }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+          }}
+          placeholder="Viết bình luận... (gõ $BT để gợi ý token)"
           rows={1}
           maxLength={4000}
           className="flex-1 bg-transparent text-xs text-white placeholder-white/30 focus:outline-none resize-none max-h-20"

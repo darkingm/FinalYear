@@ -10,7 +10,6 @@ import { DexChart } from '@/components/whale-tracker/DexChart';
 import { LiveTxFeed } from '@/components/whale-tracker/LiveTxFeed';
 import { Header } from '@/components/layout/Header';
 import { searchTokenPairs } from '@/lib/whale-api';
-import { toast } from 'sonner';
 
 const LEFT_SIDEBAR_WIDTH_KEY = 'wt_left_sidebar_width';
 const LEFT_SIDEBAR_MIN = 220;
@@ -86,28 +85,23 @@ export default function WhaleTrackerPage() {
      * not unique across chains (every chain has its own USDT) so the
      * 'most-liquid' tiebreak gives users the canonical answer most of
      * the time.
+     *
+     * Operates silently — the chart / info panel update is the visible
+     * feedback. Toast notifications were noisy when the user clicked
+     * multiple tags in a row.
      */
     const handleSymbolClick = async (symbol: string) => {
         const sym = symbol.trim().toUpperCase();
         if (!sym) return;
-        const toastId = `tag-${sym}`;
-        toast.loading(`Đang tìm chart $${sym}...`, { id: toastId });
         try {
             const results = await searchTokenPairs(sym);
-            // Filter to results where the BASE token symbol matches the tag
-            // (otherwise a search for $BTC could land on a "USDT/BTC" pair)
             const exact = results.filter(p => p.baseToken.symbol.toUpperCase() === sym);
             const candidates = exact.length > 0 ? exact : results;
-            if (candidates.length === 0) {
-                toast.error(`Không tìm thấy token $${sym}`, { id: toastId });
-                return;
-            }
-            // Pick highest-liquidity result
+            if (candidates.length === 0) return; // silent miss
             const best = candidates.reduce((a, b) => (b.liquidity ?? 0) > (a.liquidity ?? 0) ? b : a);
             handleSelectPair(best);
-            toast.success(`Đã mở $${sym} trên ${best.chain}`, { id: toastId, duration: 2000 });
-        } catch (e: any) {
-            toast.error(`Tìm $${sym} thất bại: ${e?.message || 'unknown'}`, { id: toastId });
+        } catch {
+            // Silent fail — surfacing it as a toast was the point of this fix.
         }
     };
 
